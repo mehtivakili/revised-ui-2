@@ -1,0 +1,167 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import { KeyRound, MessageSquareText, ShieldCheck } from "lucide-react";
+
+export type LoginMode = "otp" | "password";
+
+export function LoginForm({ initialMode, initialError = "" }: { initialMode: LoginMode; initialError?: string }) {
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [pending, setPending] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState(initialError);
+
+  async function submitPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    setError("");
+    setMessage("");
+
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await response.json();
+    setPending(false);
+
+    if (!response.ok || !data.ok) {
+      setError(data.error || "ورود انجام نشد.");
+      return;
+    }
+
+    window.location.href = data.role === "admin" ? "/admin" : "/";
+  }
+
+  async function requestOtp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    setError("");
+    setMessage("");
+
+    const response = await fetch("/api/auth/otp/request", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ phone })
+    });
+    const data = await response.json();
+    setPending(false);
+
+    if (!response.ok || !data.ok) {
+      setError(data.error || "ارسال کد انجام نشد.");
+      return;
+    }
+
+    setOtpSent(true);
+    setMessage(data.demoCode ? `کد آزمایشی: ${data.demoCode}` : data.message);
+  }
+
+  async function verifyOtp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    setError("");
+
+    const response = await fetch("/api/auth/otp/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ phone, code })
+    });
+    const data = await response.json();
+    setPending(false);
+
+    if (!response.ok || !data.ok) {
+      setError(data.error || "کد تایید نشد.");
+      return;
+    }
+
+    window.location.href = "/";
+  }
+
+  return (
+    <main className="auth-page">
+      <section className="auth-card">
+        <p className="eyebrow">ورود امن</p>
+        <h1>ورود به حساب کاربری</h1>
+        <p className="auth-lead">
+          ورود اصلی با شماره موبایل و کد یک‌بار مصرف انجام می‌شود. برای شروع توسعه، حساب‌های ثابت admin/1234 و user/1234
+          حرفه‌ای هستند و free/1234 حساب رایگان منقضی‌شده است.
+        </p>
+
+        <div className="auth-tabs" role="tablist" aria-label="روش ورود">
+          <a href="/login" role="tab" aria-selected={initialMode === "otp"} className={initialMode === "otp" ? "active" : ""}>
+            <MessageSquareText size={16} aria-hidden="true" />
+            پیامک
+          </a>
+          <a
+            href="/login?mode=password"
+            role="tab"
+            aria-selected={initialMode === "password"}
+            className={initialMode === "password" ? "active" : ""}
+          >
+            <KeyRound size={16} aria-hidden="true" />
+            رمز ثابت
+          </a>
+        </div>
+
+        {initialMode === "otp" ? (
+          <div className="auth-flow">
+            <form className="form-stack" onSubmit={requestOtp}>
+              <label htmlFor="phone">شماره موبایل</label>
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="09123456789"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                required
+              />
+              <button type="submit" disabled={pending}>
+                {pending ? "در حال ارسال..." : "ارسال کد"}
+              </button>
+            </form>
+
+            {otpSent ? (
+              <form className="form-stack" onSubmit={verifyOtp}>
+                <label htmlFor="code">کد یک‌بار مصرف</label>
+                <input
+                  id="code"
+                  name="code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                  required
+                />
+                <button type="submit" disabled={pending}>
+                  تایید و ورود
+                </button>
+              </form>
+            ) : null}
+          </div>
+        ) : (
+          <form className="form-stack" method="post" action="/api/auth/login" onSubmit={submitPassword}>
+            <label htmlFor="username">نام کاربری</label>
+            <input id="username" name="username" value={username} onChange={(event) => setUsername(event.target.value)} required />
+            <label htmlFor="password">رمز عبور</label>
+            <input id="password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+            <button type="submit" disabled={pending}>
+              <ShieldCheck size={16} aria-hidden="true" />
+              ورود
+            </button>
+          </form>
+        )}
+
+        {message ? <p className="form-message success">{message}</p> : null}
+        {error ? <p className="form-message error">{error}</p> : null}
+      </section>
+    </main>
+  );
+}
