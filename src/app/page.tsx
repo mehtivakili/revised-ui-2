@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Activity, Aperture, Camera, ChevronLeft, Clock, Database, Gauge, HardDrive, Network, Radio, Radar, Router, Wifi, Eye, type LucideIcon } from "lucide-react";
+import { Activity, Aperture, Camera, ChevronLeft, Clock, Database, Gauge, HardDrive, Network, Radio, Radar, Router, Wifi, Eye, Lock, type LucideIcon } from "lucide-react";
 import { dashboardCategories, type DashboardCategory, type DashboardTool } from "@/src/lib/dashboard";
 import { getUserById } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
@@ -65,7 +65,7 @@ function CategorySection({ category, variant, locked = false }: { category: Dash
   const CategoryIcon = iconMap[category.icon];
 
   return (
-    <section className={`category-section ${variant === "wide" ? "category-section-wide" : ""} ${locked ? "category-section-locked" : ""}`} aria-labelledby={`${category.id}-title`}>
+    <section className={`category-section ${variant === "wide" ? "category-section-wide" : ""}`} aria-labelledby={`${category.id}-title`}>
       <div className="category-section-content">
         <div className="category-heading">
           <div className="category-title">
@@ -81,45 +81,45 @@ function CategorySection({ category, variant, locked = false }: { category: Dash
 
         <div className="tool-card-grid">
           {category.tools.map((tool) => (
-            <ToolCard key={tool.slug} tool={tool} tone={toneByCategory[category.id]} />
+            <ToolCard key={tool.slug} tool={tool} tone={toneByCategory[category.id]} locked={locked} />
           ))}
         </div>
       </div>
-
-      {locked ? <SubscriptionLockOverlay /> : null}
     </section>
   );
 }
 
-function SubscriptionLockOverlay() {
-  return (
-    <div className="subscription-lock-overlay">
-      <p>مهلت تست شما به پایان رسیده است برای خرید اشتراک روی خرید اشتراک کلیک کنید</p>
-      <Link className="subscription-buy-button" href="/profile?upgrade=1">
-        خرید اشتراک
-      </Link>
-    </div>
-  );
-}
-
-function ToolCard({ tool, tone }: { tool: DashboardTool; tone: string }) {
+function ToolCard({ tool, tone, locked = false }: { tool: DashboardTool; tone: string; locked?: boolean }) {
   const ToolIcon = iconMap[tool.icon];
 
   return (
-    <Link className="tool-card" href={`/calculators/${tool.slug}`}>
+    <Link className={`tool-card ${locked ? "tool-card-locked" : ""}`} href={locked ? "/profile?upgrade=1" : `/calculators/${tool.slug}`}>
       <div className="tool-card-head">
-        <span className={`tool-icon tool-icon-${tone}`}>
-          <ToolIcon size={20} aria-hidden="true" />
-        </span>
+        {locked && (
+          <span className="tool-lock-badge">
+            <Lock size={12} aria-hidden="true" />
+            <span>حرفه‌ای</span>
+          </span>
+        )}
+        <div className="tool-icon-wrapper">
+          <span className={`tool-icon tool-icon-${tone}`}>
+            <ToolIcon size={20} aria-hidden="true" />
+          </span>
+          {locked && <Lock className="tool-icon-lock-overlay" size={16} aria-hidden="true" />}
+        </div>
       </div>
       <div className="tool-card-body">
         <h3>{tool.title}</h3>
         <p>{tool.description}</p>
       </div>
       <div className="tool-card-foot">
-        <span>شروع محاسبه</span>
+        <span>{locked ? "ارتقا حساب" : "شروع محاسبه"}</span>
         <span className="tool-card-arrow">
-          <ChevronLeft size={15} aria-hidden="true" />
+          {locked ? (
+            <Lock size={14} aria-hidden="true" />
+          ) : (
+            <ChevronLeft size={15} aria-hidden="true" />
+          )}
         </span>
       </div>
     </Link>

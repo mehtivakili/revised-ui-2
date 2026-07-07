@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { CalculatorShell, NumberInput, ResultGrid, SelectInput, formatNumber } from "@/src/components/calculators/CalculatorUi";
@@ -39,7 +39,7 @@ export default function SensitivityPage() {
 
   return (
     <CalculatorShell tool={tool}>
-      <div className="calc-form-grid">
+      <div className="calc-form-grid sensitivity-form-grid">
         <NumberInput label="عدد F دوربین اول" value={f1} onChange={setF1} step={0.1} />
         <SelectInput label="سنسور دوربین اول" value={s1} onChange={(value) => setS1(Number(value))} options={sensorWidths.map((item) => ({ label: item.label, value: item.value }))} />
         <NumberInput label="عدد F دوربین دوم" value={f2} onChange={setF2} step={0.1} />

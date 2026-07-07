@@ -165,10 +165,7 @@ function calculateCapacity(params: {
   };
 }
 
-function csvEscape(value: string | number) {
-  const text = String(value).replaceAll('"', '""');
-  return /[",\n]/.test(text) ? `"${text}"` : text;
-}
+
 
 export default function CapacityPage() {
   const [channels, setChannels] = useState<ChannelProfile[]>([initialChannel]);
@@ -219,8 +216,8 @@ export default function CapacityPage() {
     });
   };
 
-  const exportCsv = () => {
-    const header = ["Channel Name", "Channel Number", "Brand", "Video Standard", "Encoding Mode", "Resolution", "Frame Rate (fps)", "Bitrate (Kbps)"];
+  const exportExcel = () => {
+    const header = ["نام کانال", "تعداد کانال", "برند", "استاندارد ویدئو", "روش کُدگذاری", "رزولوشن", "فریم‌ریت (fps)", "بیت‌ریت (Kbps)"];
     const rows = channels.map((channel) => [
       channel.channelName,
       channel.channelNumber,
@@ -231,14 +228,13 @@ export default function CapacityPage() {
       channel.fps,
       channel.bitrate
     ]);
-    const csv = [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\r\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "hamyardoorbin-devices.csv";
-    anchor.click();
-    URL.revokeObjectURL(url);
+
+    import("xlsx").then((XLSX) => {
+      const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Profiles");
+      XLSX.writeFile(wb, "hamyardoorbin-devices.xlsx");
+    });
   };
 
   return (
@@ -271,9 +267,9 @@ export default function CapacityPage() {
               <Plus size={18} aria-hidden="true" />
               افزودن
             </button>
-            <button className="secondary-action" type="button" onClick={exportCsv}>
+            <button className="secondary-action" type="button" onClick={exportExcel}>
               <Download size={18} aria-hidden="true" />
-              خروجی CSV
+              خروجی Excel
             </button>
             <button className="danger-action compact" type="button" onClick={deleteSelected} disabled={!channels.some((channel) => channel.selected)}>
               <Trash2 size={16} aria-hidden="true" />
@@ -282,93 +278,123 @@ export default function CapacityPage() {
           </div>
         </div>
 
-        <div className="channel-card-grid">
-          {channels.map((channel) => (
-            <article className="channel-card" key={channel.id}>
-              <div className="channel-card-head">
-                <label className="channel-select">
-                  <input type="checkbox" checked={channel.selected} onChange={(event) => updateChannel(channel.id, "selected", event.target.checked)} />
-                  انتخاب
-                </label>
-                <button className="danger-action compact" type="button" onClick={() => removeChannel(channel.id)} disabled={channels.length === 1}>
-                  <Trash2 size={15} aria-hidden="true" />
-                  حذف
-                </button>
-              </div>
-
-              <div className="channel-fields">
-                <label>
-                  <span>نام کانال</span>
-                  <input value={channel.channelName} onChange={(event) => updateChannel(channel.id, "channelName", event.target.value)} />
-                </label>
-                <label>
-                  <span>تعداد کانال</span>
+        <div className="table-wrap">
+          <table className="calculator-table">
+            <thead>
+              <tr>
+                <th>
                   <input
-                    type="number"
-                    min={0}
-                    max={1024}
-                    step={1}
-                    value={channel.channelNumber}
-                    onChange={(event) => updateChannel(channel.id, "channelNumber", Number(event.target.value))}
+                    type="checkbox"
+                    checked={channels.every((c) => c.selected)}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setChannels((curr) => curr.map((c) => ({ ...c, selected: checked })));
+                    }}
                   />
-                </label>
-                <label>
-                  <span>برند</span>
-                  <select value={channel.brand} onChange={(event) => updateChannel(channel.id, "brand", event.target.value)}>
-                    {brands.map((brand) => (
-                      <option key={brand} value={brand}>
-                        {brand}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>استاندارد ویدئو</span>
-                  <select value={channel.videoStandard} onChange={(event) => updateChannel(channel.id, "videoStandard", event.target.value)}>
-                    {videoStandards.map((standard) => (
-                      <option key={standard} value={standard}>
-                        {standard}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>روش کُدگذاری</span>
-                  <select value={channel.encoding} onChange={(event) => updateChannel(channel.id, "encoding", event.target.value)}>
-                    {encodings.map((encoding) => (
-                      <option key={encoding} value={encoding}>
-                        {encoding}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>رزولوشن</span>
-                  <select value={channel.resolution} onChange={(event) => updateChannel(channel.id, "resolution", event.target.value)}>
-                    {resolutions.map((resolution) => (
-                      <option key={resolution} value={resolution}>
-                        {resolution}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>فریم‌ریت (fps)</span>
-                  <select value={channel.fps} onChange={(event) => updateChannel(channel.id, "fps", event.target.value)}>
-                    {fpsOptions.map((fps) => (
-                      <option key={fps} value={fps}>
-                        {fps}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>بیت‌ریت (Kbps)</span>
-                  <input type="number" min={0} step={1} value={channel.bitrate} onChange={(event) => updateChannel(channel.id, "bitrate", Number(event.target.value))} />
-                </label>
-              </div>
-            </article>
-          ))}
+                </th>
+                <th>نام کانال</th>
+                <th>تعداد کانال</th>
+                <th>برند</th>
+                <th>استاندارد ویدئو</th>
+                <th>روش کُدگذاری</th>
+                <th>رزولوشن</th>
+                <th>فریم‌ریت (fps)</th>
+                <th>بیت‌ریت (Kbps)</th>
+                <th>عملیات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {channels.map((channel) => (
+                <tr key={channel.id} className={channel.selected ? "selected-row" : ""}>
+                  <td className="col-select">
+                    <label className="channel-select">
+                      <input
+                        type="checkbox"
+                        checked={channel.selected}
+                        onChange={(event) => updateChannel(channel.id, "selected", event.target.checked)}
+                      />
+                      <span className="mobile-label">انتخاب</span>
+                    </label>
+                  </td>
+                  <td className="col-name">
+                    <span className="mobile-label">نام کانال</span>
+                    <input value={channel.channelName} onChange={(event) => updateChannel(channel.id, "channelName", event.target.value)} />
+                  </td>
+                  <td className="col-number">
+                    <span className="mobile-label">تعداد کانال</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={1024}
+                      step={1}
+                      value={channel.channelNumber}
+                      onChange={(event) => updateChannel(channel.id, "channelNumber", Number(event.target.value))}
+                    />
+                  </td>
+                  <td className="col-brand">
+                    <span className="mobile-label">برند</span>
+                    <select value={channel.brand} onChange={(event) => updateChannel(channel.id, "brand", event.target.value)}>
+                      {brands.map((brand) => (
+                        <option key={brand} value={brand}>
+                          {brand}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="col-standard">
+                    <span className="mobile-label">استاندارد ویدئو</span>
+                    <select value={channel.videoStandard} onChange={(event) => updateChannel(channel.id, "videoStandard", event.target.value)}>
+                      {videoStandards.map((standard) => (
+                        <option key={standard} value={standard}>
+                          {standard}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="col-encoding">
+                    <span className="mobile-label">روش کُدگذاری</span>
+                    <select value={channel.encoding} onChange={(event) => updateChannel(channel.id, "encoding", event.target.value)}>
+                      {encodings.map((encoding) => (
+                        <option key={encoding} value={encoding}>
+                          {encoding}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="col-resolution">
+                    <span className="mobile-label">رزولوشن</span>
+                    <select value={channel.resolution} onChange={(event) => updateChannel(channel.id, "resolution", event.target.value)}>
+                      {resolutions.map((resolution) => (
+                        <option key={resolution} value={resolution}>
+                          {resolution}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="col-fps">
+                    <span className="mobile-label">فریم‌ریت (fps)</span>
+                    <select value={channel.fps} onChange={(event) => updateChannel(channel.id, "fps", event.target.value)}>
+                      {fpsOptions.map((fps) => (
+                        <option key={fps} value={fps}>
+                          {fps}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="col-bitrate">
+                    <span className="mobile-label">بیت‌ریت (Kbps)</span>
+                    <input type="number" min={0} step={1} value={channel.bitrate} onChange={(event) => updateChannel(channel.id, "bitrate", Number(event.target.value))} />
+                  </td>
+                  <td className="col-delete">
+                    <button className="danger-action compact" type="button" onClick={() => removeChannel(channel.id)} disabled={channels.length === 1}>
+                      <Trash2 size={15} aria-hidden="true" />
+                      <span className="mobile-label">حذف</span>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         <p className="calc-note">

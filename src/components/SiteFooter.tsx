@@ -64,7 +64,7 @@ function SocialIcon({ name }: { name: SocialIconName }) {
 
 export function SiteFooter() {
   return (
-    <footer className="site-footer">
+    <footer className="site-footer" id="contact-us">
       <div className="site-footer-inner">
         <div className="footer-contact-card">
           <div className="footer-brand">

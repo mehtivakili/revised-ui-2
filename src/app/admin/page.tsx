@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { AdminPanel } from "@/src/components/AdminPanel";
-import { getSmsConfig, listUsers } from "@/src/lib/authStore";
+import { getSmsConfig } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
+import { query } from "@/src/lib/db";
 
 export default async function AdminPage() {
   const session = await getCurrentSession();
@@ -14,9 +15,43 @@ export default async function AdminPage() {
     redirect("/");
   }
 
+  let initialUsers: any[] = [];
+  let totalUsers = 0;
+  let totalPages = 1;
+
+  try {
+    const usersResult = await query(`
+      SELECT id, username, role, plan, is_free_account as "isFreeAccount", 
+             display_name as "displayName", signup_at as "signupAt", 
+             created_at as "createdAt", last_login_at as "lastLoginAt", 
+             failed_logins as "failedLogins", is_protected as "isProtected"
+      FROM users
+      ORDER BY is_protected DESC, signup_at DESC
+      LIMIT 50 OFFSET 0
+    `);
+    const countResult = await query("SELECT COUNT(*) FROM users");
+    totalUsers = parseInt(countResult.rows[0].count);
+    totalPages = Math.ceil(totalUsers / 50);
+
+    initialUsers = usersResult.rows.map(row => ({
+      ...row,
+      signupAt: row.signupAt ? new Date(row.signupAt).toISOString() : undefined,
+      createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : undefined,
+      lastLoginAt: row.lastLoginAt ? new Date(row.lastLoginAt).toISOString() : undefined
+    }));
+  } catch (err) {
+    console.error("Failed to load initial users in AdminPage:", err);
+  }
+
   return (
     <main className="app-shell">
-      <AdminPanel currentUserId={session.id} initialUsers={listUsers()} initialSmsConfig={getSmsConfig()} />
+      <AdminPanel 
+        currentUserId={session.id} 
+        initialUsers={initialUsers} 
+        initialTotalUsers={totalUsers}
+        initialTotalPages={totalPages}
+        initialSmsConfig={getSmsConfig()} 
+      />
     </main>
   );
 }

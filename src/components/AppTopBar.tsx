@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Bell, LogIn, Settings } from "lucide-react";
+import { Phone, Bell, LogIn, Settings } from "lucide-react";
 import { ProfileMenu } from "@/src/components/ProfileMenu";
 import { ToolsMenu } from "@/src/components/ToolsMenu";
 import { TopSearch } from "@/src/components/TopSearch";
+import { TopBarLayout } from "@/src/components/TopBarLayout";
 import { getUserById } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
@@ -13,7 +14,22 @@ export async function AppTopBar() {
   const access = getSubscriptionAccess(user);
 
   return (
-    <div className="site-topbar-shell">
+    <TopBarLayout
+      minimalChildren={
+        <header className="top-bar minimal-bar">
+          <Link className="brand-mark minimal-brand" href="/" aria-label="همیار دوربین">
+            <span>
+              <strong>همیار دوربین</strong>
+              <small>ابزارهای محاسباتی دوربین و شبکه</small>
+            </span>
+          </Link>
+          <Link className="back-link" href="#contact-us">
+            <Phone size={16} aria-hidden="true" />
+            <span>تماس با ما</span>
+          </Link>
+        </header>
+      }
+    >
       <header className="top-bar">
         <Link className="brand-mark" href="/" aria-label="همیار دوربین">
           <span>
@@ -35,6 +51,9 @@ export async function AppTopBar() {
         </nav>
 
         <div className="top-actions">
+          <Link href="/contacts" className="icon-button" aria-label="تماس با ما" title="تماس با ما">
+            <Phone size={18} aria-hidden="true" />
+          </Link>
           <button type="button" className="icon-button top-utility" aria-label="اعلان‌ها">
             <Bell size={18} aria-hidden="true" />
           </button>
@@ -42,7 +61,7 @@ export async function AppTopBar() {
             <Settings size={18} aria-hidden="true" />
           </button>
           {session ? (
-            <ProfileMenu username={session.username} plan={access.plan} />
+            <ProfileMenu username={session.username} plan={access.plan} isAdmin={session?.role === "admin"} />
           ) : (
             <Link className="profile-button" href="/login">
               <LogIn size={18} aria-hidden="true" />
@@ -51,6 +70,6 @@ export async function AppTopBar() {
           )}
         </div>
       </header>
-    </div>
+    </TopBarLayout>
   );
 }

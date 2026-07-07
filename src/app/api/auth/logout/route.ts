@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { sessionCookieName } from "@/src/lib/session";
 
 export async function POST() {
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(sessionCookieName, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 0
-  });
-  return response;
+  const cookieStore = await cookies();
+  cookieStore.delete(sessionCookieName);
+  
+  return NextResponse.json({ ok: true });
 }

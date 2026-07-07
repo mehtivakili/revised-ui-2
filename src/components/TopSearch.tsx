@@ -15,6 +15,7 @@ export function TopSearch({ lockedToolSlugs = [] }: { lockedToolSlugs?: string[]
 function TopSearchInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const canSearch = normalizeText(query).length >= minimumSearchLength;
@@ -66,6 +67,18 @@ function TopSearchInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
     };
   }, []);
 
+  useEffect(() => {
+    const root = wrapperRef.current;
+    if (root) {
+      root.dataset.reactMounted = "true";
+      const reactPanel = root.querySelector(".top-search-panel") as HTMLElement;
+      if (reactPanel) {
+        reactPanel.style.display = "";
+      }
+    }
+    setIsHydrated(true);
+  }, []);
+
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     const firstResult = results[0]?.item;
     if (firstResult) {
@@ -75,7 +88,7 @@ function TopSearchInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
   }
 
   return (
-    <div className={`top-search ${open ? "open" : ""}`} ref={wrapperRef}>
+    <div className={`top-search ${open ? "open" : ""}`} ref={wrapperRef} suppressHydrationWarning>
       <form action="/search" method="get" onSubmit={submitSearch}>
         <Search size={18} aria-hidden="true" />
         <input
@@ -91,7 +104,11 @@ function TopSearchInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
         />
       </form>
 
-      <div className="top-search-panel" hidden={!open}>
+      <div
+        className="top-search-panel"
+        hidden={!open}
+        style={isHydrated ? {} : undefined}
+      >
         {canSearch ? (
           results.length > 0 ? (
             results.map(({ item }) => (
@@ -110,14 +127,21 @@ function TopSearchInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
           <p>برای جستجوی دقیق حداقل ۴ کاراکتر وارد کنید.</p>
         )}
       </div>
-      <script
-        type="application/json"
-        data-top-search-items
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(fallbackItems).replace(/</g, "\\u003c") }}
+      <div
+        className="top-search-panel vanilla-search-panel"
+        hidden
+        suppressHydrationWarning
+        data-vanilla-panel
+        dangerouslySetInnerHTML={{ __html: "" }}
       />
-      <script
+      <div
+        style={{ display: "none" }}
         dangerouslySetInnerHTML={{
-          __html: `
+          __html:
+            `<script type="application/json" data-top-search-items>` +
+            JSON.stringify(fallbackItems).replace(/</g, "\\u003c") +
+            `</script>
+            <script>
 (() => {
   const script = document.currentScript;
   const root = script && script.closest(".top-search");
@@ -125,9 +149,10 @@ function TopSearchInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
   root.dataset.nativeSearchReady = "true";
 
   const input = root.querySelector('input[name="q"]');
-  const panel = root.querySelector(".top-search-panel");
+  const reactPanel = root.querySelector(".top-search-panel");
   const dataNode = root.querySelector("[data-top-search-items]");
-  if (!input || !panel || !dataNode) return;
+  const vanillaPanel = root.querySelector("[data-vanilla-panel]");
+  if (!input || !reactPanel || !dataNode || !vanillaPanel) return;
 
   let items = [];
   try {
@@ -166,21 +191,25 @@ function TopSearchInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
   const addMessage = (text) => {
     const p = document.createElement("p");
     p.textContent = text;
-    panel.appendChild(p);
+    vanillaPanel.appendChild(p);
   };
 
   const render = () => {
+    if (root.dataset.reactMounted === "true") return;
+    
     const rawQuery = input.value || "";
     const normalizedQuery = normalize(rawQuery);
-    panel.replaceChildren();
+    vanillaPanel.replaceChildren();
 
     if (!rawQuery.trim()) {
-      panel.hidden = true;
+      vanillaPanel.hidden = true;
+      reactPanel.style.display = "";
       root.classList.remove("open");
       return;
     }
 
-    panel.hidden = false;
+    vanillaPanel.hidden = false;
+    reactPanel.style.display = "none";
     root.classList.add("open");
 
     if (normalizedQuery.length < ${minimumSearchLength}) {
@@ -222,7 +251,7 @@ function TopSearchInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
       subtitle.textContent = item.categoryTitle + " · " + item.subtitle;
       text.append(title, subtitle);
       link.append(text, makeIcon());
-      panel.appendChild(link);
+      vanillaPanel.appendChild(link);
     }
   };
 
@@ -232,13 +261,15 @@ function TopSearchInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
   input.addEventListener("focus", render);
   input.addEventListener("compositionend", render);
   document.addEventListener("touchstart", (event) => {
+    if (root.dataset.reactMounted === "true") return;
     if (!root.contains(event.target)) {
-      panel.hidden = true;
+      vanillaPanel.hidden = true;
+      reactPanel.style.display = "";
       root.classList.remove("open");
     }
   }, { passive: true });
 })();
-          `
+            </script>`
         }}
       />
     </div>

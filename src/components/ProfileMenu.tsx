@@ -1,48 +1,77 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { CircleUserRound, LogOut, UserRound } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { CircleUserRound, LogOut, UserRound, Settings } from "lucide-react";
 import type { UserPlan } from "@/src/lib/authStore";
 
-export function ProfileMenu({ username, plan }: { username: string; plan: UserPlan }) {
-  const [open, setOpen] = useState(false);
+export function ProfileMenu({ username, plan, isAdmin }: { username: string; plan: UserPlan; isAdmin?: boolean }) {
+  const rootRef = useRef<HTMLDetailsElement | null>(null);
   const [pending, setPending] = useState(false);
+  const router = useRouter();
 
   async function signOut() {
     setPending(true);
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (e) {
+      console.error("Logout fetch failed:", e);
+    }
+    closeMenu();
+    router.push("/login");
+    router.refresh();
   }
 
+  const closeMenu = useCallback(() => {
+    rootRef.current?.removeAttribute("open");
+  }, []);
+
+  // Removed fragile document event listeners for outside clicks
+  // We will rely on a transparent backdrop element instead.
+
   return (
-    <div className="profile-menu">
-      <button
-        type="button"
+    <details ref={rootRef} className="profile-menu">
+      <summary
         className="avatar-button"
         aria-label="پروفایل کاربر"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
       >
         <CircleUserRound size={22} aria-hidden="true" />
-      </button>
-      {open ? (
-        <div className="profile-popover">
-          <p>
-            <strong>{username}</strong>
-            <span>خوش آمدید</span>
-            <small>{plan === "pro" ? "اشتراک حرفه‌ای" : "اشتراک رایگان"}</small>
-          </p>
-          <Link className="profile-popover-link" href="/profile" onClick={() => setOpen(false)}>
-            <UserRound size={16} aria-hidden="true" />
-            پروفایل من
+      </summary>
+      <div className="profile-popover-backdrop" onClick={closeMenu} aria-hidden="true" />
+      <div className="profile-popover">
+        <p>
+          <strong>{username}</strong>
+          <span>خوش آمدید</span>
+          <small>{plan === "pro" ? "اشتراک حرفه‌ای" : "اشتراک رایگان"}</small>
+        </p>
+        <Link className="profile-popover-link" href="/profile" onClick={closeMenu}>
+          <UserRound size={16} aria-hidden="true" />
+          پروفایل من
+        </Link>
+        {isAdmin ? (
+          <Link className="profile-popover-link admin-only-link" href="/admin" onClick={closeMenu}>
+            <Settings size={16} aria-hidden="true" />
+            مدیریت
           </Link>
-          <button type="button" className="signout-button" onClick={signOut} disabled={pending}>
-            <LogOut size={16} aria-hidden="true" />
-            {pending ? "در حال خروج..." : "خروج"}
-          </button>
-        </div>
-      ) : null}
-    </div>
+        ) : null}
+        <a 
+          href="#"
+          className="signout-button" 
+          onClick={(e) => {
+            e.preventDefault();
+            if (!pending) signOut();
+          }}
+          style={{ 
+            opacity: pending ? 0.72 : 1, 
+            cursor: pending ? "wait" : "pointer",
+            pointerEvents: pending ? "none" : "auto" 
+          }}
+        >
+          <LogOut size={16} aria-hidden="true" />
+          {pending ? "در حال خروج..." : "خروج"}
+        </a>
+      </div>
+    </details>
   );
 }

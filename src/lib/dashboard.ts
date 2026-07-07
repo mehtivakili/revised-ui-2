@@ -93,6 +93,15 @@ export const dashboardCategories: DashboardCategory[] = [
         status: "ready",
         metric: "نسبت / استاپ",
         icon: "gauge"
+      },
+      {
+        slug: "lens-3d",
+        title: "ماشین‌حساب لنز سه‌بعدی",
+        subtitle: "شبیه‌ساز دوربین",
+        description: "شبیه‌سازی سه‌بعدی میدان دید دوربین با نمایش نواحی DORI، تراکم پیکسلی و زاویه دید.",
+        status: "ready",
+        metric: "3D / DORI",
+        icon: "camera"
       }
     ]
   },

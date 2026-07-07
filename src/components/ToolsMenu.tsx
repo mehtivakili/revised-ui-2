@@ -74,20 +74,8 @@ function ToolsMenuInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
 
   useEffect(() => clearCloseTimer, [clearCloseTimer]);
 
-  useEffect(() => {
-    const closeOnOutsideEvent = (event: Event) => {
-      if (rootRef.current?.open && !rootRef.current.contains(event.target as Node)) {
-        closeMenu();
-      }
-    };
-
-    document.addEventListener("touchstart", closeOnOutsideEvent, true);
-    document.addEventListener("mousedown", closeOnOutsideEvent, true);
-    return () => {
-      document.removeEventListener("touchstart", closeOnOutsideEvent, true);
-      document.removeEventListener("mousedown", closeOnOutsideEvent, true);
-    };
-  }, [closeMenu]);
+  // Removed fragile document event listeners for outside clicks
+  // We will rely on a transparent backdrop element instead.
 
   return (
     <details
@@ -111,6 +99,7 @@ function ToolsMenuInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
         <span className="tools-menu-label">ابزارها</span>
         <ChevronDown className="tools-menu-chevron" size={16} aria-hidden="true" />
       </summary>
+      <div className="tools-menu-backdrop" onClick={closeMenu} aria-hidden="true" />
       <div
         className="tools-menu-panel"
         onMouseEnter={openMenu}
