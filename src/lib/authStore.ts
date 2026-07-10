@@ -1,4 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { query } from "@/src/lib/db";
+import { defaultTrialDays } from "@/src/lib/subscription";
 
 export type UserRole = "admin" | "user";
 export type UserPlan = "free" | "pro";
@@ -15,6 +17,8 @@ export type UserAccount = {
   lastLoginAt?: string;
   lockedUntil?: number;
   failedLogins: number;
+  trialDays: number;
+  passwordPreview?: string;
   protected?: boolean;
 };
 
@@ -38,8 +42,6 @@ type SmsConfig = {
 };
 
 type AuthState = {
-  users: UserAccount[];
-  passwords: Map<string, string>;
   otps: Map<string, OtpRecord>;
   ipHits: Map<string, { count: number; resetAt: number }>;
   smsConfig: SmsConfig;
@@ -48,110 +50,43 @@ type AuthState = {
 const sessionSecret = process.env.AUTH_SECRET || "local-development-secret-change-before-production";
 const passwordSecret = process.env.PASSWORD_SECRET || sessionSecret;
 
-const globalState = globalThis as typeof globalThis & { __hamyarAuthState?: AuthState };
+export const seedPasswords = {
+  admin: "HmyAdm-8qN4!vR2#Kp7",
+  user: "HmyUser-5Lm9!Qa3#Tz1",
+  free: "HmyFree-2Wx6!Pn8#Rs4"
+};
 
-function hash(value: string, secret = passwordSecret) {
-  return createHmac("sha256", secret).update(value).digest("hex");
+const globalState = globalThis as typeof globalThis & {
+  __hamyarAuthState?: AuthState;
+  __hamyarSchemaReady?: Promise<void>;
+};
+
+export function hashPassword(value: string) {
+  return createHmac("sha256", passwordSecret).update(value).digest("hex");
 }
 
-function createInitialState(): AuthState {
-  const now = new Date().toISOString();
-  const expiredTrialSignup = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
-  const passwords = new Map<string, string>();
-  passwords.set("admin", hash("1234"));
-  passwords.set("user", hash("1234"));
-  passwords.set("free", hash("1234"));
-
-  return {
-    users: [
-      {
-        id: "seed-admin",
-        username: "admin",
-        role: "admin",
-        plan: "pro",
-        isFreeAccount: false,
-        displayName: "مدیر سیستم",
-        signupAt: now,
-        createdAt: now,
-        failedLogins: 0,
-        protected: true
-      },
-      {
-        id: "seed-user",
-        username: "user",
-        role: "user",
-        plan: "pro",
-        isFreeAccount: false,
-        displayName: "کاربر آزمایشی",
-        signupAt: now,
-        createdAt: now,
-        failedLogins: 0,
-        protected: true
-      },
-      {
-        id: "seed-free",
-        username: "free",
-        role: "user",
-        plan: "free",
-        isFreeAccount: true,
-        displayName: "کاربر تست رایگان",
-        signupAt: expiredTrialSignup,
-        createdAt: expiredTrialSignup,
-        failedLogins: 0,
-        protected: true
-      }
-    ],
-    passwords,
-    otps: new Map(),
-    ipHits: new Map(),
-    smsConfig: {
-      providerName: "",
-      apiUrl: "",
-      senderNumber: "",
-      apiKey: "",
-      templateId: "",
-      timeoutSeconds: 8,
-      enabled: false
-    }
-  };
+function hashSession(value: string) {
+  return createHmac("sha256", sessionSecret).update(value).digest("hex");
 }
 
 function state() {
   if (!globalState.__hamyarAuthState) {
-    globalState.__hamyarAuthState = createInitialState();
+    globalState.__hamyarAuthState = {
+      otps: new Map(),
+      ipHits: new Map(),
+      smsConfig: {
+        providerName: "",
+        apiUrl: "",
+        senderNumber: "",
+        apiKey: "",
+        templateId: "",
+        timeoutSeconds: 8,
+        enabled: false
+      }
+    };
   }
 
-  const authState = globalState.__hamyarAuthState;
-  const now = new Date().toISOString();
-  authState.passwords.set("admin", authState.passwords.get("admin") ?? hash("1234"));
-  authState.passwords.set("user", authState.passwords.get("user") ?? hash("1234"));
-  authState.passwords.set("free", authState.passwords.get("free") ?? hash("1234"));
-
-  if (!authState.users.some((user) => user.username === "free")) {
-    const expiredTrialSignup = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
-    authState.users.push({
-      id: "seed-free",
-      username: "free",
-      role: "user",
-      plan: "free",
-      isFreeAccount: true,
-      displayName: "کاربر تست رایگان",
-      signupAt: expiredTrialSignup,
-      createdAt: expiredTrialSignup,
-      failedLogins: 0,
-      protected: true
-    });
-  }
-
-  authState.users.forEach((user) => {
-    const persistedSignupAt = user.signupAt ?? user.createdAt ?? now;
-    user.signupAt = persistedSignupAt;
-    user.createdAt = user.createdAt ?? persistedSignupAt;
-    user.plan = user.plan ?? (user.username === "admin" || user.username === "user" ? "pro" : "free");
-    user.isFreeAccount = user.plan === "free";
-  });
-
-  return authState;
+  return globalState.__hamyarAuthState;
 }
 
 function safeEqual(left: string, right: string) {
@@ -160,78 +95,191 @@ function safeEqual(left: string, right: string) {
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-export function listUsers() {
-  return state().users.map(({ protected: isProtected, failedLogins, lockedUntil, ...user }) => ({
-    ...user,
-    isProtected: Boolean(isProtected),
-    failedLogins,
-    lockedUntil
-  }));
+function toIso(value?: Date | string | null) {
+  if (!value) return undefined;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
-export function getUser(username: string) {
-  return state().users.find((user) => user.username === username);
-}
-
-export function getUserById(id: string) {
-  return state().users.find((user) => user.id === id);
-}
-
-export function upsertMobileUser(username: string) {
-  const existing = getUser(username);
-  if (existing) return existing;
-  const signupAt = new Date().toISOString();
-
-  const user: UserAccount = {
-    id: randomBytes(10).toString("hex"),
-    username,
-    role: "user",
-    plan: "free",
-    isFreeAccount: true,
-    displayName: `کاربر ${username}`,
-    signupAt,
-    createdAt: signupAt,
-    failedLogins: 0
+function mapDbUser(row: any): UserAccount {
+  return {
+    id: String(row.id),
+    username: String(row.username),
+    role: row.role === "admin" ? "admin" : "user",
+    plan: row.plan === "pro" ? "pro" : "free",
+    isFreeAccount: row.is_free_account ?? row.isFreeAccount ?? row.plan !== "pro",
+    displayName: String(row.display_name ?? row.displayName ?? row.username),
+    signupAt: toIso(row.signup_at ?? row.signupAt) ?? new Date().toISOString(),
+    createdAt: toIso(row.created_at ?? row.createdAt) ?? new Date().toISOString(),
+    lastLoginAt: toIso(row.last_login_at ?? row.lastLoginAt),
+    lockedUntil: row.locked_until ? Number(row.locked_until) : undefined,
+    failedLogins: Number(row.failed_logins ?? row.failedLogins ?? 0),
+    trialDays: Number(row.trial_days ?? row.trialDays ?? defaultTrialDays),
+    passwordPreview: row.password_preview ?? row.passwordPreview ?? undefined,
+    protected: Boolean(row.is_protected ?? row.isProtected)
   };
-
-  state().users.push(user);
-  return user;
 }
 
-export function deleteUser(id: string, actorId: string) {
-  const authState = state();
-  const target = authState.users.find((user) => user.id === id);
-  if (!target) return { ok: false as const, error: "حساب کاربری پیدا نشد." };
-  if (target.id === actorId) return { ok: false as const, error: "مدیر نمی‌تواند حساب خودش را حذف کند." };
-  if (target.protected) return { ok: false as const, error: "حساب‌های پایه قابل حذف نیستند." };
-
-  authState.users = authState.users.filter((user) => user.id !== id);
-  return { ok: true as const };
-}
-
-export function verifyPassword(username: string, password: string) {
-  const user = getUser(username);
-  if (!user) return { ok: false as const, error: "نام کاربری یا رمز عبور اشتباه است." };
-
-  const now = Date.now();
-  if (user.lockedUntil && user.lockedUntil > now) {
-    return { ok: false as const, error: "به دلیل تلاش‌های ناموفق، حساب موقتاً قفل شده است." };
+export async function ensureAuthSchema() {
+  if (!globalState.__hamyarSchemaReady) {
+    globalState.__hamyarSchemaReady = (async () => {
+      await query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id VARCHAR(50) PRIMARY KEY,
+          username VARCHAR(100) UNIQUE NOT NULL,
+          role VARCHAR(20) NOT NULL,
+          plan VARCHAR(20) NOT NULL,
+          is_free_account BOOLEAN DEFAULT TRUE,
+          display_name VARCHAR(100) NOT NULL,
+          signup_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          last_login_at TIMESTAMP,
+          failed_logins INTEGER DEFAULT 0,
+          is_protected BOOLEAN DEFAULT FALSE
+        );
+      `);
+      await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT");
+      await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_preview TEXT");
+      await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_days INTEGER NOT NULL DEFAULT 7");
+      await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until BIGINT");
+      await query(`
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      await query(
+        `INSERT INTO app_settings (key, value)
+         VALUES ('default_trial_days', $1)
+         ON CONFLICT (key) DO NOTHING`,
+        [String(defaultTrialDays)]
+      );
+      await seedBaseUsers();
+      await query(
+        `UPDATE users
+         SET password_hash = $1, password_preview = username
+         WHERE (password_hash IS NULL OR password_hash = '')`,
+        [hashPassword("__placeholder__")]
+      );
+      await query(
+        `UPDATE users
+         SET password_hash = $1
+         WHERE password_preview = username AND password_hash = $2`,
+        [hashPassword("__placeholder__"), hashPassword("__placeholder__")]
+      );
+      await query(
+        `UPDATE users
+         SET password_hash = $1
+         WHERE password_preview = username`,
+        [hashPassword("__phone_password_marker__")]
+      );
+      const rows = await query("SELECT username FROM users WHERE password_hash = $1", [hashPassword("__phone_password_marker__")]);
+      for (const row of rows.rows) {
+        await query("UPDATE users SET password_hash = $1 WHERE username = $2", [hashPassword(row.username), row.username]);
+      }
+    })();
   }
 
-  const expected = state().passwords.get(username);
-  if (!expected || !safeEqual(expected, hash(password))) {
-    user.failedLogins += 1;
-    if (user.failedLogins >= 5) {
-      user.lockedUntil = now + 15 * 60 * 1000;
-      user.failedLogins = 0;
-    }
+  return globalState.__hamyarSchemaReady;
+}
+
+async function seedBaseUsers() {
+  const now = new Date();
+  const expiredTrialSignup = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+  const seeds = [
+    ["seed-admin", "admin", "admin", "pro", false, "مدیر سیستم", now, now, 0, true, seedPasswords.admin],
+    ["seed-user", "user", "user", "pro", false, "کاربر حرفه‌ای", now, now, 0, true, seedPasswords.user],
+    ["seed-free", "free", "user", "free", true, "کاربر تست رایگان", expiredTrialSignup, expiredTrialSignup, 0, true, seedPasswords.free]
+  ] as const;
+
+  for (const seed of seeds) {
+    await query(
+      `INSERT INTO users
+       (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       ON CONFLICT (username) DO UPDATE SET
+         password_hash = COALESCE(NULLIF(users.password_hash, ''), EXCLUDED.password_hash),
+         password_preview = COALESCE(NULLIF(users.password_preview, ''), EXCLUDED.password_preview),
+         trial_days = COALESCE(users.trial_days, EXCLUDED.trial_days)`,
+      [...seed.slice(0, 10), hashPassword(seed[10]), seed[10], defaultTrialDays]
+    );
+  }
+}
+
+export async function getDefaultTrialDays() {
+  await ensureAuthSchema();
+  const result = await query("SELECT value FROM app_settings WHERE key = 'default_trial_days'");
+  return Number(result.rows[0]?.value ?? defaultTrialDays);
+}
+
+export async function setDefaultTrialDays(days: number) {
+  const safeDays = Math.max(0, Math.min(3650, Math.floor(days)));
+  await ensureAuthSchema();
+  await query(
+    `INSERT INTO app_settings (key, value, updated_at)
+     VALUES ('default_trial_days', $1, CURRENT_TIMESTAMP)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+    [String(safeDays)]
+  );
+  return safeDays;
+}
+
+export async function getUser(username: string) {
+  await ensureAuthSchema();
+  const result = await query("SELECT * FROM users WHERE username = $1", [username]);
+  return result.rows[0] ? mapDbUser(result.rows[0]) : undefined;
+}
+
+export async function getUserById(id: string) {
+  await ensureAuthSchema();
+  const result = await query("SELECT * FROM users WHERE id = $1", [id]);
+  return result.rows[0] ? mapDbUser(result.rows[0]) : undefined;
+}
+
+export async function upsertMobileUser(username: string) {
+  await ensureAuthSchema();
+  const existing = await getUser(username);
+  if (existing) return existing;
+
+  const signupAt = new Date();
+  const trialDays = await getDefaultTrialDays();
+  const result = await query(
+    `INSERT INTO users
+     (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
+     VALUES ($1, $2, 'user', 'free', true, $3, $4, $4, 0, false, $5, $2, $6)
+     RETURNING *`,
+    [randomBytes(10).toString("hex"), username, `کاربر ${username}`, signupAt, hashPassword(username), trialDays]
+  );
+  return mapDbUser(result.rows[0]);
+}
+
+export async function verifyPassword(username: string, password: string) {
+  await ensureAuthSchema();
+  const result = await query("SELECT * FROM users WHERE username = $1", [username]);
+  const row = result.rows[0];
+  if (!row) return { ok: false as const, error: "نام کاربری یا رمز عبور اشتباه است." };
+
+  const user = mapDbUser(row);
+  const now = Date.now();
+  if (user.lockedUntil && user.lockedUntil > now) {
+    return { ok: false as const, error: "به دلیل تلاش‌های ناموفق، حساب موقتا قفل شده است." };
+  }
+
+  const expected = String(row.password_hash || "");
+  if (!expected || !safeEqual(expected, hashPassword(password))) {
+    const failedLogins = user.failedLogins + 1;
+    const lockedUntil = failedLogins >= 5 ? now + 15 * 60 * 1000 : null;
+    await query(
+      "UPDATE users SET failed_logins = $1, locked_until = $2 WHERE id = $3",
+      [lockedUntil ? 0 : failedLogins, lockedUntil, user.id]
+    );
     return { ok: false as const, error: "نام کاربری یا رمز عبور اشتباه است." };
   }
 
-  user.failedLogins = 0;
-  user.lockedUntil = undefined;
-  user.lastLoginAt = new Date().toISOString();
-  return { ok: true as const, user };
+  const loginAt = new Date();
+  await query("UPDATE users SET failed_logins = 0, locked_until = NULL, last_login_at = $1 WHERE id = $2", [loginAt, user.id]);
+  return { ok: true as const, user: { ...user, failedLogins: 0, lockedUntil: undefined, lastLoginAt: loginAt.toISOString() } };
 }
 
 export function rateLimit(key: string, limit: number, windowMs: number) {
@@ -252,7 +300,7 @@ export function rateLimit(key: string, limit: number, windowMs: number) {
   return { ok: true as const };
 }
 
-export function createOtp(username: string) {
+export async function createOtp(username: string) {
   const authState = state();
   const now = Date.now();
   const existing = authState.otps.get(username);
@@ -267,18 +315,18 @@ export function createOtp(username: string) {
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
   authState.otps.set(username, {
-    codeHash: hash(code),
+    codeHash: hashPassword(code),
     expiresAt: now + 2 * 60 * 1000,
     attempts: 0,
     requestCount: (existing?.requestCount ?? 0) + 1,
     nextRequestAt: now + 60 * 1000
   });
 
-  upsertMobileUser(username);
+  await upsertMobileUser(username);
   return { ok: true as const, code, expiresAt: now + 2 * 60 * 1000 };
 }
 
-export function verifyOtp(username: string, code: string) {
+export async function verifyOtp(username: string, code: string) {
   const authState = state();
   const record = authState.otps.get(username);
   const now = Date.now();
@@ -294,14 +342,15 @@ export function verifyOtp(username: string, code: string) {
   }
 
   record.attempts += 1;
-  if (!safeEqual(record.codeHash, hash(code))) {
+  if (!safeEqual(record.codeHash, hashPassword(code))) {
     return { ok: false as const, error: "کد وارد شده درست نیست." };
   }
 
   authState.otps.delete(username);
-  const user = upsertMobileUser(username);
-  user.lastLoginAt = new Date().toISOString();
-  return { ok: true as const, user };
+  const user = await upsertMobileUser(username);
+  const loginAt = new Date();
+  await query("UPDATE users SET last_login_at = $1 WHERE id = $2", [loginAt, user.id]);
+  return { ok: true as const, user: { ...user, lastLoginAt: loginAt.toISOString() } };
 }
 
 export function signSession(user: Pick<UserAccount, "id" | "username" | "role">) {
@@ -313,14 +362,14 @@ export function signSession(user: Pick<UserAccount, "id" | "username" | "role">)
       exp: Date.now() + 7 * 24 * 60 * 60 * 1000
     })
   ).toString("base64url");
-  const signature = hash(payload, sessionSecret);
+  const signature = hashSession(payload);
   return `${payload}.${signature}`;
 }
 
-export function readSession(token?: string) {
+export async function readSession(token?: string) {
   if (!token) return null;
   const [payload, signature] = token.split(".");
-  if (!payload || !signature || !safeEqual(hash(payload, sessionSecret), signature)) return null;
+  if (!payload || !signature || !safeEqual(hashSession(payload), signature)) return null;
 
   try {
     const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
@@ -331,7 +380,7 @@ export function readSession(token?: string) {
     };
 
     if (session.exp < Date.now()) return null;
-    const user = getUserById(session.id);
+    const user = await getUserById(session.id);
     if (!user || user.username !== session.username || user.role !== session.role) return null;
     return session;
   } catch {

@@ -16,7 +16,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
 
-  const user = getUserById(session.id);
+  const user = await getUserById(session.id);
   const access = getSubscriptionAccess(user);
   const params = await searchParams;
   const query = Array.isArray(params.q) ? params.q[0] : params.q ?? "";

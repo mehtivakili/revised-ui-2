@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     return failedLoginResponse(request, isFormPost, "نام کاربری و رمز عبور الزامی است.", 400);
   }
 
-  const result = verifyPassword(username, password);
+  const result = await verifyPassword(username, password);
   if (!result.ok) {
     return failedLoginResponse(request, isFormPost, result.error, 401);
   }

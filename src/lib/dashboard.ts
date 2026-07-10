@@ -77,15 +77,6 @@ export const dashboardCategories: DashboardCategory[] = [
         icon: "eye"
       },
       {
-        slug: "planner",
-        title: "میدان دید",
-        subtitle: "میدان دید دوربین",
-        description: "محاسبه زاویه دید، عرض صحنه، تراکم پیکسلی و فواصل دوربین بر اساس مشخصات حسگر و لنز.",
-        status: "ready",
-        metric: "FOV / PPM",
-        icon: "camera"
-      },
-      {
         slug: "sensitivity",
         title: "مقایسه حساسیت",
         subtitle: "مقایسه نور کم",
@@ -96,8 +87,8 @@ export const dashboardCategories: DashboardCategory[] = [
       },
       {
         slug: "lens-3d",
-        title: "ماشین‌حساب لنز سه‌بعدی",
-        subtitle: "شبیه‌ساز دوربین",
+        title: "میدان دید",
+        subtitle: "شبیه‌ساز سه‌بعدی دوربین",
         description: "شبیه‌سازی سه‌بعدی میدان دید دوربین با نمایش نواحی DORI، تراکم پیکسلی و زاویه دید.",
         status: "ready",
         metric: "3D / DORI",

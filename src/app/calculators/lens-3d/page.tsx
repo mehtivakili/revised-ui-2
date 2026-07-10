@@ -7,8 +7,8 @@ import type { DashboardTool } from "@/src/lib/dashboard";
 /* ─── tool metadata ─── */
 const tool: DashboardTool = {
   slug: "lens-3d",
-  title: "ماشین‌حساب لنز سه‌بعدی",
-  subtitle: "شبیه‌ساز دوربین",
+  title: "میدان دید",
+  subtitle: "شبیه‌ساز سه‌بعدی دوربین",
   description: "شبیه‌سازی سه‌بعدی میدان دید دوربین با نمایش نواحی DORI، تراکم پیکسلی و زاویه دید.",
   status: "ready",
   metric: "3D / DORI",
@@ -117,12 +117,12 @@ function buildScene(
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(width, height);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setClearColor(0x0f1419, 1);
+  renderer.setClearColor(0xd8eaf3, 1);
   container.appendChild(renderer.domElement);
 
   /* scene */
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x0f1419, 80, 200);
+  scene.fog = new THREE.Fog(0xd8eaf3, 90, 220);
 
   /* camera */
   const cam = new THREE.PerspectiveCamera(50, width / height, 0.1, 500);
@@ -138,7 +138,7 @@ function buildScene(
   // Set initial 3D view
   const set3DView = () => {
     cam.position.set(-params.distance * 0.6, params.camHeight * 2.5, params.distance * 1.2);
-    controls.target.set(params.distance * 0.4, 0, 0);
+    controls.target.set(params.distance, params.targetHeight / 2, 0);
   };
   set3DView();
 
@@ -147,10 +147,10 @@ function buildScene(
     setViewMode: (mode) => {
       if (mode === "top") {
         cam.position.set(params.distance / 2, Math.max(20, params.distance * 1.5), 0);
-        controls.target.set(params.distance / 2, 0, 0);
+        controls.target.set(params.distance, params.targetHeight / 2, 0);
       } else if (mode === "side") {
         cam.position.set(params.distance / 2, params.targetHeight, Math.max(15, params.distance));
-        controls.target.set(params.distance / 2, params.targetHeight, 0);
+        controls.target.set(params.distance, params.targetHeight / 2, 0);
       } else {
         set3DView();
       }
@@ -161,7 +161,7 @@ function buildScene(
   /* ── ground grid ── */
   const gridSize = Math.max(100, params.distance * 4);
   const gridDivisions = Math.round(gridSize / 2);
-  const grid = new THREE.GridHelper(gridSize, gridDivisions, 0x2a3a4a, 0x1a2530);
+  const grid = new THREE.GridHelper(gridSize, gridDivisions, 0x79a8bf, 0xb7d1df);
   scene.add(grid);
 
   /* ambient + directional lights */
@@ -172,20 +172,20 @@ function buildScene(
 
   /* ── camera box (mount point) ── */
   const camBoxGeo = new THREE.BoxGeometry(0.4, 0.3, 0.5);
-  const camBoxMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.6, roughness: 0.3 });
+  const camBoxMat = new THREE.MeshStandardMaterial({ color: 0x5f7f95, metalness: 0.35, roughness: 0.42 });
   const camBox = new THREE.Mesh(camBoxGeo, camBoxMat);
   camBox.position.set(0, params.camHeight, 0);
   scene.add(camBox);
 
   /* camera pole */
   const poleGeo = new THREE.CylinderGeometry(0.06, 0.06, params.camHeight, 8);
-  const poleMat = new THREE.MeshStandardMaterial({ color: 0x475569 });
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x6d8798 });
   const pole = new THREE.Mesh(poleGeo, poleMat);
   pole.position.set(0, params.camHeight / 2, 0);
   scene.add(pole);
 
   /* ── lens indicator line from camera ── */
-  const lineMat = new THREE.LineBasicMaterial({ color: 0x94a3b8 });
+  const lineMat = new THREE.LineBasicMaterial({ color: 0x4f7f98 });
   const lineGeo = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(0, params.camHeight, 0),
     new THREE.Vector3(params.distance * 0.15, params.camHeight - (params.camHeight - params.targetHeight) * 0.15, 0)
@@ -252,7 +252,7 @@ function buildScene(
     new THREE.Vector3(0, params.camHeight, 0)
   ];
   const outlineGeo = new THREE.BufferGeometry().setFromPoints(outlinePoints);
-  const outlineMat = new THREE.LineBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.6 });
+  const outlineMat = new THREE.LineBasicMaterial({ color: 0x1686a6, transparent: true, opacity: 0.72 });
   scene.add(new THREE.Line(outlineGeo, outlineMat));
 
   const sideGeo1 = new THREE.BufferGeometry().setFromPoints([
@@ -275,16 +275,62 @@ function buildScene(
   dashLine.computeLineDistances();
   scene.add(dashLine);
 
+  const createCutoutTexture = (image: HTMLImageElement) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+
+    ctx.drawImage(image, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const isWhiteMatte = max > 226 && max - min < 36;
+
+      if (isWhiteMatte) {
+        data[i + 3] = 0;
+        continue;
+      }
+
+      for (let channel = 0; channel < 3; channel++) {
+        const contrasted = (data[i + channel] - 128) * 1.28 + 128;
+        data[i + channel] = Math.max(0, Math.min(255, contrasted * 0.92));
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    const cutoutTexture = new THREE.CanvasTexture(canvas);
+    cutoutTexture.minFilter = THREE.LinearFilter;
+    cutoutTexture.magFilter = THREE.LinearFilter;
+    cutoutTexture.needsUpdate = true;
+    return cutoutTexture;
+  };
+
   /* ── human figure (Sprite) at target distance ── */
   const textureLoader = new THREE.TextureLoader();
   textureLoader.load('/images/man-plate.png?v=2', (texture) => {
     // Preserve aspect ratio
     const aspect = texture.image.width / texture.image.height;
-    const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const cutoutTexture = createCutoutTexture(texture.image as HTMLImageElement) ?? texture;
+    const spriteMaterial = new THREE.SpriteMaterial({
+      map: cutoutTexture,
+      transparent: true,
+      alphaTest: 0.08,
+      depthWrite: false,
+      depthTest: false
+    });
     const sprite = new THREE.Sprite(spriteMaterial);
+    sprite.renderOrder = 20;
     
     // Scale sprite to target height
-    sprite.scale.set(params.targetHeight * aspect, params.targetHeight, 1);
+    sprite.scale.set(params.targetHeight * aspect * 1.18, params.targetHeight * 1.18, 1);
     
     // Position at target distance, resting on ground
     sprite.position.set(params.distance, params.targetHeight / 2, 0);
@@ -415,8 +461,8 @@ export default function Lens3DPage() {
   /* ── Simulated Pixelation Setup ── */
   const manWidthMeters = 0.5;
   const cameraPixelsForMan = Math.max(1, Math.round(result.ppm * manWidthMeters));
-  const displayWidth = 140;
-  const aspect = 1; // 1024x1024 image
+  const displayWidth = 170;
+  const aspect = 1.08;
   const displayHeight = displayWidth / aspect;
   const scaleFactor = displayWidth / cameraPixelsForMan;
 
@@ -451,14 +497,15 @@ export default function Lens3DPage() {
           </div>
         </aside>
 
-        {/* ── 3D viewport ── */}
-        <div className="lens3d-viewport" ref={containerRef}>
-          
-          {/* View Presets Overlays */}
-          <div className="lens3d-controls">
-            <button className={viewMode === "3d" ? "active" : ""} onClick={() => setViewMode("3d")}>3D</button>
-            <button className={viewMode === "top" ? "active" : ""} onClick={() => setViewMode("top")}>بالا (Top)</button>
-            <button className={viewMode === "side" ? "active" : ""} onClick={() => setViewMode("side")}>کنار (Side)</button>
+        <div className="lens3d-stage">
+          {/* ── 3D viewport ── */}
+          <div className="lens3d-viewport" ref={containerRef}>
+            {/* View Presets Overlays */}
+            <div className="lens3d-controls">
+              <button className={viewMode === "3d" ? "active" : ""} onClick={() => setViewMode("3d")}>3D</button>
+              <button className={viewMode === "top" ? "active" : ""} onClick={() => setViewMode("top")}>بالا (Top)</button>
+              <button className={viewMode === "side" ? "active" : ""} onClick={() => setViewMode("side")}>کنار (Side)</button>
+            </div>
           </div>
 
           {/* Simulated Camera View Overlay */}
@@ -472,7 +519,7 @@ export default function Lens3DPage() {
                 style={{
                   width: cameraPixelsForMan,
                   height: cameraPixelsForMan / aspect,
-                  transform: `scale(${scaleFactor})`,
+                  transform: `scale(${scaleFactor * 1.72}) translateY(24%)`,
                   transformOrigin: 'center center'
                 }}
               >

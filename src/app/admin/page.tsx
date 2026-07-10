@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { AdminPanel } from "@/src/components/AdminPanel";
-import { getSmsConfig } from "@/src/lib/authStore";
+import { ensureAuthSchema, getDefaultTrialDays, getSmsConfig } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
 import { query } from "@/src/lib/db";
 
@@ -18,13 +18,17 @@ export default async function AdminPage() {
   let initialUsers: any[] = [];
   let totalUsers = 0;
   let totalPages = 1;
+  let defaultTrialDays = 7;
 
   try {
+    await ensureAuthSchema();
+    defaultTrialDays = await getDefaultTrialDays();
     const usersResult = await query(`
       SELECT id, username, role, plan, is_free_account as "isFreeAccount", 
              display_name as "displayName", signup_at as "signupAt", 
              created_at as "createdAt", last_login_at as "lastLoginAt", 
-             failed_logins as "failedLogins", is_protected as "isProtected"
+             failed_logins as "failedLogins", is_protected as "isProtected",
+             trial_days as "trialDays", password_preview as "passwordPreview"
       FROM users
       ORDER BY is_protected DESC, signup_at DESC
       LIMIT 50 OFFSET 0
@@ -50,6 +54,7 @@ export default async function AdminPage() {
         initialUsers={initialUsers} 
         initialTotalUsers={totalUsers}
         initialTotalPages={totalPages}
+        initialDefaultTrialDays={defaultTrialDays}
         initialSmsConfig={getSmsConfig()} 
       />
     </main>

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { MessageSquare, Shield, Trash2, UsersRound, Settings, ChevronDown, ChevronUp } from "lucide-react";
+import { Eye, EyeOff, MessageSquare, Pencil, Plus, Save, Settings2, Trash2, UsersRound, X, ChevronDown, ChevronUp } from "lucide-react";
 import type { UserPlan, UserRole } from "@/src/lib/authStore";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
 
@@ -17,6 +17,8 @@ type AdminUser = {
   lastLoginAt?: string;
   lockedUntil?: number;
   failedLogins: number;
+  trialDays: number;
+  passwordPreview?: string;
   isProtected: boolean;
 };
 
@@ -36,6 +38,7 @@ type AdminPanelProps = {
   initialUsers: AdminUser[];
   initialTotalUsers: number;
   initialTotalPages: number;
+  initialDefaultTrialDays: number;
   initialSmsConfig: SmsConfig;
 };
 
@@ -44,6 +47,7 @@ export function AdminPanel({
   initialUsers, 
   initialTotalUsers,
   initialTotalPages,
+  initialDefaultTrialDays,
   initialSmsConfig 
 }: AdminPanelProps) {
   const [users, setUsers] = useState(initialUsers);
@@ -57,6 +61,28 @@ export function AdminPanel({
   const [roleFilter, setRoleFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const [smsConfig, setSmsConfig] = useState(initialSmsConfig);
+  const [defaultTrialDays, setDefaultTrialDays] = useState(initialDefaultTrialDays);
+  const [savingDefaultTrial, setSavingDefaultTrial] = useState(false);
+  const [showPasswords, setShowPasswords] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    username: "",
+    displayName: "",
+    role: "user" as UserRole,
+    plan: "free" as UserPlan,
+    trialDays: initialDefaultTrialDays,
+    daysLeft: initialDefaultTrialDays,
+    password: ""
+  });
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+  const [editForm, setEditForm] = useState({
+    displayName: "",
+    role: "user" as UserRole,
+    plan: "free" as UserPlan,
+    trialDays: initialDefaultTrialDays,
+    daysLeft: initialDefaultTrialDays,
+    password: ""
+  });
   const [apiKey, setApiKey] = useState("");
   const [now] = useState(() => Date.now());
   const [message, setMessage] = useState("");
@@ -93,12 +119,137 @@ export function AdminPanel({
       setTotalUsers(data.totalUsers);
       setTotalPages(data.totalPages);
       setCurrentPage(data.currentPage);
-    } catch (err: any) {
+      if (typeof data.defaultTrialDays === "number") setDefaultTrialDays(data.defaultTrialDays);
+    } catch {
       setError("خطا در ارتباط با سرور.");
     } finally {
       setLoading(false);
     }
   };
+
+  const getDaysLeft = (user: Pick<AdminUser, "plan" | "isFreeAccount" | "signupAt" | "createdAt" | "trialDays">) => {
+    return getSubscriptionAccess(user, now).trialDaysRemaining;
+  };
+
+  async function saveDefaultTrial(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSavingDefaultTrial(true);
+    setError("");
+    setMessage("");
+
+    const response = await fetch("/api/admin/accounts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "settings", defaultTrialDays })
+    });
+    const data = await response.json();
+    setSavingDefaultTrial(false);
+
+    if (!response.ok || !data.ok) {
+      setError(data.error || "ذخیره مدت تست انجام نشد.");
+      return;
+    }
+
+    setDefaultTrialDays(data.defaultTrialDays);
+    setCreateForm((current) => ({ ...current, trialDays: data.defaultTrialDays, daysLeft: data.defaultTrialDays }));
+    setMessage("مدت پیش‌فرض تست ذخیره شد.");
+  }
+
+  async function createAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    setMessage("");
+
+    const password = createForm.password.trim() || createForm.username.trim();
+    const response = await fetch("/api/admin/accounts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...createForm, password })
+    });
+    const data = await response.json();
+    setLoading(false);
+
+    if (!response.ok || !data.ok) {
+      setError(data.error || "ایجاد کاربر انجام نشد.");
+      return;
+    }
+
+    setCreateForm({
+      username: "",
+      displayName: "",
+      role: "user",
+      plan: "free",
+      trialDays: defaultTrialDays,
+      daysLeft: defaultTrialDays,
+      password: ""
+    });
+    setMessage("کاربر جدید ایجاد شد.");
+    setCreateModalOpen(false);
+    fetchPage(1);
+  }
+
+  function startEdit(user: AdminUser) {
+    setEditingUser(user);
+    setEditForm({
+      displayName: user.displayName,
+      role: user.role,
+      plan: user.plan,
+      trialDays: user.trialDays ?? defaultTrialDays,
+      daysLeft: getDaysLeft(user),
+      password: ""
+    });
+  }
+
+  async function saveEditedAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingUser) return;
+    setPendingUserId(editingUser.id);
+    setError("");
+    setMessage("");
+
+    const response = await fetch("/api/admin/accounts", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: editingUser.id, ...editForm })
+    });
+    const data = await response.json();
+    setPendingUserId("");
+
+    if (!response.ok || !data.ok) {
+      setError(data.error || "ویرایش کاربر انجام نشد.");
+      return;
+    }
+
+    setEditingUser(null);
+    setMessage("اطلاعات کاربر ذخیره شد.");
+    fetchPage(currentPage);
+  }
+
+  function closeCreateModal() {
+    setCreateModalOpen(false);
+    setCreateForm({
+      username: "",
+      displayName: "",
+      role: "user",
+      plan: "free",
+      trialDays: defaultTrialDays,
+      daysLeft: defaultTrialDays,
+      password: ""
+    });
+  }
+
+  function closeEditModal() {
+    setEditingUser(null);
+    setEditForm({
+      displayName: "",
+      role: "user",
+      plan: "free",
+      trialDays: defaultTrialDays,
+      daysLeft: defaultTrialDays,
+      password: ""
+    });
+  }
 
   const handleFilterChange = (updates: { plan?: string; role?: string; sortBy?: string }) => {
     const nextPlan = updates.plan !== undefined ? updates.plan : planFilter;
@@ -231,6 +382,48 @@ export function AdminPanel({
             </label>
           </div>
 
+          <div className="admin-management-grid">
+            <form className="admin-setting-card" onSubmit={saveDefaultTrial}>
+              <span className="category-icon">
+                <Settings2 size={18} aria-hidden="true" />
+              </span>
+              <div className="admin-setting-copy">
+                <strong>مدت پیش‌فرض تست رایگان</strong>
+                <small>برای کاربران جدید و ورود موبایلی استفاده می‌شود.</small>
+              </div>
+              <input
+                aria-label="مدت پیش‌فرض تست رایگان"
+                type="number"
+                min={0}
+                max={3650}
+                value={defaultTrialDays}
+                onChange={(event) => setDefaultTrialDays(Number(event.target.value))}
+              />
+              <button className="secondary-action compact" type="submit" disabled={savingDefaultTrial}>
+                <Save size={15} aria-hidden="true" />
+                {savingDefaultTrial ? "ذخیره..." : "ذخیره"}
+              </button>
+            </form>
+
+            <div className="admin-action-card">
+              <span className="category-icon">
+                <UsersRound size={18} aria-hidden="true" />
+              </span>
+              <div className="admin-setting-copy">
+                <strong>مدیریت حساب‌ها</strong>
+                <small>کاربر جدید بسازید یا رمزهای اولیه را موقت نمایش دهید.</small>
+              </div>
+              <button className="primary-action compact" type="button" onClick={() => setCreateModalOpen(true)}>
+                <Plus size={16} aria-hidden="true" />
+                ایجاد کاربر جدید
+              </button>
+              <button className="secondary-action compact password-toggle" type="button" onClick={() => setShowPasswords((value) => !value)}>
+                {showPasswords ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
+                {showPasswords ? "مخفی کردن رمزها" : "نمایش رمزها"}
+              </button>
+            </div>
+          </div>
+
           <div className="admin-table-wrap scrollable-admin-table">
             {loading ? (
               <div className="table-loader">در حال بارگذاری...</div>
@@ -241,6 +434,7 @@ export function AdminPanel({
                     <th>نام کاربری</th>
                     <th>نقش</th>
                     <th>اشتراک</th>
+                    <th>رمز</th>
                     <th>ثبت‌نام</th>
                     <th>آخرین ورود</th>
                     <th>وضعیت</th>
@@ -289,10 +483,21 @@ export function AdminPanel({
                           <span className={`plan-pill ${access.plan}`}>{access.plan === "pro" ? "حرفه‌ای" : "رایگان"}</span>
                           <small>{access.plan === "free" ? (access.restricted ? "تست منقضی" : `${access.trialDaysRemaining} روز باقی‌مانده`) : "دسترسی کامل"}</small>
                         </td>
+                        <td data-label="رمز" className="col-desktop-only">
+                          <small>{showPasswords ? user.passwordPreview || "فقط قابل تغییر" : "••••••••"}</small>
+                        </td>
                         <td data-label="ثبت‌نام" className="col-desktop-only">{new Date(access.signupAt).toLocaleDateString("fa-IR")}</td>
                         <td data-label="آخرین ورود" className="col-desktop-only">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString("fa-IR") : "بدون ورود"}</td>
                         <td data-label="وضعیت" className="col-desktop-only">{locked ? "قفل موقت" : user.isProtected ? "حساب پایه" : "فعال"}</td>
                         <td data-label="عملیات" className="col-desktop-only">
+                          <button
+                            type="button"
+                            className="secondary-action compact"
+                            onClick={() => startEdit(user)}
+                          >
+                            <Pencil size={15} aria-hidden="true" />
+                            ویرایش
+                          </button>
                           <button
                             type="button"
                             className="danger-action compact"
@@ -311,8 +516,17 @@ export function AdminPanel({
                               <span><strong>نقش:</strong> {user.role === "admin" ? "مدیر" : "کاربر"}</span>
                               <span><strong>ثبت‌نام:</strong> {new Date(access.signupAt).toLocaleDateString("fa-IR")}</span>
                               <span><strong>وضعیت:</strong> {locked ? "قفل" : "فعال"}</span>
+                              <span><strong>رمز:</strong> {showPasswords ? user.passwordPreview || "فقط قابل تغییر" : "••••••••"}</span>
                             </div>
                             <div className="mobile-details-row-actions">
+                              <button
+                                type="button"
+                                className="secondary-action compact"
+                                onClick={() => startEdit(user)}
+                              >
+                                <Pencil size={13} aria-hidden="true" />
+                                ویرایش
+                              </button>
                               <button
                                 type="button"
                                 className="danger-action compact"
@@ -435,6 +649,131 @@ export function AdminPanel({
           </form>
         </article>
       </section>
+
+      {createModalOpen ? (
+        <div className="admin-modal-backdrop" role="presentation" onMouseDown={closeCreateModal}>
+          <section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="create-user-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="admin-modal-head">
+              <div>
+                <p className="eyebrow">حساب جدید</p>
+                <h2 id="create-user-title">ایجاد کاربر جدید</h2>
+              </div>
+              <button className="icon-button" type="button" aria-label="بستن" onClick={closeCreateModal}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <form className="admin-form-grid admin-modal-form" onSubmit={createAccount}>
+              <label>
+                <span>نام کاربری / موبایل</span>
+                <input value={createForm.username} onChange={(event) => setCreateForm({ ...createForm, username: event.target.value })} required />
+              </label>
+              <label>
+                <span>نام نمایشی</span>
+                <input value={createForm.displayName} onChange={(event) => setCreateForm({ ...createForm, displayName: event.target.value })} />
+              </label>
+              <label>
+                <span>نقش</span>
+                <select value={createForm.role} onChange={(event) => setCreateForm({ ...createForm, role: event.target.value as UserRole })}>
+                  <option value="user">کاربر</option>
+                  <option value="admin">مدیر</option>
+                </select>
+              </label>
+              <label>
+                <span>اشتراک</span>
+                <select value={createForm.plan} onChange={(event) => setCreateForm({ ...createForm, plan: event.target.value as UserPlan })}>
+                  <option value="free">رایگان</option>
+                  <option value="pro">حرفه‌ای</option>
+                </select>
+              </label>
+              <label>
+                <span>کل روزهای تست</span>
+                <input type="number" min={0} max={3650} value={createForm.trialDays} onChange={(event) => setCreateForm({ ...createForm, trialDays: Number(event.target.value) })} />
+              </label>
+              <label>
+                <span>روزهای باقی‌مانده</span>
+                <input type="number" min={0} max={3650} value={createForm.daysLeft} onChange={(event) => setCreateForm({ ...createForm, daysLeft: Number(event.target.value) })} />
+              </label>
+              <label>
+                <span>رمز عبور</span>
+                <input
+                  dir="ltr"
+                  type={showPasswords ? "text" : "password"}
+                  placeholder="اگر خالی باشد، موبایل رمز می‌شود"
+                  value={createForm.password}
+                  onChange={(event) => setCreateForm({ ...createForm, password: event.target.value })}
+                />
+              </label>
+              <div className="admin-modal-actions">
+                <button className="secondary-action" type="button" onClick={closeCreateModal}>
+                  انصراف
+                </button>
+                <button className="primary-action" type="submit" disabled={loading}>
+                  <Plus size={16} aria-hidden="true" />
+                  ایجاد کاربر
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+
+      {editingUser ? (
+        <div className="admin-modal-backdrop" role="presentation" onMouseDown={closeEditModal}>
+          <section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="edit-user-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="admin-modal-head">
+              <div>
+                <p className="eyebrow">ویرایش حساب</p>
+                <h2 id="edit-user-title">{editingUser.username}</h2>
+              </div>
+              <button className="icon-button" type="button" aria-label="بستن" onClick={closeEditModal}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <form className="admin-form-grid admin-modal-form" onSubmit={saveEditedAccount}>
+              <label>
+                <span>نام نمایشی</span>
+                <input value={editForm.displayName} onChange={(event) => setEditForm({ ...editForm, displayName: event.target.value })} />
+              </label>
+              <label>
+                <span>نقش</span>
+                <select value={editForm.role} onChange={(event) => setEditForm({ ...editForm, role: event.target.value as UserRole })}>
+                  <option value="user">کاربر</option>
+                  <option value="admin">مدیر</option>
+                </select>
+              </label>
+              <label>
+                <span>اشتراک</span>
+                <select value={editForm.plan} onChange={(event) => setEditForm({ ...editForm, plan: event.target.value as UserPlan })}>
+                  <option value="free">رایگان</option>
+                  <option value="pro">حرفه‌ای</option>
+                </select>
+              </label>
+              <label>
+                <span>کل روزهای تست</span>
+                <input type="number" min={0} max={3650} value={editForm.trialDays} onChange={(event) => setEditForm({ ...editForm, trialDays: Number(event.target.value) })} />
+              </label>
+              <label>
+                <span>روزهای باقی‌مانده</span>
+                <input type="number" min={0} max={3650} value={editForm.daysLeft} onChange={(event) => setEditForm({ ...editForm, daysLeft: Number(event.target.value) })} />
+              </label>
+              <label>
+                <span>رمز جدید</span>
+                <input dir="ltr" type={showPasswords ? "text" : "password"} value={editForm.password} onChange={(event) => setEditForm({ ...editForm, password: event.target.value })} />
+              </label>
+              <p className="admin-modal-note">اگر رمز جدید را خالی بگذارید، رمز فعلی حفظ می‌شود.</p>
+              <div className="admin-modal-actions">
+                <button className="secondary-action" type="button" onClick={closeEditModal}>
+                  انصراف
+                </button>
+                <button className="primary-action" type="submit" disabled={pendingUserId === editingUser.id}>
+                  <Save size={16} aria-hidden="true" />
+                  ذخیره کاربر
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
 
       {message ? <p className="form-message success">{message}</p> : null}
       {error ? <p className="form-message error">{error}</p> : null}

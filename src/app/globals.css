@@ -1412,6 +1412,10 @@ h3 {
   display: grid;
   gap: 16px;
   min-width: 0;
+  border-color: rgba(205, 228, 242, 0.78);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 252, 255, 0.88)),
+    var(--panel);
 }
 
 .admin-section-title {
@@ -1436,11 +1440,13 @@ h3 {
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: #ffffff;
+  box-shadow: 0 16px 42px rgba(31, 74, 111, 0.08);
 }
 
 .admin-table {
   width: 100%;
-  min-width: 1120px;
+  min-width: 1240px;
   border-collapse: collapse;
 }
 
@@ -1454,9 +1460,17 @@ h3 {
 
 .admin-table th {
   color: var(--muted);
-  background: #eef8fd;
+  background: #f0f8fc;
   font-size: 12px;
   font-weight: 800;
+}
+
+.admin-table tbody tr {
+  transition: background 150ms ease;
+}
+
+.admin-table tbody tr:hover {
+  background: #f8fcff;
 }
 
 .admin-table td strong,
@@ -1517,6 +1531,12 @@ h3 {
   padding: 8px 10px;
 }
 
+.admin-table td[data-label="عملیات"] {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .admin-form-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1530,6 +1550,103 @@ h3 {
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
+}
+
+.admin-management-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+  gap: 14px;
+}
+
+.admin-setting-card,
+.admin-action-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(205, 228, 242, 0.8);
+  border-radius: var(--radius);
+  background: #ffffff;
+  box-shadow: 0 10px 26px rgba(31, 74, 111, 0.07);
+}
+
+.admin-setting-card input {
+  width: 96px;
+}
+
+.admin-setting-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-setting-copy strong {
+  font-size: 14px;
+}
+
+.admin-setting-copy small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.password-toggle {
+  justify-self: start;
+}
+
+.admin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(14, 34, 49, 0.34);
+  backdrop-filter: blur(8px);
+}
+
+.admin-modal {
+  width: min(760px, 100%);
+  max-height: min(86vh, 760px);
+  overflow-y: auto;
+  padding: 18px;
+  border: 1px solid rgba(205, 228, 242, 0.88);
+  border-radius: var(--radius);
+  background: #ffffff;
+  box-shadow: 0 28px 80px rgba(14, 34, 49, 0.28);
+}
+
+.admin-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.admin-modal-head h2,
+.admin-modal-head p {
+  margin-bottom: 0;
+}
+
+.admin-modal-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-modal-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 6px;
+}
+
+.admin-modal-note {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .admin-switch {
@@ -3037,6 +3154,35 @@ h3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .admin-management-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-setting-card,
+  .admin-action-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .admin-setting-card input,
+  .admin-setting-card button,
+  .admin-action-card button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .admin-modal {
+    max-height: 90vh;
+    padding: 14px;
+  }
+
+  .admin-modal-form {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-modal-actions {
+    flex-direction: column-reverse;
+  }
+
   .admin-card {
     padding: 14px;
     border-radius: 16px;
@@ -3968,6 +4114,11 @@ h3 {
   align-items: start;
 }
 
+.lens3d-stage {
+  position: relative;
+  min-width: 0;
+}
+
 .lens3d-panel {
   background: var(--panel);
   border: 1px solid rgba(205, 228, 242, 0.7);
@@ -4053,7 +4204,8 @@ h3 {
 .lens3d-viewport {
   position: relative;
   min-height: 500px;
-  background: #0f1419;
+  background:
+    linear-gradient(180deg, #e5f3f8 0%, #d7eaf3 52%, #c9dfe9 100%);
   border-radius: var(--radius);
   border: 1px solid rgba(205, 228, 242, 0.7);
   box-shadow: var(--shadow);
@@ -4078,17 +4230,17 @@ h3 {
   left: 16px;
   display: flex;
   gap: 8px;
-  background: rgba(15, 20, 25, 0.7);
+  background: rgba(255, 255, 255, 0.72);
   padding: 6px;
   border-radius: 8px;
   backdrop-filter: blur(4px);
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid rgba(145, 184, 203, 0.42);
 }
 
 .lens3d-controls button {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: #35566a;
   padding: 6px 12px;
   border-radius: 4px;
   font-size: 12px;
@@ -4097,8 +4249,8 @@ h3 {
 }
 
 .lens3d-controls button:hover {
-  background: rgba(255,255,255,0.1);
-  color: #fff;
+  background: rgba(22, 134, 166, 0.12);
+  color: #123447;
 }
 
 .lens3d-controls button.active {
@@ -4110,22 +4262,22 @@ h3 {
 .lens3d-camera-sim {
   position: absolute;
   top: 16px;
-  right: 16px;
-  background: rgba(15, 20, 25, 0.85);
-  border: 1px solid rgba(255,255,255,0.1);
+  left: 16px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(145, 184, 203, 0.42);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  box-shadow: 0 12px 30px rgba(12, 28, 43, 0.34);
   backdrop-filter: blur(8px);
 }
 
 .lens3d-camera-sim-header {
-  background: rgba(255,255,255,0.05);
+  background: rgba(238, 248, 253, 0.82);
   padding: 8px 12px;
   font-size: 11px;
   font-weight: bold;
-  color: #fff;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  color: #123447;
+  border-bottom: 1px solid rgba(145, 184, 203, 0.32);
   text-align: center;
 }
 
@@ -4135,17 +4287,22 @@ h3 {
   display: flex;
   justify-content: center;
   align-items: center;
-  background: #e2e8f0;
+  background: linear-gradient(180deg, #f8fbfd, #dbeaf1);
 }
 
 .lens3d-camera-sim-pixelator {
   transform-origin: center center;
+  display: grid;
+  place-items: center;
 }
 
 .lens3d-camera-sim-pixelator img {
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 38%;
   display: block;
+  filter: contrast(1.35) saturate(1.18) brightness(0.94);
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
@@ -4297,6 +4454,30 @@ h3 {
     min-height: 350px;
   }
 
+  .lens3d-stage {
+    display: grid;
+    gap: 12px;
+  }
+
+  .lens3d-camera-sim {
+    position: static;
+    justify-self: stretch;
+    width: 100%;
+    background: #ffffff;
+    border: 1px solid rgba(205, 228, 242, 0.78);
+    box-shadow: 0 10px 24px rgba(23, 109, 168, 0.08);
+  }
+
+  .lens3d-camera-sim-header {
+    color: var(--text);
+    background: #eef8fd;
+    border-bottom: 1px solid rgba(205, 228, 242, 0.78);
+  }
+
+  .lens3d-camera-sim-view {
+    width: 100% !important;
+  }
+
   .lens3d-results {
     flex-wrap: wrap;
     justify-content: space-around;
@@ -4306,6 +4487,19 @@ h3 {
 @media (max-width: 480px) {
   .lens3d-viewport {
     min-height: 280px;
+  }
+
+  .lens3d-controls {
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    justify-content: center;
+  }
+
+  .lens3d-controls button {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
   }
 
   .lens3d-dori-grid {

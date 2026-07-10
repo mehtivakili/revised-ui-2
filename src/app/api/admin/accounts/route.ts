@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { query } from "@/src/lib/db";
+import { ensureAuthSchema, getDefaultTrialDays, hashPassword, setDefaultTrialDays } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
 
 async function requireAdmin() {
@@ -21,8 +23,9 @@ export async function GET(request: NextRequest) {
   const offset = (page - 1) * limit;
 
   try {
-    let whereClauses: string[] = [];
-    const queryParams: any[] = [];
+    await ensureAuthSchema();
+    const whereClauses: string[] = [];
+    const queryParams: (string | number)[] = [];
 
     if (search) {
       queryParams.push(`%${search}%`);
@@ -50,18 +53,19 @@ export async function GET(request: NextRequest) {
       orderString += ", signup_at DESC";
     }
 
-    let usersQueryText = `
+    const usersQueryText = `
       SELECT id, username, role, plan, is_free_account as "isFreeAccount", 
              display_name as "displayName", signup_at as "signupAt", 
              created_at as "createdAt", last_login_at as "lastLoginAt", 
-             failed_logins as "failedLogins", is_protected as "isProtected"
+             failed_logins as "failedLogins", is_protected as "isProtected",
+             trial_days as "trialDays", password_preview as "passwordPreview"
       FROM users
       ${whereString}
       ${orderString}
       LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
     `;
 
-    let countQueryText = `SELECT COUNT(*) FROM users ${whereString}`;
+    const countQueryText = `SELECT COUNT(*) FROM users ${whereString}`;
 
     const countParams = [...queryParams];
     queryParams.push(limit, offset);
@@ -83,11 +87,135 @@ export async function GET(request: NextRequest) {
       users,
       totalUsers,
       totalPages,
-      currentPage: page
+      currentPage: page,
+      defaultTrialDays: await getDefaultTrialDays()
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("API accounts GET failed:", err);
     return NextResponse.json({ ok: false, error: "خطا در خواندن کاربران از دیتابیس." }, { status: 500 });
+  }
+}
+
+function sanitizeRole(value: unknown) {
+  return value === "admin" ? "admin" : "user";
+}
+
+function sanitizePlan(value: unknown) {
+  return value === "pro" ? "pro" : "free";
+}
+
+function toSafeInt(value: unknown, fallback: number, min = 0, max = 3650) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(parsed)));
+}
+
+async function signupAtForRemainingDays(trialDays: number, daysLeft: number) {
+  const usedDays = Math.max(0, trialDays - daysLeft);
+  return new Date(Date.now() - usedDays * 24 * 60 * 60 * 1000);
+}
+
+export async function POST(request: Request) {
+  const session = await requireAdmin();
+  if (!session) return NextResponse.json({ ok: false, error: "دسترسی غیرمجاز است." }, { status: 403 });
+
+  const body = await request.json().catch(() => null);
+  const action = String(body?.action ?? "create");
+
+  try {
+    await ensureAuthSchema();
+
+    if (action === "settings") {
+      const defaultTrialDays = await setDefaultTrialDays(toSafeInt(body?.defaultTrialDays, 7));
+      return NextResponse.json({ ok: true, defaultTrialDays });
+    }
+
+    const username = String(body?.username ?? "").trim();
+    const displayName = String(body?.displayName ?? username).trim();
+    const role = sanitizeRole(body?.role);
+    const plan = sanitizePlan(body?.plan);
+    const trialDays = toSafeInt(body?.trialDays, await getDefaultTrialDays());
+    const daysLeft = toSafeInt(body?.daysLeft, trialDays);
+    const password = String(body?.password ?? username).trim() || username;
+
+    if (!username) {
+      return NextResponse.json({ ok: false, error: "نام کاربری یا موبایل الزامی است." }, { status: 400 });
+    }
+
+    const signupAt = await signupAtForRemainingDays(trialDays, daysLeft);
+    const result = await query(
+      `INSERT INTO users
+       (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 0, false, $8, $9, $10)
+       RETURNING id`,
+      [
+        randomUUID(),
+        username,
+        role,
+        plan,
+        plan === "free",
+        displayName || username,
+        signupAt,
+        hashPassword(password),
+        password,
+        trialDays
+      ]
+    );
+
+    return NextResponse.json({ ok: true, id: result.rows[0].id });
+  } catch (err: unknown) {
+    if (typeof err === "object" && err && "code" in err && err.code === "23505") {
+      return NextResponse.json({ ok: false, error: "این نام کاربری قبلا ثبت شده است." }, { status: 409 });
+    }
+    console.error("API accounts POST failed:", err);
+    return NextResponse.json({ ok: false, error: "خطا در ایجاد کاربر." }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  const session = await requireAdmin();
+  if (!session) return NextResponse.json({ ok: false, error: "دسترسی غیرمجاز است." }, { status: 403 });
+
+  const body = await request.json().catch(() => null);
+  const id = String(body?.id ?? "");
+  if (!id) return NextResponse.json({ ok: false, error: "شناسه کاربر ارسال نشده است." }, { status: 400 });
+
+  try {
+    await ensureAuthSchema();
+    const current = await query("SELECT * FROM users WHERE id = $1", [id]);
+    if (current.rowCount === 0) return NextResponse.json({ ok: false, error: "کاربر پیدا نشد." }, { status: 404 });
+
+    const row = current.rows[0];
+    const role = sanitizeRole(body?.role ?? row.role);
+    const plan = sanitizePlan(body?.plan ?? row.plan);
+    const trialDays = toSafeInt(body?.trialDays, Number(row.trial_days ?? 7));
+    const daysLeft = toSafeInt(body?.daysLeft, trialDays);
+    const signupAt = await signupAtForRemainingDays(trialDays, daysLeft);
+    const displayName = String(body?.displayName ?? row.display_name ?? row.username).trim() || row.username;
+    const password = String(body?.password ?? "").trim();
+
+    if (password) {
+      await query(
+        `UPDATE users
+         SET role = $1, plan = $2, is_free_account = $3, display_name = $4,
+             trial_days = $5, signup_at = $6, password_hash = $7, password_preview = $8
+         WHERE id = $9`,
+        [role, plan, plan === "free", displayName, trialDays, signupAt, hashPassword(password), password, id]
+      );
+    } else {
+      await query(
+        `UPDATE users
+         SET role = $1, plan = $2, is_free_account = $3, display_name = $4,
+             trial_days = $5, signup_at = $6
+         WHERE id = $7`,
+        [role, plan, plan === "free", displayName, trialDays, signupAt, id]
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err: unknown) {
+    console.error("API accounts PATCH failed:", err);
+    return NextResponse.json({ ok: false, error: "خطا در ویرایش کاربر." }, { status: 500 });
   }
 }
 
@@ -107,6 +235,7 @@ export async function DELETE(request: Request) {
   }
 
   try {
+    await ensureAuthSchema();
     const userRes = await query("SELECT is_protected FROM users WHERE id = $1", [id]);
     if (userRes.rowCount === 0) {
       return NextResponse.json({ ok: false, error: "کاربر پیدا نشد." }, { status: 404 });
@@ -119,7 +248,7 @@ export async function DELETE(request: Request) {
     await query("DELETE FROM users WHERE id = $1", [id]);
 
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("API accounts DELETE failed:", err);
     return NextResponse.json({ ok: false, error: "خطا در حذف کاربر از دیتابیس." }, { status: 500 });
   }

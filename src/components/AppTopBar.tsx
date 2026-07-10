@@ -10,7 +10,7 @@ import { getSubscriptionAccess } from "@/src/lib/subscription";
 
 export async function AppTopBar() {
   const session = await getCurrentSession();
-  const user = session ? getUserById(session.id) : null;
+  const user = session ? await getUserById(session.id) : null;
   const access = getSubscriptionAccess(user);
 
   return (

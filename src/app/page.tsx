@@ -42,7 +42,7 @@ export default async function HomePage() {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
 
-  const user = getUserById(session.id);
+  const user = await getUserById(session.id);
   const access = getSubscriptionAccess(user);
 
   return (

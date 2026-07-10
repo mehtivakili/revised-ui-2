@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "شماره موبایل معتبر نیست." }, { status: 400 });
   }
 
-  const otp = createOtp(phone.value);
+  const otp = await createOtp(phone.value);
   if (!otp.ok) return NextResponse.json({ ok: false, error: otp.error }, { status: 429 });
 
   const smsConfig = getSmsConfig();

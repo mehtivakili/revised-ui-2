@@ -1,7 +1,9 @@
 import { dashboardCategories, type DashboardCategory } from "@/src/lib/dashboard";
 import type { UserAccount, UserPlan } from "@/src/lib/authStore";
 
-export const trialDurationMs = 7 * 24 * 60 * 60 * 1000;
+export const defaultTrialDays = 7;
+export const trialDayMs = 24 * 60 * 60 * 1000;
+export const trialDurationMs = defaultTrialDays * trialDayMs;
 export const freeAccessibleCategoryId: DashboardCategory["id"] = "storage";
 
 export type SubscriptionAccess = {
@@ -17,13 +19,14 @@ export type SubscriptionAccess = {
   lockedToolSlugs: string[];
 };
 
-export function getSubscriptionAccess(user?: Pick<UserAccount, "plan" | "isFreeAccount" | "signupAt" | "createdAt"> | null, now = Date.now()): SubscriptionAccess {
+export function getSubscriptionAccess(user?: Pick<UserAccount, "plan" | "isFreeAccount" | "signupAt" | "createdAt" | "trialDays"> | null, now = Date.now()): SubscriptionAccess {
   const signupAt = user?.signupAt ?? user?.createdAt ?? new Date(now).toISOString();
   const signupTime = Date.parse(signupAt);
   const safeSignupTime = Number.isFinite(signupTime) ? signupTime : now;
   const plan = user?.plan ?? (user?.isFreeAccount ? "free" : "pro");
   const isFreeAccount = plan === "free" || Boolean(user?.isFreeAccount);
-  const trialEndsAtTime = safeSignupTime + trialDurationMs;
+  const trialDays = Math.max(0, Number(user?.trialDays ?? defaultTrialDays));
+  const trialEndsAtTime = safeSignupTime + trialDays * trialDayMs;
   const trialExpired = isFreeAccount && trialEndsAtTime <= now;
   const restricted = isFreeAccount && trialExpired;
   const allCategoryIds = dashboardCategories.map((category) => category.id);

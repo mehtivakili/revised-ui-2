@@ -10,7 +10,7 @@ export async function CalculatorAccessGate({ slug, children }: { slug: string; c
   const session = await getCurrentSession();
   if (!session) redirect("/login");
 
-  const user = getUserById(session.id);
+  const user = await getUserById(session.id);
   const access = getSubscriptionAccess(user);
 
   if (getToolBySlug(slug) && isToolLocked(access, slug)) {

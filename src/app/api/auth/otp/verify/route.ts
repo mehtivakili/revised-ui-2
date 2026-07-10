@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "کد باید ۶ رقم باشد." }, { status: 400 });
   }
 
-  const result = verifyOtp(phone.value, code);
+  const result = await verifyOtp(phone.value, code);
   if (!result.ok) {
     return NextResponse.json({ ok: false, error: result.error }, { status: 401 });
   }

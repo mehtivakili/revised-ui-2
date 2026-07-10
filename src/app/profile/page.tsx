@@ -9,7 +9,7 @@ export default async function ProfilePage() {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
 
-  const user = getUserById(session.id);
+  const user = await getUserById(session.id);
   if (!user) redirect("/login");
 
   const access = getSubscriptionAccess(user);

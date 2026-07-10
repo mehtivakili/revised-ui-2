@@ -87,8 +87,7 @@ export function LoginForm({ initialMode, initialError = "" }: { initialMode: Log
         <p className="eyebrow">ورود امن</p>
         <h1>ورود به حساب کاربری</h1>
         <p className="auth-lead">
-          ورود اصلی با شماره موبایل و کد یک‌بار مصرف انجام می‌شود. برای شروع توسعه، حساب‌های ثابت admin/1234 و user/1234
-          حرفه‌ای هستند و free/1234 حساب رایگان منقضی‌شده است.
+          با شماره موبایل و کد یک‌بار مصرف وارد شوید یا از رمز عبور حساب خود استفاده کنید.
         </p>
 
         <div className="auth-tabs" role="tablist" aria-label="روش ورود">

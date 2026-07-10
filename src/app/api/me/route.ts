@@ -9,7 +9,7 @@ export async function GET() {
     return NextResponse.json({ ok: true, user: null, access: null });
   }
 
-  const user = getUserById(session.id);
+  const user = await getUserById(session.id);
   if (!user) {
     return NextResponse.json({ ok: false, error: "حساب کاربری پیدا نشد." }, { status: 404 });
   }
