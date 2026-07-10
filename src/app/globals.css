@@ -449,18 +449,23 @@ p {
 .tools-menu-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 44;
+  z-index: 39;
+  display: none;
   cursor: default;
 }
 
-.tools-menu[open]::after {
-  display: none;
+.tools-menu[open] .tools-menu-backdrop {
+  display: block;
 }
 
 .tools-menu-trigger {
+  position: relative;
+  z-index: 41;
+  border: 0;
   padding: 8px 12px;
   color: var(--muted);
   background: transparent;
+  font: inherit;
   font-size: 13px;
   cursor: pointer;
 }
@@ -2818,10 +2823,6 @@ h3 {
   .tools-menu-panel::-webkit-scrollbar-thumb {
     background: rgba(23, 109, 168, 0.34);
     border-radius: 999px;
-  }
-
-  .tools-menu[open]::after {
-    display: none;
   }
 
   .tools-menu[open] .tools-menu-panel {

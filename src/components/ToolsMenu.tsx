@@ -46,7 +46,7 @@ export function ToolsMenu({ lockedToolSlugs = [] }: { lockedToolSlugs?: string[]
 }
 
 function ToolsMenuInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
-  const rootRef = useRef<HTMLDetailsElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lockedTools = useMemo(() => new Set(lockedToolSlugs), [lockedToolSlugs]);
 
@@ -67,6 +67,15 @@ function ToolsMenuInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
     rootRef.current?.removeAttribute("open");
   }, [clearCloseTimer]);
 
+  const toggleMenu = useCallback(() => {
+    clearCloseTimer();
+    if (rootRef.current?.hasAttribute("open")) {
+      rootRef.current.removeAttribute("open");
+      return;
+    }
+    rootRef.current?.setAttribute("open", "");
+  }, [clearCloseTimer]);
+
   const scheduleClose = useCallback(() => {
     clearCloseTimer();
     closeTimer.current = setTimeout(closeMenu, 180);
@@ -78,32 +87,50 @@ function ToolsMenuInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
   // We will rely on a transparent backdrop element instead.
 
   return (
-    <details
+    <div
       ref={rootRef}
       className="tools-menu"
-      onMouseEnter={openMenu}
-      onMouseLeave={scheduleClose}
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse") openMenu();
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") scheduleClose();
+      }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
-          scheduleClose();
+          closeMenu();
         }
       }}
     >
-      <summary
+      <button
+        type="button"
         className="tools-menu-trigger"
-        onClick={clearCloseTimer}
-        onFocus={openMenu}
-        onKeyDown={(event) => event.key === "Escape" && closeMenu()}
+        aria-haspopup="menu"
+        onClick={(event) => {
+          event.preventDefault();
+          toggleMenu();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") closeMenu();
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggleMenu();
+          }
+        }}
       >
         <Menu className="tools-menu-mobile-icon" size={18} aria-hidden="true" />
         <span className="tools-menu-label">ابزارها</span>
         <ChevronDown className="tools-menu-chevron" size={16} aria-hidden="true" />
-      </summary>
+      </button>
       <div className="tools-menu-backdrop" onClick={closeMenu} aria-hidden="true" />
       <div
         className="tools-menu-panel"
-        onMouseEnter={openMenu}
-        onMouseLeave={scheduleClose}
+        onPointerEnter={(event) => {
+          if (event.pointerType === "mouse") openMenu();
+        }}
+        onPointerLeave={(event) => {
+          if (event.pointerType === "mouse") scheduleClose();
+        }}
       >
         {dashboardCategories.map((category) => {
           const visibleTools = category.tools.filter((tool) => !lockedTools.has(tool.slug));
@@ -137,6 +164,6 @@ function ToolsMenuInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
           );
         })}
       </div>
-    </details>
+    </div>
   );
 }
