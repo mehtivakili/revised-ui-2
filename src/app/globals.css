@@ -1256,6 +1256,38 @@ h3 {
   gap: 10px;
 }
 
+.register-card {
+  width: min(400px, 100%);
+}
+
+.register-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 5px;
+  background: #eef8fd;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.register-steps span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 34px;
+  color: var(--muted);
+  border-radius: var(--radius);
+  font-size: 11.5px;
+  font-weight: 900;
+}
+
+.register-steps span.active {
+  color: #fff;
+  background: var(--accent);
+}
+
 .form-stack {
   display: grid;
   gap: 7px;
@@ -1272,6 +1304,12 @@ h3 {
   padding: 8px 10px;
   border-radius: 10px;
   font-size: 12px;
+}
+
+.auth-card input[readonly] {
+  color: var(--muted);
+  background: #f3f8fb;
+  cursor: default;
 }
 
 .form-stack button {
@@ -1315,6 +1353,19 @@ h3 {
   color: var(--danger);
   background: #fff5f4;
   border: 1px solid rgba(180, 35, 24, 0.18);
+}
+
+.auth-switch {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.auth-switch a {
+  color: var(--accent-strong);
+  font-weight: 900;
+  text-decoration: none;
 }
 
 .panel {
@@ -1437,7 +1488,7 @@ h3 {
 
 .admin-table-wrap {
   min-width: 0;
-  overflow-x: auto;
+  overflow-x: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: #ffffff;
@@ -1446,23 +1497,66 @@ h3 {
 
 .admin-table {
   width: 100%;
-  min-width: 1240px;
+  min-width: 0;
+  table-layout: fixed;
   border-collapse: collapse;
 }
 
 .admin-table th,
 .admin-table td {
-  padding: 12px;
+  padding: 8px 9px;
   border-bottom: 1px solid var(--border);
   text-align: right;
   vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .admin-table th {
   color: var(--muted);
   background: #f0f8fc;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
+}
+
+.admin-table th:nth-child(1),
+.admin-table td:nth-child(2) {
+  width: 20%;
+}
+
+.admin-table th:nth-child(2),
+.admin-table td:nth-child(3) {
+  width: 8%;
+}
+
+.admin-table th:nth-child(3),
+.admin-table td:nth-child(4) {
+  width: 12%;
+}
+
+.admin-table th:nth-child(4),
+.admin-table td:nth-child(5) {
+  width: 10%;
+}
+
+.admin-table th:nth-child(5),
+.admin-table td:nth-child(6) {
+  width: 10%;
+}
+
+.admin-table th:nth-child(6),
+.admin-table td:nth-child(7) {
+  width: 16%;
+}
+
+.admin-table th:nth-child(7),
+.admin-table td:nth-child(8) {
+  width: 9%;
+}
+
+.admin-table th:nth-child(8),
+.admin-table td:nth-child(9) {
+  width: 13%;
 }
 
 .admin-table tbody tr {
@@ -1483,6 +1577,9 @@ h3 {
   color: var(--muted);
   direction: ltr;
   text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .role-pill {
@@ -1529,6 +1626,40 @@ h3 {
   width: auto;
   min-height: 36px;
   padding: 8px 10px;
+}
+
+.icon-only-action {
+  position: relative;
+  width: 34px !important;
+  min-width: 34px;
+  min-height: 34px !important;
+  padding: 0 !important;
+  justify-content: center;
+}
+
+.icon-only-action::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  z-index: 5;
+  padding: 4px 8px;
+  color: #ffffff;
+  background: rgba(14, 34, 49, 0.92);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.icon-only-action:hover::after,
+.icon-only-action:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .admin-table td[data-label="عملیات"] {
@@ -3283,7 +3414,6 @@ h3 {
   }
 
   .danger-action.compact {
-    width: 100%;
     min-height: 34px;
   }
 
@@ -3543,16 +3673,34 @@ h3 {
 
 .admin-table th,
 .admin-table td {
-  padding: 8px 12px !important;
-  font-size: 13px;
+  padding: 7px 8px !important;
+  font-size: 12px;
 }
 
 .admin-table td strong {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .admin-table td small {
-  font-size: 11px;
+  font-size: 10px;
+}
+
+.admin-table td.actions-cell {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 82px;
+  overflow: visible !important;
+  white-space: nowrap;
+}
+
+.admin-table td.actions-cell .icon-only-action {
+  flex: 0 0 34px;
+}
+
+.admin-table td.actions-cell svg {
+  flex-shrink: 0;
 }
 
 .admin-search-form {

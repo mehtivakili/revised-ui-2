@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { KeyRound, MessageSquareText, ShieldCheck } from "lucide-react";
 
 export type LoginMode = "otp" | "password";
@@ -57,7 +58,7 @@ export function LoginForm({ initialMode, initialError = "" }: { initialMode: Log
     }
 
     setOtpSent(true);
-    setMessage(data.demoCode ? `کد آزمایشی: ${data.demoCode}` : data.message);
+    setMessage(data.message);
   }
 
   async function verifyOtp(event: FormEvent<HTMLFormElement>) {
@@ -160,6 +161,9 @@ export function LoginForm({ initialMode, initialError = "" }: { initialMode: Log
 
         {message ? <p className="form-message success">{message}</p> : null}
         {error ? <p className="form-message error">{error}</p> : null}
+        <p className="auth-switch">
+          حساب ندارید؟ <Link href="/register">ثبت‌نام کنید</Link>
+        </p>
       </section>
     </main>
   );

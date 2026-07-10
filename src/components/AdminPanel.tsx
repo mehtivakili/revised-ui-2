@@ -489,23 +489,25 @@ export function AdminPanel({
                         <td data-label="ثبت‌نام" className="col-desktop-only">{new Date(access.signupAt).toLocaleDateString("fa-IR")}</td>
                         <td data-label="آخرین ورود" className="col-desktop-only">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString("fa-IR") : "بدون ورود"}</td>
                         <td data-label="وضعیت" className="col-desktop-only">{locked ? "قفل موقت" : user.isProtected ? "حساب پایه" : "فعال"}</td>
-                        <td data-label="عملیات" className="col-desktop-only">
+                        <td data-label="عملیات" className="col-desktop-only actions-cell">
                           <button
                             type="button"
-                            className="secondary-action compact"
+                            className="secondary-action compact icon-only-action"
+                            title="ویرایش"
+                            aria-label={`ویرایش ${user.username}`}
                             onClick={() => startEdit(user)}
                           >
                             <Pencil size={15} aria-hidden="true" />
-                            ویرایش
                           </button>
                           <button
                             type="button"
-                            className="danger-action compact"
+                            className="danger-action compact icon-only-action"
+                            title="حذف"
+                            aria-label={`حذف ${user.username}`}
                             disabled={!canDelete || pendingUserId === user.id}
                             onClick={() => deleteAccount(user.id)}
                           >
                             <Trash2 size={15} aria-hidden="true" />
-                            حذف
                           </button>
                         </td>
 
@@ -521,20 +523,22 @@ export function AdminPanel({
                             <div className="mobile-details-row-actions">
                               <button
                                 type="button"
-                                className="secondary-action compact"
+                                className="secondary-action compact icon-only-action"
+                                title="ویرایش"
+                                aria-label={`ویرایش ${user.username}`}
                                 onClick={() => startEdit(user)}
                               >
                                 <Pencil size={13} aria-hidden="true" />
-                                ویرایش
                               </button>
                               <button
                                 type="button"
-                                className="danger-action compact"
+                                className="danger-action compact icon-only-action"
+                                title="حذف"
+                                aria-label={`حذف ${user.username}`}
                                 disabled={!canDelete || pendingUserId === user.id}
                                 onClick={() => deleteAccount(user.id)}
                               >
                                 <Trash2 size={13} aria-hidden="true" />
-                                حذف حساب
                               </button>
                             </div>
                           </td>

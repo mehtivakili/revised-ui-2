@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { Phone, Bell, LogIn, Settings } from "lucide-react";
+﻿import Link from "next/link";
+import { Phone, Bell, LogIn } from "lucide-react";
 import { ProfileMenu } from "@/src/components/ProfileMenu";
 import { ToolsMenu } from "@/src/components/ToolsMenu";
 import { TopSearch } from "@/src/components/TopSearch";
@@ -57,9 +57,6 @@ export async function AppTopBar() {
           <button type="button" className="icon-button top-utility" aria-label="اعلان‌ها">
             <Bell size={18} aria-hidden="true" />
           </button>
-          <button type="button" className="icon-button top-utility" aria-label="تنظیمات">
-            <Settings size={18} aria-hidden="true" />
-          </button>
           {session ? (
             <ProfileMenu username={session.username} plan={access.plan} isAdmin={session?.role === "admin"} />
           ) : (
@@ -73,3 +70,4 @@ export async function AppTopBar() {
     </TopBarLayout>
   );
 }
+
