@@ -15,6 +15,7 @@ export async function AppTopBar() {
 
   return (
     <TopBarLayout
+      minimalOnContacts={!session}
       minimalChildren={
         <header className="top-bar minimal-bar">
           <Link className="brand-mark minimal-brand" href="/" aria-label="همیار دوربین">
@@ -23,10 +24,16 @@ export async function AppTopBar() {
               <small>ابزارهای محاسباتی دوربین و شبکه</small>
             </span>
           </Link>
-          <Link className="back-link" href="#contact-us">
-            <Phone size={16} aria-hidden="true" />
-            <span>تماس با ما</span>
-          </Link>
+          <div className="minimal-topbar-actions">
+            <Link className="back-link" href="/contacts">
+              <Phone size={16} aria-hidden="true" />
+              <span>تماس با ما</span>
+            </Link>
+            <Link className="app-download-button" href="#" aria-label="دانلود اپلیکیشن">
+              <Download size={17} aria-hidden="true" />
+              <span>دانلود اپلیکیشن</span>
+            </Link>
+          </div>
         </header>
       }
     >
@@ -65,10 +72,12 @@ export async function AppTopBar() {
               <span>ورود</span>
             </Link>
           )}
-          <Link className="app-download-button" href="#" aria-label="دانلود اپلیکیشن">
-            <Download size={17} aria-hidden="true" />
-            <span>دانلود اپلیکیشن</span>
-          </Link>
+          {!session ? (
+            <Link className="app-download-button" href="#" aria-label="دانلود اپلیکیشن">
+              <Download size={17} aria-hidden="true" />
+              <span>دانلود اپلیکیشن</span>
+            </Link>
+          ) : null}
         </div>
       </header>
     </TopBarLayout>

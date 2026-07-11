@@ -6,6 +6,7 @@ dist
 .env
 .env.local
 .env.*.local
+.postgres-data/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

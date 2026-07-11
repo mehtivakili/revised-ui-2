@@ -5,13 +5,15 @@ import type { ReactNode } from "react";
 
 export function TopBarLayout({
   children,
-  minimalChildren
+  minimalChildren,
+  minimalOnContacts = false
 }: {
   children: ReactNode;
   minimalChildren: ReactNode;
+  minimalOnContacts?: boolean;
 }) {
   const pathname = usePathname();
-  const isMinimal = pathname === "/login" || pathname === "/register";
+  const isMinimal = pathname === "/login" || pathname === "/register" || (minimalOnContacts && pathname === "/contacts");
 
   return (
     <div className={`site-topbar-shell ${isMinimal ? "minimal-topbar" : ""}`}>
