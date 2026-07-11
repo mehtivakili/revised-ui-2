@@ -29,7 +29,7 @@ export async function AppTopBar() {
               <Phone size={16} aria-hidden="true" />
               <span>تماس با ما</span>
             </Link>
-            <Link className="app-download-button" href="#" aria-label="دانلود اپلیکیشن">
+            <Link className="app-download-button" href="/downloads/hamyardoorbin.apk" download aria-label="دانلود اپلیکیشن">
               <Download size={17} aria-hidden="true" />
               <span>دانلود اپلیکیشن</span>
             </Link>
@@ -73,7 +73,7 @@ export async function AppTopBar() {
             </Link>
           )}
           {!session ? (
-            <Link className="app-download-button" href="#" aria-label="دانلود اپلیکیشن">
+            <Link className="app-download-button" href="/downloads/hamyardoorbin.apk" download aria-label="دانلود اپلیکیشن">
               <Download size={17} aria-hidden="true" />
               <span>دانلود اپلیکیشن</span>
             </Link>
