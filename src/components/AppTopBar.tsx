@@ -1,5 +1,5 @@
 ﻿import Link from "next/link";
-import { Phone, Bell, LogIn } from "lucide-react";
+import { Phone, Bell, Download, LogIn } from "lucide-react";
 import { ProfileMenu } from "@/src/components/ProfileMenu";
 import { ToolsMenu } from "@/src/components/ToolsMenu";
 import { TopSearch } from "@/src/components/TopSearch";
@@ -65,6 +65,10 @@ export async function AppTopBar() {
               <span>ورود</span>
             </Link>
           )}
+          <Link className="app-download-button" href="#" aria-label="دانلود اپلیکیشن">
+            <Download size={17} aria-hidden="true" />
+            <span>دانلود اپلیکیشن</span>
+          </Link>
         </div>
       </header>
     </TopBarLayout>
