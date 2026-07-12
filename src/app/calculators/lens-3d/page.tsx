@@ -495,7 +495,7 @@ export default function Lens3DPage() {
     if (!ctx) return;
 
     // Define the physical width of the crop visible in the HUD box in meters
-    const W_visible = 0.65;
+    const W_visible = 1.05;
     
     // Calculate canvas internal resolution (matches PPM * visible width)
     const canvasW = Math.max(1, Math.round(result.ppm * W_visible));
@@ -517,7 +517,7 @@ export default function Lens3DPage() {
     const sh = sw / aspect;
 
     const sx = (img.width - sw) * 0.5;
-    const sy = (img.height - sh) * 0.12; // Adjusted vertically to center on upper body/face/plate
+    const sy = (img.height - sh) * 0.08; // Adjusted vertically to show head down to license plate / plaque
 
     // Disable image smoothing to get pixelated downsampling
     ctx.imageSmoothingEnabled = false;
