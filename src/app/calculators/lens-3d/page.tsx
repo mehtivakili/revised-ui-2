@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useImperativeHandle, forwardRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CalculatorShell, NumberInput, SelectInput, formatNumber } from "@/src/components/calculators/CalculatorUi";
 import type { DashboardTool } from "@/src/lib/dashboard";
 
@@ -459,12 +459,82 @@ export default function Lens3DPage() {
   }, [viewMode]);
 
   /* ── Simulated Pixelation Setup ── */
-  const manWidthMeters = 0.5;
-  const cameraPixelsForMan = Math.max(1, Math.round(result.ppm * manWidthMeters));
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const simImageRef = useRef<HTMLImageElement | null>(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  // Pre-load the target image on mount
+  useEffect(() => {
+    const img = new Image();
+    img.src = "/images/man-plate.png?v=2";
+    img.onload = () => {
+      simImageRef.current = img;
+      setImageLoaded(true);
+    };
+  }, []);
+
   const displayWidth = 170;
   const aspect = 1.08;
   const displayHeight = displayWidth / aspect;
-  const scaleFactor = displayWidth / cameraPixelsForMan;
+
+  const currentDoriZone = useMemo(() => {
+    const ppm = result.ppm;
+    if (ppm >= 250) return doriZones[4]; // identification
+    if (ppm >= 125) return doriZones[3]; // recognition
+    if (ppm >= 62) return doriZones[2];  // observation
+    if (ppm >= 25) return doriZones[1];  // detection
+    return doriZones[0];                 // monitoring
+  }, [result.ppm]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const img = simImageRef.current;
+    if (!canvas || !img) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Define the physical width of the crop visible in the HUD box in meters
+    const W_visible = 0.65;
+    
+    // Calculate canvas internal resolution (matches PPM * visible width)
+    const canvasW = Math.max(1, Math.round(result.ppm * W_visible));
+    const canvasH = Math.max(1, Math.round(canvasW / aspect));
+
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvasW, canvasH);
+
+    // Compute source crop from the 1024x1024 image
+    // The full image physical height is targetHeight * 1.18.
+    // The image is square, so its physical width is also targetHeight * 1.18.
+    const W_img_physical = targetHeight * 1.18;
+    const cropFraction = W_visible / W_img_physical;
+
+    const sw = img.width * cropFraction;
+    const sh = sw / aspect;
+
+    const sx = (img.width - sw) * 0.5;
+    const sy = (img.height - sh) * 0.12; // Adjusted vertically to center on upper body/face/plate
+
+    // Disable image smoothing to get pixelated downsampling
+    ctx.imageSmoothingEnabled = false;
+
+    // Draw cropped portion onto canvas
+    ctx.drawImage(
+      img,
+      Math.max(0, sx),
+      Math.max(0, sy),
+      Math.min(img.width, sw),
+      Math.min(img.height, sh),
+      0,
+      0,
+      canvasW,
+      canvasH
+    );
+  }, [imageLoaded, result.ppm, targetHeight, aspect]);
 
   return (
     <CalculatorShell tool={tool}>
@@ -514,17 +584,41 @@ export default function Lens3DPage() {
               کیفیت شبیه‌سازی (PPM {formatNumber(result.ppm, 0)})
             </div>
             <div className="lens3d-camera-sim-view" style={{ width: displayWidth, height: displayHeight }}>
-              <div 
-                className="lens3d-camera-sim-pixelator"
-                style={{
-                  width: cameraPixelsForMan,
-                  height: cameraPixelsForMan / aspect,
-                  transform: `scale(${scaleFactor * 1.72}) translateY(24%)`,
-                  transformOrigin: 'center center'
-                }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/images/man-plate.png?v=2" alt="Reference target" />
+              {imageLoaded ? (
+                <canvas 
+                  ref={canvasRef} 
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'block',
+                    imageRendering: 'pixelated'
+                  }}
+                />
+              ) : (
+                <div style={{ fontSize: '10px', color: '#94a3b8' }}>بارگذاری...</div>
+              )}
+
+              {/* Camera HUD Overlays */}
+              <div className="lens3d-hud-overlay">
+                {/* Crosshair in the middle */}
+                <div className="lens3d-hud-crosshair"></div>
+                
+                {/* Top bar (REC indicator and CAM name) */}
+                <div className="lens3d-hud-top">
+                  <span className="lens3d-hud-rec">
+                    <span className="lens3d-hud-dot"></span>
+                    REC
+                  </span>
+                  <span className="lens3d-hud-cam">CAM_01</span>
+                </div>
+
+                {/* Bottom bar (Current PPM and DORI Mode) */}
+                <div className="lens3d-hud-bottom">
+                  <span>{formatNumber(result.ppm, 0)} PPM</span>
+                  <span className="lens3d-hud-zone" style={{ color: currentDoriZone.color }}>
+                    {currentDoriZone.label}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
