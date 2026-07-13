@@ -21,8 +21,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "شماره موبایل معتبر نیست." }, { status: 400 });
     }
 
-    if (!/^[0-9]{5,6}$/.test(code)) {
-      return NextResponse.json({ ok: false, error: "کد تایید باید ۵ یا ۶ رقم باشد." }, { status: 400 });
+    if (!/^[0-9]{4,20}$/.test(code)) {
+      return NextResponse.json({ ok: false, error: "کد تایید باید بین ۴ تا ۲۰ رقم باشد." }, { status: 400 });
     }
 
     const result = await verifyRegistrationOtp(phone.value, code);

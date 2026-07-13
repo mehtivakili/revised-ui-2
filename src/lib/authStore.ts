@@ -335,6 +335,17 @@ export async function createOtp(username: string, options: { ensureUser?: boolea
   return { ok: true as const, code, expiresAt: now + 2 * 60 * 1000 };
 }
 
+export function discardOtp(username: string) {
+  state().otps.delete(username);
+}
+
+export function replaceOtpCode(username: string, code: string) {
+  const record = state().otps.get(username);
+  if (!record || !/^[0-9]{4,20}$/.test(code)) return false;
+  record.codeHash = hashPassword(code);
+  return true;
+}
+
 function createRegistrationToken(username: string) {
   const token = randomBytes(24).toString("base64url");
   state().registrationTokens.set(token, {
