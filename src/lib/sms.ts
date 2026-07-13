@@ -56,8 +56,19 @@ function findOtpCode(payload: unknown): string | undefined {
  * The token is read only on the server and is never returned to the client.
  */
 export async function sendMelipayamakOtp(to: string): Promise<SmsResult> {
-  const configuredUrl = process.env.MELIPAYAMAK_OTP_URL?.trim();
-  const apiKey = process.env.MELIPAYAMAK_API_KEY?.trim();
+  // Support both the explicit Melipayamak names and the legacy SMS names
+  // already used by this project. This is useful when PM2 loads an existing
+  // server environment instead of the local .env.local file.
+  const configuredUrl =
+    process.env.MELIPAYAMAK_OTP_URL?.trim() ||
+    (process.env.SMS_PROVIDER?.toLowerCase().includes("meli") || !process.env.SMS_PROVIDER
+      ? process.env.SMS_API_URL?.trim()
+      : undefined);
+  const apiKey =
+    process.env.MELIPAYAMAK_API_KEY?.trim() ||
+    (process.env.SMS_PROVIDER?.toLowerCase().includes("meli") || !process.env.SMS_PROVIDER
+      ? process.env.SMS_API_KEY?.trim()
+      : undefined);
 
   if (!configuredUrl && !apiKey) {
     if (process.env.NODE_ENV !== "production") {
