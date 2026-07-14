@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { Eye, EyeOff, MessageSquare, Pencil, Plus, Save, Settings2, Trash2, UsersRound, X, ChevronDown, ChevronUp } from "lucide-react";
 import type { UserPlan, UserRole } from "@/src/lib/authStore";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
+import { RequiredNumberInput } from "@/src/components/calculators/CalculatorUi";
 
 type AdminUser = {
   id: string;
@@ -391,13 +392,12 @@ export function AdminPanel({
                 <strong>مدت پیش‌فرض تست رایگان</strong>
                 <small>برای کاربران جدید و ورود موبایلی استفاده می‌شود.</small>
               </div>
-              <input
+              <RequiredNumberInput
                 aria-label="مدت پیش‌فرض تست رایگان"
-                type="number"
                 min={0}
                 max={3650}
                 value={defaultTrialDays}
-                onChange={(event) => setDefaultTrialDays(Number(event.target.value))}
+                onValueChange={setDefaultTrialDays}
               />
               <button className="secondary-action compact" type="submit" disabled={savingDefaultTrial}>
                 <Save size={15} aria-hidden="true" />
@@ -631,12 +631,11 @@ export function AdminPanel({
             </label>
             <label>
               <span>Timeout درخواست</span>
-              <input
-                type="number"
+              <RequiredNumberInput
                 min={3}
                 max={30}
                 value={smsConfig.timeoutSeconds}
-                onChange={(event) => setSmsConfig({ ...smsConfig, timeoutSeconds: Number(event.target.value) })}
+                onValueChange={(value) => setSmsConfig({ ...smsConfig, timeoutSeconds: value })}
               />
             </label>
             <label className="admin-switch">
@@ -691,11 +690,11 @@ export function AdminPanel({
               </label>
               <label>
                 <span>کل روزهای تست</span>
-                <input type="number" min={0} max={3650} value={createForm.trialDays} onChange={(event) => setCreateForm({ ...createForm, trialDays: Number(event.target.value) })} />
+                <RequiredNumberInput min={0} max={3650} value={createForm.trialDays} onValueChange={(value) => setCreateForm({ ...createForm, trialDays: value })} />
               </label>
               <label>
                 <span>روزهای باقی‌مانده</span>
-                <input type="number" min={0} max={3650} value={createForm.daysLeft} onChange={(event) => setCreateForm({ ...createForm, daysLeft: Number(event.target.value) })} />
+                <RequiredNumberInput min={0} max={3650} value={createForm.daysLeft} onValueChange={(value) => setCreateForm({ ...createForm, daysLeft: value })} />
               </label>
               <label>
                 <span>رمز عبور</span>
@@ -754,11 +753,11 @@ export function AdminPanel({
               </label>
               <label>
                 <span>کل روزهای تست</span>
-                <input type="number" min={0} max={3650} value={editForm.trialDays} onChange={(event) => setEditForm({ ...editForm, trialDays: Number(event.target.value) })} />
+                <RequiredNumberInput min={0} max={3650} value={editForm.trialDays} onValueChange={(value) => setEditForm({ ...editForm, trialDays: value })} />
               </label>
               <label>
                 <span>روزهای باقی‌مانده</span>
-                <input type="number" min={0} max={3650} value={editForm.daysLeft} onChange={(event) => setEditForm({ ...editForm, daysLeft: Number(event.target.value) })} />
+                <RequiredNumberInput min={0} max={3650} value={editForm.daysLeft} onValueChange={(value) => setEditForm({ ...editForm, daysLeft: value })} />
               </label>
               <label>
                 <span>رمز جدید</span>

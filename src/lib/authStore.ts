@@ -403,13 +403,17 @@ export async function verifyRegistrationOtp(username: string, code: string) {
 }
 
 export async function completeRegistration(username: string, token: string, displayName: string, password: string) {
+  const finalPassword = password.trim();
+  if (!finalPassword) {
+    return { ok: false as const, error: "لطفاً فیلدهای ضروری را تکمیل کنید." };
+  }
+
   if (!consumeRegistrationToken(token, username)) {
     return { ok: false as const, error: "جلسه ثبت‌نام منقضی شده است. دوباره کد تایید را وارد کنید." };
   }
 
   const user = await upsertMobileUser(username);
   const finalDisplayName = displayName.trim() || `کاربر ${username}`;
-  const finalPassword = password.trim() || username;
   const loginAt = new Date();
   await query(
     `UPDATE users

@@ -1,6 +1,6 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
-const serverUrl = process.env.CAPACITOR_SERVER_URL;
+const serverUrl = process.env.CAPACITOR_SERVER_URL || "https://hamyardoorbin.ir";
 
 const config: CapacitorConfig = {
   appId: "com.persiasystem.hamyardoorbin",
@@ -8,28 +8,25 @@ const config: CapacitorConfig = {
   webDir: "capacitor-web",
   plugins: {
     SplashScreen: {
-      launchShowDuration: 3000,
+      launchShowDuration: 500,
       launchAutoHide: true,
-      backgroundColor: "#e2f2fb",
+      backgroundColor: "#00143d",
       androidSplashResourceName: "splash_screen",
-      androidScaleType: "CENTER_CROP",
+      androidScaleType: "FIT_CENTER",
       splashFullScreen: true,
+      splashImmersive: true,
       showSpinner: false
     },
     StatusBar: {
       style: "LIGHT",
-      backgroundColor: "#e2f2fb",
+      backgroundColor: "#00143d",
       overlaysWebView: false
     }
   },
-  ...(serverUrl
-    ? {
-        server: {
-          url: serverUrl,
-          cleartext: serverUrl.startsWith("http://")
-        }
-      }
-    : {})
+  server: {
+    url: serverUrl,
+    cleartext: serverUrl.startsWith("http://")
+  }
 };
 
 export default config;
