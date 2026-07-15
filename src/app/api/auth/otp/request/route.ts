@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createOtp, discardOtp, getUser, rateLimit, replaceOtpCode } from "@/src/lib/authStore";
-import { sendMelipayamakOtp } from "@/src/lib/sms";
+import { createOtp, discardOtp, getUser, rateLimit } from "@/src/lib/authStore";
+import { sendMelipayamakSharedOtp } from "@/src/lib/sms";
 import { normalizeIranPhone } from "@/src/lib/validation";
 
 function getClientKey(request: Request) {
@@ -32,13 +32,11 @@ export async function POST(request: Request) {
     const otp = await createOtp(phone.value, { ensureUser: false });
     if (!otp.ok) return NextResponse.json({ ok: false, error: otp.error }, { status: 429 });
 
-    const sms = await sendMelipayamakOtp(phone.value);
+    const sms = await sendMelipayamakSharedOtp(phone.value, otp.code);
     if (!sms.ok) {
       discardOtp(phone.value);
       return NextResponse.json({ ok: false, error: sms.error }, { status: 502 });
     }
-    if (sms.otpCode) replaceOtpCode(phone.value, sms.otpCode);
-
     return NextResponse.json({
       ok: true,
       phone: phone.value,

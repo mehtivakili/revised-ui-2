@@ -1,4 +1,5 @@
 ﻿import { createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { randomInt } from "crypto";
 import { query } from "@/src/lib/db";
 import { defaultTrialDays } from "@/src/lib/subscription";
 
@@ -320,7 +321,7 @@ export async function createOtp(username: string, options: { ensureUser?: boolea
     };
   }
 
-  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const code = String(randomInt(100000, 1_000_000));
   authState.otps.set(username, {
     codeHash: hashPassword(code),
     expiresAt: now + 2 * 60 * 1000,
@@ -367,7 +368,7 @@ function consumeRegistrationToken(token: string, username: string) {
 }
 
 export async function verifyOtpCode(username: string, code: string, options: { allowTestCode?: boolean; keepRecord?: boolean } = {}) {
-  if (options.allowTestCode && code === "98765") {
+  if (process.env.NODE_ENV !== "production" && options.allowTestCode && code === "98765") {
     return { ok: true as const };
   }
 
