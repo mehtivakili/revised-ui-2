@@ -1,6 +1,6 @@
 ﻿import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { randomInt } from "crypto";
-import { query } from "@/src/lib/db";
+import { pool, query } from "@/src/lib/db";
 import { defaultTrialDays } from "@/src/lib/subscription";
 
 export type UserRole = "admin" | "user";
@@ -18,6 +18,7 @@ export type UserAccount = {
   lastLoginAt?: string;
   lockedUntil?: number;
   failedLogins: number;
+  loginCount: number;
   trialDays: number;
   passwordPreview?: string;
   protected?: boolean;
@@ -121,6 +122,7 @@ function mapDbUser(row: any): UserAccount {
     lastLoginAt: toIso(row.last_login_at ?? row.lastLoginAt),
     lockedUntil: row.locked_until ? Number(row.locked_until) : undefined,
     failedLogins: Number(row.failed_logins ?? row.failedLogins ?? 0),
+    loginCount: Number(row.login_count ?? row.loginCount ?? 1),
     trialDays: Number(row.trial_days ?? row.trialDays ?? defaultTrialDays),
     passwordPreview: row.password_preview ?? row.passwordPreview ?? undefined,
     protected: Boolean(row.is_protected ?? row.isProtected)
@@ -141,6 +143,7 @@ export async function ensureAuthSchema() {
           signup_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           last_login_at TIMESTAMP,
+          login_count INTEGER NOT NULL DEFAULT 1,
           failed_logins INTEGER DEFAULT 0,
           is_protected BOOLEAN DEFAULT FALSE
         );
@@ -149,6 +152,33 @@ export async function ensureAuthSchema() {
       await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_preview TEXT");
       await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_days INTEGER NOT NULL DEFAULT 7");
       await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until BIGINT");
+      await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS login_count INTEGER NOT NULL DEFAULT 1");
+      await query(`
+        CREATE TABLE IF NOT EXISTS user_login_events (
+          id BIGSERIAL PRIMARY KEY,
+          user_id VARCHAR(50) NOT NULL,
+          logged_in_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      await query("CREATE INDEX IF NOT EXISTS user_login_events_logged_in_at_idx ON user_login_events (logged_in_at DESC)");
+      await query(`
+        CREATE TABLE IF NOT EXISTS user_presence (
+          user_id VARCHAR(50) PRIMARY KEY,
+          last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      await query("CREATE INDEX IF NOT EXISTS user_presence_last_seen_at_idx ON user_presence (last_seen_at DESC)");
+      await query(`
+        INSERT INTO user_login_events (user_id, logged_in_at)
+        SELECT id, last_login_at
+        FROM users AS existing_user
+        WHERE last_login_at IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM user_login_events AS event
+            WHERE event.user_id = existing_user.id
+          )
+      `);
       await query(`
         CREATE TABLE IF NOT EXISTS app_settings (
           key TEXT PRIMARY KEY,
@@ -285,8 +315,17 @@ export async function verifyPassword(username: string, password: string) {
   }
 
   const loginAt = new Date();
-  await query("UPDATE users SET failed_logins = 0, locked_until = NULL, last_login_at = $1 WHERE id = $2", [loginAt, user.id]);
-  return { ok: true as const, user: { ...user, failedLogins: 0, lockedUntil: undefined, lastLoginAt: loginAt.toISOString() } };
+  const loginCount = await recordSuccessfulLogin(user.id, loginAt, true);
+  return {
+    ok: true as const,
+    user: {
+      ...user,
+      failedLogins: 0,
+      lockedUntil: undefined,
+      lastLoginAt: loginAt.toISOString(),
+      loginCount
+    }
+  };
 }
 
 export function rateLimit(key: string, limit: number, windowMs: number) {
@@ -418,17 +457,19 @@ export async function completeRegistration(username: string, token: string, disp
   const loginAt = new Date();
   await query(
     `UPDATE users
-     SET display_name = $1, password_hash = $2, password_preview = $3, last_login_at = $4
-     WHERE id = $5`,
-    [finalDisplayName, hashPassword(finalPassword), finalPassword, loginAt, user.id]
+     SET display_name = $1, password_hash = $2, password_preview = $3
+     WHERE id = $4`,
+    [finalDisplayName, hashPassword(finalPassword), finalPassword, user.id]
   );
+  const loginCount = await recordSuccessfulLogin(user.id, loginAt, false);
   return {
     ok: true as const,
     user: {
       ...user,
       displayName: finalDisplayName,
       passwordPreview: finalPassword,
-      lastLoginAt: loginAt.toISOString()
+      lastLoginAt: loginAt.toISOString(),
+      loginCount
     }
   };
 }
@@ -441,8 +482,59 @@ export async function verifyOtp(username: string, code: string) {
   if (!user) return { ok: false as const, error: "ابتدا ثبت‌نام کنید و حساب کاربری بسازید." };
 
   const loginAt = new Date();
-  await query("UPDATE users SET last_login_at = $1 WHERE id = $2", [loginAt, user.id]);
-  return { ok: true as const, user: { ...user, lastLoginAt: loginAt.toISOString() } };
+  const loginCount = await recordSuccessfulLogin(user.id, loginAt, true);
+  return {
+    ok: true as const,
+    user: {
+      ...user,
+      lastLoginAt: loginAt.toISOString(),
+      loginCount
+    }
+  };
+}
+
+async function recordSuccessfulLogin(userId: string, loginAt: Date, incrementLoginCount: boolean) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const updateResult = await client.query(
+      `UPDATE users
+       SET failed_logins = 0,
+           locked_until = NULL,
+           last_login_at = $1,
+           login_count = login_count + $2
+       WHERE id = $3
+       RETURNING login_count`,
+      [loginAt, incrementLoginCount ? 1 : 0, userId]
+    );
+    await client.query(
+      "INSERT INTO user_login_events (user_id, logged_in_at) VALUES ($1, $2)",
+      [userId, loginAt]
+    );
+    await client.query(
+      `INSERT INTO user_presence (user_id, last_seen_at)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at`,
+      [userId, loginAt]
+    );
+    await client.query("COMMIT");
+    return Number(updateResult.rows[0]?.login_count ?? 1);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function recordUserActivity(userId: string) {
+  await ensureAuthSchema();
+  await query(
+    `INSERT INTO user_presence (user_id, last_seen_at)
+     VALUES ($1, CURRENT_TIMESTAMP)
+     ON CONFLICT (user_id) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at`,
+    [userId]
+  );
 }
 
 export function signSession(user: Pick<UserAccount, "id" | "username" | "role">) {

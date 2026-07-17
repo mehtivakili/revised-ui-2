@@ -4,6 +4,7 @@ import { ProfileMenu } from "@/src/components/ProfileMenu";
 import { ToolsMenu } from "@/src/components/ToolsMenu";
 import { TopSearch } from "@/src/components/TopSearch";
 import { TopBarLayout } from "@/src/components/TopBarLayout";
+import { OnlinePresence } from "@/src/components/OnlinePresence";
 import { getUserById } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
@@ -37,6 +38,7 @@ export async function AppTopBar() {
         </header>
       }
     >
+      {session ? <OnlinePresence /> : null}
       <header className="top-bar">
         <Link className="brand-mark" href="/" aria-label="همیار دوربین">
           <span>

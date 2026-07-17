@@ -29,7 +29,7 @@ export async function GET() {
     const result = await query(`
       SELECT id, username, display_name, role, plan, is_free_account,
              trial_days, signup_at, created_at, last_login_at, locked_until,
-             failed_logins, is_protected
+             login_count, failed_logins, is_protected
       FROM users
       ORDER BY is_protected DESC, signup_at DESC
     `);
@@ -45,6 +45,7 @@ export async function GET() {
       "تاریخ ثبت‌نام": asDate(user.signup_at),
       "تاریخ ایجاد": asDate(user.created_at),
       "آخرین ورود": asDate(user.last_login_at),
+      "تعداد ورود": Number(user.login_count ?? 1),
       "قفل تا": lockedUntilDate(user.locked_until),
       "ورود ناموفق": Number(user.failed_logins ?? 0),
       "حساب سیستمی": user.is_protected ? "بله" : "خیر"
@@ -54,9 +55,9 @@ export async function GET() {
     worksheet["!cols"] = [
       { wch: 38 }, { wch: 22 }, { wch: 24 }, { wch: 12 }, { wch: 14 },
       { wch: 14 }, { wch: 17 }, { wch: 22 }, { wch: 22 }, { wch: 22 },
-      { wch: 22 }, { wch: 16 }, { wch: 16 }
+      { wch: 16 }, { wch: 22 }, { wch: 16 }, { wch: 16 }
     ];
-    worksheet["!autofilter"] = { ref: worksheet["!ref"] ?? "A1:M1" };
+    worksheet["!autofilter"] = { ref: worksheet["!ref"] ?? "A1:N1" };
     (worksheet as XLSX.WorkSheet & { "!views"?: Array<{ rightToLeft: boolean }> })["!views"] = [
       { rightToLeft: true }
     ];

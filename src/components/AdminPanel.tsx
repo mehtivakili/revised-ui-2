@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { Download, Eye, EyeOff, MessageSquare, Pencil, Plus, Save, Settings2, Trash2, UsersRound, X, ChevronDown, ChevronUp } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import { Activity, CalendarDays, Download, Eye, EyeOff, MessageSquare, Pencil, Plus, Save, Settings2, Trash2, UsersRound, X, ChevronDown, ChevronUp } from "lucide-react";
 import type { UserPlan, UserRole } from "@/src/lib/authStore";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
 import { RequiredNumberInput } from "@/src/components/calculators/CalculatorUi";
@@ -18,6 +18,7 @@ type AdminUser = {
   lastLoginAt?: string;
   lockedUntil?: number;
   failedLogins: number;
+  loginCount: number;
   trialDays: number;
   passwordPreview?: string;
   isProtected: boolean;
@@ -32,6 +33,18 @@ type SmsConfig = {
   enabled: boolean;
   updatedAt?: string;
   apiKeySet: boolean;
+};
+
+type ActivityStats = {
+  onlineNow: number;
+  loginsToday: number;
+  loginsThisWeek: number;
+  loginsThisMonth: number;
+};
+
+type DailyLoginStats = {
+  day: string;
+  logins: number;
 };
 
 type AdminPanelProps = {
@@ -96,6 +109,31 @@ export function AdminPanel({
   const [pendingUserId, setPendingUserId] = useState("");
   const [savingSms, setSavingSms] = useState(false);
   const [exportingUsers, setExportingUsers] = useState(false);
+  const [activityStats, setActivityStats] = useState<ActivityStats | null>(null);
+  const [dailyLogins, setDailyLogins] = useState<DailyLoginStats[]>([]);
+
+  useEffect(() => {
+    let disposed = false;
+    const loadActivityStats = async () => {
+      try {
+        const response = await fetch("/api/admin/activity", { cache: "no-store" });
+        const data = await response.json();
+        if (response.ok && data.ok && !disposed) {
+          setActivityStats(data.stats);
+          setDailyLogins(data.dailyLogins ?? []);
+        }
+      } catch {
+        // Management remains available if live metrics are temporarily unavailable.
+      }
+    };
+
+    void loadActivityStats();
+    const intervalId = window.setInterval(loadActivityStats, 60_000);
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   const fetchPage = async (
     page: number,
@@ -459,13 +497,62 @@ export function AdminPanel({
             </label>
 
             <label>
-              <span>ترتیب ثبت‌نام:</span>
+              <span>مرتب‌سازی:</span>
               <select value={sortBy} onChange={(e) => { setSortBy(e.target.value); handleFilterChange({ sortBy: e.target.value }); }}>
                 <option value="newest">جدیدترین به قدیمی‌ترین</option>
                 <option value="oldest">قدیمی‌ترین به جدیدترین</option>
+                <option value="mostLogins">بیشترین تعداد ورود</option>
+                <option value="leastLogins">کمترین تعداد ورود</option>
               </select>
             </label>
           </div>
+
+          <section className="admin-activity-grid" aria-label="آمار فعالیت کاربران">
+            <article className="admin-activity-card online">
+              <span className="admin-activity-icon"><Activity size={18} aria-hidden="true" /></span>
+              <div>
+                <small>آنلاین اکنون</small>
+                <strong>{new Intl.NumberFormat("fa-IR").format(activityStats?.onlineNow ?? 0)}</strong>
+                <span className="admin-online-status"><i aria-hidden="true" />فعال در ۵ دقیقه اخیر</span>
+              </div>
+            </article>
+            <article className="admin-activity-card">
+              <span className="admin-activity-icon"><CalendarDays size={18} aria-hidden="true" /></span>
+              <div><small>ورود امروز</small><strong>{new Intl.NumberFormat("fa-IR").format(activityStats?.loginsToday ?? 0)}</strong></div>
+            </article>
+            <article className="admin-activity-card">
+              <span className="admin-activity-icon"><UsersRound size={18} aria-hidden="true" /></span>
+              <div><small>ورود این هفته</small><strong>{new Intl.NumberFormat("fa-IR").format(activityStats?.loginsThisWeek ?? 0)}</strong></div>
+            </article>
+            <article className="admin-activity-card">
+              <span className="admin-activity-icon"><Activity size={18} aria-hidden="true" /></span>
+              <div><small>ورود این ماه</small><strong>{new Intl.NumberFormat("fa-IR").format(activityStats?.loginsThisMonth ?? 0)}</strong></div>
+            </article>
+          </section>
+
+          <section className="admin-daily-logins" aria-labelledby="daily-logins-title">
+            <div className="admin-daily-logins-head">
+              <div>
+                <h3 id="daily-logins-title">جدول ورود روزانه</h3>
+                <p>شامل ورودهای ثبت‌شده در هفت روز اخیر</p>
+              </div>
+              <span>هر ورود موفق یک رکورد جدید است</span>
+            </div>
+            <div className="admin-daily-logins-table-wrap">
+              <table>
+                <thead><tr><th>روز</th><th>تعداد ورود موفق</th></tr></thead>
+                <tbody>
+                  {dailyLogins.map((entry) => (
+                    <tr key={entry.day}>
+                      <td>{new Date(entry.day).toLocaleDateString("fa-IR", { month: "long", day: "numeric" })}</td>
+                      <td>{new Intl.NumberFormat("fa-IR").format(entry.logins)}</td>
+                    </tr>
+                  ))}
+                  {dailyLogins.length === 0 ? <tr><td colSpan={2}>در حال دریافت آمار...</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
           <div className="admin-management-grid">
             <form className="admin-setting-card" onSubmit={saveDefaultTrial}>
@@ -582,6 +669,7 @@ export function AdminPanel({
                     <th>رمز</th>
                     <th>ثبت‌نام</th>
                     <th>آخرین ورود</th>
+                    <th>تعداد ورود</th>
                     <th>وضعیت</th>
                     <th>عملیات</th>
                   </tr>
@@ -633,6 +721,7 @@ export function AdminPanel({
                         </td>
                         <td data-label="ثبت‌نام" className="col-desktop-only">{new Date(access.signupAt).toLocaleDateString("fa-IR")}</td>
                         <td data-label="آخرین ورود" className="col-desktop-only">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString("fa-IR") : "بدون ورود"}</td>
+                        <td data-label="تعداد ورود" className="col-desktop-only">{user.loginCount ?? 1}</td>
                         <td data-label="وضعیت" className="col-desktop-only">{locked ? "قفل موقت" : user.isProtected ? "حساب پایه" : "فعال"}</td>
                         <td data-label="عملیات" className="col-desktop-only actions-cell">
                           <button
@@ -663,6 +752,7 @@ export function AdminPanel({
                               <span><strong>نقش:</strong> {user.role === "admin" ? "مدیر" : "کاربر"}</span>
                               <span><strong>ثبت‌نام:</strong> {new Date(access.signupAt).toLocaleDateString("fa-IR")}</span>
                               <span><strong>وضعیت:</strong> {locked ? "قفل" : "فعال"}</span>
+                              <span><strong>تعداد ورود:</strong> {user.loginCount ?? 1}</span>
                               <span><strong>رمز:</strong> {showPasswords ? user.passwordPreview || "فقط قابل تغییر" : "••••••••"}</span>
                             </div>
                             <div className="mobile-details-row-actions">

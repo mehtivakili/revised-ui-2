@@ -44,19 +44,24 @@ export async function GET(request: NextRequest) {
 
     const whereString = whereClauses.length > 0 ? ` WHERE ${whereClauses.join(" AND ")}` : "";
 
-    let orderString = " ORDER BY is_protected DESC";
-    if (sortBy === "newest") {
-      orderString += ", signup_at DESC";
+    let orderString;
+    if (sortBy === "mostLogins") {
+      orderString = " ORDER BY login_count DESC, signup_at DESC";
+    } else if (sortBy === "leastLogins") {
+      orderString = " ORDER BY login_count ASC, signup_at DESC";
+    } else if (sortBy === "newest") {
+      orderString = " ORDER BY is_protected DESC, signup_at DESC";
     } else if (sortBy === "oldest") {
-      orderString += ", signup_at ASC";
+      orderString = " ORDER BY is_protected DESC, signup_at ASC";
     } else {
-      orderString += ", signup_at DESC";
+      orderString = " ORDER BY is_protected DESC, signup_at DESC";
     }
 
     const usersQueryText = `
       SELECT id, username, role, plan, is_free_account as "isFreeAccount", 
              display_name as "displayName", signup_at as "signupAt", 
              created_at as "createdAt", last_login_at as "lastLoginAt", 
+             login_count as "loginCount",
              failed_logins as "failedLogins", is_protected as "isProtected",
              trial_days as "trialDays", password_preview as "passwordPreview"
       FROM users
