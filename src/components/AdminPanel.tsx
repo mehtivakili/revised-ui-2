@@ -47,6 +47,67 @@ type DailyLoginStats = {
   logins: number;
 };
 
+function LoginActivityChart({ entries, rangeLabel }: { entries: DailyLoginStats[]; rangeLabel: string }) {
+  const width = 440;
+  const height = 230;
+  const padding = { top: 22, right: 18, bottom: 38, left: 34 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const maxLogins = Math.max(1, ...entries.map((entry) => entry.logins));
+  const baseY = padding.top + plotHeight;
+  const labelStep = Math.max(1, Math.ceil(entries.length / 5));
+  const points = entries.map((entry, index) => ({
+    ...entry,
+    x: padding.left + (entries.length > 1 ? (index / (entries.length - 1)) * plotWidth : plotWidth / 2),
+    y: padding.top + (1 - entry.logins / maxLogins) * plotHeight
+  }));
+  const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  const areaPath = points.length
+    ? `M ${points[0].x} ${baseY} ${points.map((point) => `L ${point.x} ${point.y}`).join(" ")} L ${points[points.length - 1].x} ${baseY} Z`
+    : "";
+  const numberFormat = new Intl.NumberFormat("fa-IR");
+
+  return (
+    <aside className="admin-login-chart" aria-labelledby="login-chart-title">
+      <div className="admin-login-chart-head">
+        <div>
+          <h3 id="login-chart-title">نمودار ورود کاربران</h3>
+          <p>{rangeLabel}</p>
+        </div>
+        <strong>{numberFormat.format(entries.reduce((total, entry) => total + entry.logins, 0))}</strong>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`نمودار ورود کاربران در ${rangeLabel}`}>
+        <defs>
+          <linearGradient id="login-chart-fill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#1689c9" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#1689c9" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {[0, 0.25, 0.5, 0.75, 1].map((step) => {
+          const y = padding.top + step * plotHeight;
+          return <line key={step} x1={padding.left} x2={width - padding.right} y1={y} y2={y} className="chart-grid-line" />;
+        })}
+        {areaPath ? <path d={areaPath} className="chart-area" /> : null}
+        {linePath ? <path d={linePath} className="chart-line" /> : null}
+        {points.map((point, index) => (
+          <g key={point.day}>
+            <circle cx={point.x} cy={point.y} r="4" className="chart-point">
+              <title>{`${new Date(point.day).toLocaleDateString("fa-IR", { month: "short", day: "numeric" })}: ${numberFormat.format(point.logins)} ورود`}</title>
+            </circle>
+            {(index % labelStep === 0 || index === points.length - 1) ? (
+              <text x={point.x} y={height - 14} textAnchor="middle" className="chart-axis-label">
+                {new Date(point.day).toLocaleDateString("fa-IR", { month: "short", day: "numeric" })}
+              </text>
+            ) : null}
+          </g>
+        ))}
+        <text x={padding.left - 7} y={padding.top + 5} textAnchor="end" className="chart-axis-label">{numberFormat.format(maxLogins)}</text>
+        <text x={padding.left - 7} y={baseY + 4} textAnchor="end" className="chart-axis-label">۰</text>
+      </svg>
+    </aside>
+  );
+}
+
 type AdminPanelProps = {
   currentUserId: string;
   initialUsers: AdminUser[];
@@ -111,12 +172,13 @@ export function AdminPanel({
   const [exportingUsers, setExportingUsers] = useState(false);
   const [activityStats, setActivityStats] = useState<ActivityStats | null>(null);
   const [dailyLogins, setDailyLogins] = useState<DailyLoginStats[]>([]);
+  const [activityRange, setActivityRange] = useState<"week" | "month">("week");
 
   useEffect(() => {
     let disposed = false;
     const loadActivityStats = async () => {
       try {
-        const response = await fetch("/api/admin/activity", { cache: "no-store" });
+        const response = await fetch(`/api/admin/activity?range=${activityRange}`, { cache: "no-store" });
         const data = await response.json();
         if (response.ok && data.ok && !disposed) {
           setActivityStats(data.stats);
@@ -133,7 +195,7 @@ export function AdminPanel({
       disposed = true;
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [activityRange]);
 
   const fetchPage = async (
     page: number,
@@ -530,28 +592,34 @@ export function AdminPanel({
             </article>
           </section>
 
-          <section className="admin-daily-logins" aria-labelledby="daily-logins-title">
-            <div className="admin-daily-logins-head">
-              <div>
-                <h3 id="daily-logins-title">جدول ورود روزانه</h3>
-                <p>شامل ورودهای ثبت‌شده در هفت روز اخیر</p>
+          <section className="admin-activity-details" aria-label="جزئیات ورود کاربران">
+            <LoginActivityChart entries={dailyLogins} rangeLabel={activityRange === "week" ? "هفت روز اخیر" : "ماه جاری"} />
+            <section className="admin-daily-logins" aria-labelledby="daily-logins-title">
+              <div className="admin-daily-logins-head">
+                <div>
+                  <h3 id="daily-logins-title">جدول ورود روزانه</h3>
+                  <p>{activityRange === "week" ? "شامل ورودهای ثبت‌شده در هفت روز اخیر" : "شامل ورودهای ثبت‌شده از ابتدای ماه جاری"}</p>
+                </div>
+                <div className="admin-activity-range" role="group" aria-label="بازه نمایش ورودها">
+                  <button type="button" className={activityRange === "week" ? "active" : ""} onClick={() => setActivityRange("week")}>۷ روز</button>
+                  <button type="button" className={activityRange === "month" ? "active" : ""} onClick={() => setActivityRange("month")}>ماه جاری</button>
+                </div>
               </div>
-              <span>هر ورود موفق یک رکورد جدید است</span>
-            </div>
-            <div className="admin-daily-logins-table-wrap">
-              <table>
-                <thead><tr><th>روز</th><th>تعداد ورود موفق</th></tr></thead>
-                <tbody>
-                  {dailyLogins.map((entry) => (
-                    <tr key={entry.day}>
-                      <td>{new Date(entry.day).toLocaleDateString("fa-IR", { month: "long", day: "numeric" })}</td>
-                      <td>{new Intl.NumberFormat("fa-IR").format(entry.logins)}</td>
-                    </tr>
-                  ))}
-                  {dailyLogins.length === 0 ? <tr><td colSpan={2}>در حال دریافت آمار...</td></tr> : null}
-                </tbody>
-              </table>
-            </div>
+              <div className="admin-daily-logins-table-wrap">
+                <table>
+                  <thead><tr><th>روز</th><th>تعداد ورود موفق</th></tr></thead>
+                  <tbody>
+                    {dailyLogins.map((entry) => (
+                      <tr key={entry.day}>
+                        <td>{new Date(entry.day).toLocaleDateString("fa-IR", { month: "long", day: "numeric" })}</td>
+                        <td>{new Intl.NumberFormat("fa-IR").format(entry.logins)}</td>
+                      </tr>
+                    ))}
+                    {dailyLogins.length === 0 ? <tr><td colSpan={2}>در حال دریافت آمار...</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </section>
 
           <div className="admin-management-grid">
@@ -724,25 +792,27 @@ export function AdminPanel({
                         <td data-label="تعداد ورود" className="col-desktop-only">{user.loginCount ?? 1}</td>
                         <td data-label="وضعیت" className="col-desktop-only">{locked ? "قفل موقت" : user.isProtected ? "حساب پایه" : "فعال"}</td>
                         <td data-label="عملیات" className="col-desktop-only actions-cell">
-                          <button
-                            type="button"
-                            className="secondary-action compact icon-only-action"
-                            title="ویرایش"
-                            aria-label={`ویرایش ${user.username}`}
-                            onClick={() => startEdit(user)}
-                          >
-                            <Pencil size={15} aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            className="danger-action compact icon-only-action"
-                            title="حذف"
-                            aria-label={`حذف ${user.username}`}
-                            disabled={!canDelete || pendingUserId === user.id}
-                            onClick={() => deleteAccount(user.id)}
-                          >
-                            <Trash2 size={15} aria-hidden="true" />
-                          </button>
+                          <div className="admin-table-actions">
+                            <button
+                              type="button"
+                              className="secondary-action compact icon-only-action"
+                              title="ویرایش"
+                              aria-label={`ویرایش ${user.username}`}
+                              onClick={() => startEdit(user)}
+                            >
+                              <Pencil size={15} aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              className="danger-action compact icon-only-action"
+                              title="حذف"
+                              aria-label={`حذف ${user.username}`}
+                              disabled={!canDelete || pendingUserId === user.id}
+                              onClick={() => deleteAccount(user.id)}
+                            >
+                              <Trash2 size={15} aria-hidden="true" />
+                            </button>
+                          </div>
                         </td>
 
                         {/* Collapsible Mobile Details */}

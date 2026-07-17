@@ -5,7 +5,7 @@ import { getCurrentSession } from "@/src/lib/session";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getCurrentSession();
   if (session?.role !== "admin") {
     return NextResponse.json({ ok: false, error: "دسترسی غیرمجاز است." }, { status: 403 });
@@ -13,6 +13,10 @@ export async function GET() {
 
   try {
     await ensureAuthSchema();
+    const range = new URL(request.url).searchParams.get("range") === "month" ? "month" : "week";
+    const rangeStart = range === "month"
+      ? "date_trunc('month', CURRENT_DATE)"
+      : "CURRENT_DATE - INTERVAL '6 days'";
     const [summaryResult, dailyResult] = await Promise.all([
       query(`
       SELECT
@@ -25,7 +29,7 @@ export async function GET() {
       query(`
         SELECT day::date AS day, COUNT(event.id)::int AS logins
         FROM generate_series(
-          CURRENT_DATE - INTERVAL '6 days',
+          ${rangeStart},
           CURRENT_DATE,
           INTERVAL '1 day'
         ) AS calendar(day)
@@ -46,6 +50,7 @@ export async function GET() {
         loginsThisWeek: Number(stats.loginsThisWeek ?? 0),
         loginsThisMonth: Number(stats.loginsThisMonth ?? 0)
       },
+      range,
       dailyLogins: dailyResult.rows.map((row) => ({
         day: new Date(row.day).toISOString(),
         logins: Number(row.logins ?? 0)
