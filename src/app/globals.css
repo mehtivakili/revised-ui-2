@@ -1745,25 +1745,115 @@ h3 {
 
 .admin-management-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
 .admin-setting-card,
 .admin-action-card {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+  min-width: 0;
+  padding: 18px;
   border: 1px solid rgba(205, 228, 242, 0.8);
   border-radius: var(--radius);
   background: #ffffff;
   box-shadow: 0 10px 26px rgba(31, 74, 111, 0.07);
 }
 
-.admin-setting-card input {
-  width: 96px;
+.admin-management-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-setting-controls {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.55fr) minmax(170px, 1fr);
+  align-items: end;
+  gap: 10px;
+}
+
+.admin-days-input,
+.admin-bulk-controls label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-setting-controls input,
+.admin-bulk-controls input,
+.admin-bulk-controls select {
+  width: 100%;
+}
+
+.admin-account-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-account-actions button {
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
+}
+
+.admin-bulk-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: var(--panel-soft);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.admin-bulk-checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.admin-bulk-card {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid rgba(205, 228, 242, 0.8);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, #ffffff, var(--panel-soft));
+  box-shadow: 0 10px 26px rgba(31, 74, 111, 0.07);
+}
+
+.admin-bulk-controls {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(190px, 1.2fr) minmax(150px, 0.75fr) minmax(150px, auto);
+  align-items: end;
+  gap: 10px;
+}
+
+.admin-bulk-value-note {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: var(--muted);
+  background: #ffffff;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  font-weight: 700;
 }
 
 .admin-setting-copy {
@@ -3386,13 +3476,15 @@ h3 {
 
   .admin-setting-card,
   .admin-action-card {
-    grid-template-columns: auto minmax(0, 1fr);
+    width: 100%;
   }
 
-  .admin-setting-card input,
-  .admin-setting-card button,
-  .admin-action-card button {
-    grid-column: 1 / -1;
+  .admin-bulk-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-account-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     width: 100%;
   }
 
@@ -4957,6 +5049,33 @@ h3 {
   .pwa-install-action {
     grid-column: 1 / -1;
     justify-content: center;
+    width: 100%;
+  }
+
+  .admin-account-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .admin-setting-card,
+  .admin-action-card,
+  .admin-bulk-card {
+    padding: 14px;
+  }
+
+  .admin-setting-controls,
+  .admin-account-actions,
+  .admin-bulk-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-setting-controls button,
+  .admin-account-actions button,
+  .admin-bulk-controls button {
     width: 100%;
   }
 }
