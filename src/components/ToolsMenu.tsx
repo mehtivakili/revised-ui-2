@@ -42,10 +42,10 @@ const iconMap: Record<DashboardTool["icon"] | DashboardCategory["icon"], LucideI
 
 export function ToolsMenu({ lockedToolSlugs = [] }: { lockedToolSlugs?: string[] }) {
   const pathname = usePathname();
-  return <ToolsMenuInner key={pathname} lockedToolSlugs={lockedToolSlugs} />;
+  return <ToolsMenuInner key={pathname} pathname={pathname} lockedToolSlugs={lockedToolSlugs} />;
 }
 
-function ToolsMenuInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
+function ToolsMenuInner({ pathname, lockedToolSlugs }: { pathname: string; lockedToolSlugs: string[] }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lockedTools = useMemo(() => new Set(lockedToolSlugs), [lockedToolSlugs]);
@@ -65,15 +65,6 @@ function ToolsMenuInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
   const closeMenu = useCallback(() => {
     clearCloseTimer();
     rootRef.current?.removeAttribute("open");
-  }, [clearCloseTimer]);
-
-  const toggleMenu = useCallback(() => {
-    clearCloseTimer();
-    if (rootRef.current?.hasAttribute("open")) {
-      rootRef.current.removeAttribute("open");
-      return;
-    }
-    rootRef.current?.setAttribute("open", "");
   }, [clearCloseTimer]);
 
   const scheduleClose = useCallback(() => {
@@ -102,26 +93,25 @@ function ToolsMenuInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
         }
       }}
     >
-      <button
-        type="button"
+      <Link
+        href="/calculators"
         className="tools-menu-trigger"
         aria-haspopup="menu"
-        onClick={(event) => {
-          event.preventDefault();
-          toggleMenu();
-        }}
+        aria-current={pathname === "/calculators" ? "page" : undefined}
+        onClick={closeMenu}
         onKeyDown={(event) => {
           if (event.key === "Escape") closeMenu();
-          if (event.key === "Enter" || event.key === " ") {
+          if (event.key === "ArrowDown") {
             event.preventDefault();
-            toggleMenu();
+            openMenu();
+            rootRef.current?.querySelector<HTMLAnchorElement>(".tools-menu-links a")?.focus();
           }
         }}
       >
         <Menu className="tools-menu-mobile-icon" size={18} aria-hidden="true" />
         <span className="tools-menu-label">ابزارها</span>
         <ChevronDown className="tools-menu-chevron" size={16} aria-hidden="true" />
-      </button>
+      </Link>
       <div className="tools-menu-backdrop" onClick={closeMenu} aria-hidden="true" />
       <div
         className="tools-menu-panel"
