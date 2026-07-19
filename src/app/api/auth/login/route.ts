@@ -60,7 +60,7 @@ export async function POST(request: Request) {
   }
 
   const response = isFormPost
-    ? formRedirect(request, result.user.role === "admin" ? "/admin" : "/")
+    ? formRedirect(request, "/calculators")
     : NextResponse.json({ ok: true, role: result.user.role });
   response.cookies.set(sessionCookieName, signSession(result.user), sessionCookieOptions());
   return response;

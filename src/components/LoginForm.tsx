@@ -35,7 +35,7 @@ export function LoginForm({ initialMode, initialError = "" }: { initialMode: Log
       return;
     }
 
-    window.location.href = data.role === "admin" ? "/admin" : "/";
+    window.location.href = "/calculators";
   }
 
   async function requestOtp(event: FormEvent<HTMLFormElement>) {
@@ -79,7 +79,7 @@ export function LoginForm({ initialMode, initialError = "" }: { initialMode: Log
       return;
     }
 
-    window.location.href = "/";
+    window.location.href = "/calculators";
   }
 
   return (

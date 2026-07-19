@@ -19,7 +19,7 @@ export async function AppTopBar() {
       minimalOnContacts={!session}
       minimalChildren={
         <header className="top-bar minimal-bar">
-          <Link className="brand-mark minimal-brand" href="/" aria-label="همیار دوربین">
+          <Link className="brand-mark minimal-brand" href="/calculators" aria-label="همیار دوربین">
             <span>
               <strong>همیار دوربین</strong>
               <small>ابزارهای محاسباتی دوربین و شبکه</small>
@@ -40,14 +40,14 @@ export async function AppTopBar() {
     >
       {session ? <OnlinePresence /> : null}
       <header className="top-bar">
-        <Link className="brand-mark" href="/" aria-label="همیار دوربین">
+        <Link className="brand-mark" href="/calculators" aria-label="همیار دوربین">
           <span>
             <strong>همیار دوربین</strong>
             <small>ابزارهای محاسباتی دوربین و شبکه</small>
           </span>
         </Link>
 
-        <Link className="topbar-title" href="/" aria-label="همیار دوربین">
+        <Link className="topbar-title" href="/calculators" aria-label="همیار دوربین">
           همیار دوربین
         </Link>
 
