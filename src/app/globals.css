@@ -5457,7 +5457,6 @@ h3 {
   }
 }
 
-<<<<<<< HEAD
 /* Advanced catalog galleries and planner */
 .catalog-card {
   grid-template-rows: auto auto minmax(54px, 1fr) auto auto;
@@ -5601,7 +5600,10 @@ h3 {
   border: 1px solid #c9ebdf;
   border-radius: 10px;
   font-size: 11px;
-=======
+  font-weight: 900;
+  cursor: pointer;
+}
+
 /* Installable web app prompt */
 .pwa-install-prompt {
   position: fixed;
@@ -5653,12 +5655,10 @@ h3 {
   background: #36e7ef;
   border: 0;
   border-radius: 10px;
->>>>>>> c15d891129d5b826544e5c3a3e8c9e81de969989
   font-weight: 900;
   cursor: pointer;
 }
 
-<<<<<<< HEAD
 .wizard-stage-layout {
   display: grid;
   grid-template-columns: minmax(300px, .78fr) minmax(0, 1.35fr);
@@ -6100,7 +6100,9 @@ h3 {
     grid-template-columns: 1fr auto auto;
     align-items: center;
     justify-items: start;
-=======
+  }
+}
+
 .pwa-install-close {
   position: absolute;
   top: 6px;
@@ -6174,6 +6176,5 @@ h3 {
 @media (max-width: 420px) {
   .admin-activity-grid {
     grid-template-columns: 1fr;
->>>>>>> c15d891129d5b826544e5c3a3e8c9e81de969989
   }
 }
