@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { Eye, EyeOff, MessageSquare, Pencil, Plus, Save, Settings2, Trash2, UsersRound, X, ChevronDown, ChevronUp } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import { Activity, CalendarDays, Download, Eye, EyeOff, MessageSquare, Pencil, Plus, Save, Settings2, Trash2, UsersRound, X, ChevronDown, ChevronUp } from "lucide-react";
 import type { UserPlan, UserRole } from "@/src/lib/authStore";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
+import { RequiredNumberInput } from "@/src/components/calculators/CalculatorUi";
 
 type AdminUser = {
   id: string;
@@ -17,6 +18,7 @@ type AdminUser = {
   lastLoginAt?: string;
   lockedUntil?: number;
   failedLogins: number;
+  loginCount: number;
   trialDays: number;
   passwordPreview?: string;
   isProtected: boolean;
@@ -32,6 +34,79 @@ type SmsConfig = {
   updatedAt?: string;
   apiKeySet: boolean;
 };
+
+type ActivityStats = {
+  onlineNow: number;
+  loginsToday: number;
+  loginsThisWeek: number;
+  loginsThisMonth: number;
+};
+
+type DailyLoginStats = {
+  day: string;
+  logins: number;
+};
+
+function LoginActivityChart({ entries, rangeLabel }: { entries: DailyLoginStats[]; rangeLabel: string }) {
+  const width = 440;
+  const height = 230;
+  const padding = { top: 22, right: 18, bottom: 38, left: 34 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const maxLogins = Math.max(1, ...entries.map((entry) => entry.logins));
+  const baseY = padding.top + plotHeight;
+  const labelStep = Math.max(1, Math.ceil(entries.length / 5));
+  const points = entries.map((entry, index) => ({
+    ...entry,
+    x: padding.left + (entries.length > 1 ? (index / (entries.length - 1)) * plotWidth : plotWidth / 2),
+    y: padding.top + (1 - entry.logins / maxLogins) * plotHeight
+  }));
+  const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  const areaPath = points.length
+    ? `M ${points[0].x} ${baseY} ${points.map((point) => `L ${point.x} ${point.y}`).join(" ")} L ${points[points.length - 1].x} ${baseY} Z`
+    : "";
+  const numberFormat = new Intl.NumberFormat("fa-IR");
+
+  return (
+    <aside className="admin-login-chart" aria-labelledby="login-chart-title">
+      <div className="admin-login-chart-head">
+        <div>
+          <h3 id="login-chart-title">نمودار ورود کاربران</h3>
+          <p>{rangeLabel}</p>
+        </div>
+        <strong>{numberFormat.format(entries.reduce((total, entry) => total + entry.logins, 0))}</strong>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`نمودار ورود کاربران در ${rangeLabel}`}>
+        <defs>
+          <linearGradient id="login-chart-fill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#1689c9" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#1689c9" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {[0, 0.25, 0.5, 0.75, 1].map((step) => {
+          const y = padding.top + step * plotHeight;
+          return <line key={step} x1={padding.left} x2={width - padding.right} y1={y} y2={y} className="chart-grid-line" />;
+        })}
+        {areaPath ? <path d={areaPath} className="chart-area" /> : null}
+        {linePath ? <path d={linePath} className="chart-line" /> : null}
+        {points.map((point, index) => (
+          <g key={point.day}>
+            <circle cx={point.x} cy={point.y} r="4" className="chart-point">
+              <title>{`${new Date(point.day).toLocaleDateString("fa-IR", { month: "short", day: "numeric" })}: ${numberFormat.format(point.logins)} ورود`}</title>
+            </circle>
+            {(index % labelStep === 0 || index === points.length - 1) ? (
+              <text x={point.x} y={height - 14} textAnchor="middle" className="chart-axis-label">
+                {new Date(point.day).toLocaleDateString("fa-IR", { month: "short", day: "numeric" })}
+              </text>
+            ) : null}
+          </g>
+        ))}
+        <text x={padding.left - 7} y={padding.top + 5} textAnchor="end" className="chart-axis-label">{numberFormat.format(maxLogins)}</text>
+        <text x={padding.left - 7} y={baseY + 4} textAnchor="end" className="chart-axis-label">۰</text>
+      </svg>
+    </aside>
+  );
+}
 
 type AdminPanelProps = {
   currentUserId: string;
@@ -63,6 +138,11 @@ export function AdminPanel({
   const [smsConfig, setSmsConfig] = useState(initialSmsConfig);
   const [defaultTrialDays, setDefaultTrialDays] = useState(initialDefaultTrialDays);
   const [savingDefaultTrial, setSavingDefaultTrial] = useState(false);
+  const [applyTrialToExisting, setApplyTrialToExisting] = useState(true);
+  const [bulkTarget, setBulkTarget] = useState("free");
+  const [bulkOperation, setBulkOperation] = useState("trialDays");
+  const [bulkTrialDays, setBulkTrialDays] = useState(initialDefaultTrialDays);
+  const [savingBulk, setSavingBulk] = useState(false);
   const [showPasswords, setShowPasswords] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -89,6 +169,33 @@ export function AdminPanel({
   const [error, setError] = useState("");
   const [pendingUserId, setPendingUserId] = useState("");
   const [savingSms, setSavingSms] = useState(false);
+  const [exportingUsers, setExportingUsers] = useState(false);
+  const [activityStats, setActivityStats] = useState<ActivityStats | null>(null);
+  const [dailyLogins, setDailyLogins] = useState<DailyLoginStats[]>([]);
+  const [activityRange, setActivityRange] = useState<"week" | "month">("week");
+
+  useEffect(() => {
+    let disposed = false;
+    const loadActivityStats = async () => {
+      try {
+        const response = await fetch(`/api/admin/activity?range=${activityRange}`, { cache: "no-store" });
+        const data = await response.json();
+        if (response.ok && data.ok && !disposed) {
+          setActivityStats(data.stats);
+          setDailyLogins(data.dailyLogins ?? []);
+        }
+      } catch {
+        // Management remains available if live metrics are temporarily unavailable.
+      }
+    };
+
+    void loadActivityStats();
+    const intervalId = window.setInterval(loadActivityStats, 60_000);
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activityRange]);
 
   const fetchPage = async (
     page: number,
@@ -140,7 +247,7 @@ export function AdminPanel({
     const response = await fetch("/api/admin/accounts", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "settings", defaultTrialDays })
+      body: JSON.stringify({ action: "settings", defaultTrialDays, applyToExistingFree: applyTrialToExisting })
     });
     const data = await response.json();
     setSavingDefaultTrial(false);
@@ -151,8 +258,54 @@ export function AdminPanel({
     }
 
     setDefaultTrialDays(data.defaultTrialDays);
+    setBulkTrialDays(data.defaultTrialDays);
     setCreateForm((current) => ({ ...current, trialDays: data.defaultTrialDays, daysLeft: data.defaultTrialDays }));
-    setMessage("مدت پیش‌فرض تست ذخیره شد.");
+    setMessage(applyTrialToExisting
+      ? `مدت تست ذخیره شد و برای ${data.affectedUsers ?? 0} کاربر رایگان به‌روزرسانی شد.`
+      : "مدت پیش‌فرض تست برای کاربران جدید ذخیره شد.");
+  }
+
+  async function applyBulkOperation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const targetLabel = bulkTarget === "all" ? "همه کاربران" : bulkTarget === "pro" ? "کاربران حرفه‌ای" : "کاربران رایگان";
+    const operationLabel = bulkOperation === "trialDays"
+      ? `تغییر مدت تست به ${bulkTrialDays} روز`
+      : bulkOperation === "planFree"
+        ? "تبدیل اشتراک به رایگان"
+        : bulkOperation === "planPro"
+          ? "تبدیل اشتراک به حرفه‌ای"
+          : "باز کردن قفل ورود";
+
+    if (!window.confirm(`${operationLabel} برای ${targetLabel} انجام شود؟`)) return;
+
+    setSavingBulk(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/accounts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "bulk",
+          target: bulkTarget,
+          operation: bulkOperation,
+          trialDays: bulkTrialDays
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        setError(data.error || "عملیات گروهی انجام نشد.");
+        return;
+      }
+
+      await fetchPage(currentPage);
+      setMessage(`عملیات برای ${data.affectedUsers ?? 0} کاربر انجام شد.`);
+    } catch {
+      setError("خطا در ارتباط با سرور برای عملیات گروهی.");
+    } finally {
+      setSavingBulk(false);
+    }
   }
 
   async function createAccount(event: FormEvent<HTMLFormElement>) {
@@ -304,6 +457,38 @@ export function AdminPanel({
     setMessage("تنظیمات پیامک ذخیره شد.");
   }
 
+  async function exportUsers() {
+    setExportingUsers(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/admin/accounts/export");
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        setError(data?.error || "خطا در دریافت فایل اکسل کاربران.");
+        return;
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition") ?? "";
+      const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? "users.xlsx";
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      setMessage("فایل اکسل همه کاربران دانلود شد.");
+    } catch {
+      setError("خطا در ارتباط با سرور برای دریافت فایل اکسل.");
+    } finally {
+      setExportingUsers(false);
+    }
+  }
+
   const getPageNumbers = () => {
     const pages: (number | string)[] = [];
     if (totalPages <= 7) {
@@ -374,54 +559,169 @@ export function AdminPanel({
             </label>
 
             <label>
-              <span>ترتیب ثبت‌نام:</span>
+              <span>مرتب‌سازی:</span>
               <select value={sortBy} onChange={(e) => { setSortBy(e.target.value); handleFilterChange({ sortBy: e.target.value }); }}>
                 <option value="newest">جدیدترین به قدیمی‌ترین</option>
                 <option value="oldest">قدیمی‌ترین به جدیدترین</option>
+                <option value="mostLogins">بیشترین تعداد ورود</option>
+                <option value="leastLogins">کمترین تعداد ورود</option>
               </select>
             </label>
           </div>
 
+          <section className="admin-activity-grid" aria-label="آمار فعالیت کاربران">
+            <article className="admin-activity-card online">
+              <span className="admin-activity-icon"><Activity size={18} aria-hidden="true" /></span>
+              <div>
+                <small>آنلاین اکنون</small>
+                <strong>{new Intl.NumberFormat("fa-IR").format(activityStats?.onlineNow ?? 0)}</strong>
+                <span className="admin-online-status"><i aria-hidden="true" />فعال در ۵ دقیقه اخیر</span>
+              </div>
+            </article>
+            <article className="admin-activity-card">
+              <span className="admin-activity-icon"><CalendarDays size={18} aria-hidden="true" /></span>
+              <div><small>ورود امروز</small><strong>{new Intl.NumberFormat("fa-IR").format(activityStats?.loginsToday ?? 0)}</strong></div>
+            </article>
+            <article className="admin-activity-card">
+              <span className="admin-activity-icon"><UsersRound size={18} aria-hidden="true" /></span>
+              <div><small>ورود این هفته</small><strong>{new Intl.NumberFormat("fa-IR").format(activityStats?.loginsThisWeek ?? 0)}</strong></div>
+            </article>
+            <article className="admin-activity-card">
+              <span className="admin-activity-icon"><Activity size={18} aria-hidden="true" /></span>
+              <div><small>ورود این ماه</small><strong>{new Intl.NumberFormat("fa-IR").format(activityStats?.loginsThisMonth ?? 0)}</strong></div>
+            </article>
+          </section>
+
+          <section className="admin-activity-details" aria-label="جزئیات ورود کاربران">
+            <LoginActivityChart entries={dailyLogins} rangeLabel={activityRange === "week" ? "هفت روز اخیر" : "ماه جاری"} />
+            <section className="admin-daily-logins" aria-labelledby="daily-logins-title">
+              <div className="admin-daily-logins-head">
+                <div>
+                  <h3 id="daily-logins-title">جدول ورود روزانه</h3>
+                  <p>{activityRange === "week" ? "شامل ورودهای ثبت‌شده در هفت روز اخیر" : "شامل ورودهای ثبت‌شده از ابتدای ماه جاری"}</p>
+                </div>
+                <div className="admin-activity-range" role="group" aria-label="بازه نمایش ورودها">
+                  <button type="button" className={activityRange === "week" ? "active" : ""} onClick={() => setActivityRange("week")}>۷ روز</button>
+                  <button type="button" className={activityRange === "month" ? "active" : ""} onClick={() => setActivityRange("month")}>ماه جاری</button>
+                </div>
+              </div>
+              <div className="admin-daily-logins-table-wrap">
+                <table>
+                  <thead><tr><th>روز</th><th>تعداد ورود موفق</th></tr></thead>
+                  <tbody>
+                    {dailyLogins.map((entry) => (
+                      <tr key={entry.day}>
+                        <td>{new Date(entry.day).toLocaleDateString("fa-IR", { month: "long", day: "numeric" })}</td>
+                        <td>{new Intl.NumberFormat("fa-IR").format(entry.logins)}</td>
+                      </tr>
+                    ))}
+                    {dailyLogins.length === 0 ? <tr><td colSpan={2}>در حال دریافت آمار...</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
           <div className="admin-management-grid">
             <form className="admin-setting-card" onSubmit={saveDefaultTrial}>
-              <span className="category-icon">
-                <Settings2 size={18} aria-hidden="true" />
-              </span>
-              <div className="admin-setting-copy">
-                <strong>مدت پیش‌فرض تست رایگان</strong>
-                <small>برای کاربران جدید و ورود موبایلی استفاده می‌شود.</small>
+              <div className="admin-management-card-head">
+                <span className="category-icon">
+                  <Settings2 size={18} aria-hidden="true" />
+                </span>
+                <div className="admin-setting-copy">
+                  <strong>مدت پیش‌فرض تست رایگان</strong>
+                  <small>پایان تست هر کاربر از تاریخ ثبت‌نام خودش محاسبه می‌شود.</small>
+                </div>
               </div>
-              <input
-                aria-label="مدت پیش‌فرض تست رایگان"
-                type="number"
-                min={0}
-                max={3650}
-                value={defaultTrialDays}
-                onChange={(event) => setDefaultTrialDays(Number(event.target.value))}
-              />
-              <button className="secondary-action compact" type="submit" disabled={savingDefaultTrial}>
-                <Save size={15} aria-hidden="true" />
-                {savingDefaultTrial ? "ذخیره..." : "ذخیره"}
-              </button>
+              <div className="admin-setting-controls">
+                <label className="admin-days-input">
+                  <span>تعداد روز</span>
+                  <RequiredNumberInput
+                    aria-label="مدت پیش‌فرض تست رایگان"
+                    min={0}
+                    max={3650}
+                    value={defaultTrialDays}
+                    onValueChange={setDefaultTrialDays}
+                  />
+                </label>
+                <button className="secondary-action compact" type="submit" disabled={savingDefaultTrial}>
+                  <Save size={15} aria-hidden="true" />
+                  {savingDefaultTrial ? "در حال ذخیره..." : "ذخیره مدت تست"}
+                </button>
+              </div>
+              <label className="admin-bulk-checkbox">
+                <input type="checkbox" checked={applyTrialToExisting} onChange={(event) => setApplyTrialToExisting(event.target.checked)} />
+                <span>برای همه کاربران رایگان فعلی هم اعمال شود</span>
+              </label>
             </form>
 
             <div className="admin-action-card">
-              <span className="category-icon">
-                <UsersRound size={18} aria-hidden="true" />
-              </span>
-              <div className="admin-setting-copy">
-                <strong>مدیریت حساب‌ها</strong>
-                <small>کاربر جدید بسازید یا رمزهای اولیه را موقت نمایش دهید.</small>
+              <div className="admin-management-card-head">
+                <span className="category-icon">
+                  <UsersRound size={18} aria-hidden="true" />
+                </span>
+                <div className="admin-setting-copy">
+                  <strong>مدیریت حساب‌ها</strong>
+                  <small>ایجاد حساب، نمایش موقت رمزها و دریافت نسخه اکسل.</small>
+                </div>
               </div>
-              <button className="primary-action compact" type="button" onClick={() => setCreateModalOpen(true)}>
-                <Plus size={16} aria-hidden="true" />
-                ایجاد کاربر جدید
-              </button>
-              <button className="secondary-action compact password-toggle" type="button" onClick={() => setShowPasswords((value) => !value)}>
-                {showPasswords ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
-                {showPasswords ? "مخفی کردن رمزها" : "نمایش رمزها"}
-              </button>
+              <div className="admin-account-actions">
+                <button className="primary-action compact" type="button" onClick={() => setCreateModalOpen(true)}>
+                  <Plus size={16} aria-hidden="true" />
+                  ایجاد کاربر جدید
+                </button>
+                <button className="secondary-action compact password-toggle" type="button" onClick={() => setShowPasswords((value) => !value)}>
+                  {showPasswords ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
+                  {showPasswords ? "مخفی کردن رمزها" : "نمایش رمزها"}
+                </button>
+                <button className="secondary-action compact" type="button" onClick={exportUsers} disabled={exportingUsers}>
+                  <Download size={15} aria-hidden="true" />
+                  {exportingUsers ? "در حال ساخت فایل..." : "دانلود اکسل کاربران"}
+                </button>
+              </div>
             </div>
+
+            <form className="admin-bulk-card" onSubmit={applyBulkOperation}>
+              <div className="admin-management-card-head">
+                <span className="category-icon">
+                  <Settings2 size={18} aria-hidden="true" />
+                </span>
+                <div className="admin-setting-copy">
+                  <strong>عملیات گروهی کاربران</strong>
+                  <small>مدیران سیستم تغییر نمی‌کنند. قبل از اجرا، تأیید نهایی نمایش داده می‌شود.</small>
+                </div>
+              </div>
+              <div className="admin-bulk-controls">
+                <label>
+                  <span>کاربران هدف</span>
+                  <select value={bulkTarget} onChange={(event) => setBulkTarget(event.target.value)}>
+                    <option value="free">کاربران رایگان</option>
+                    <option value="pro">کاربران حرفه‌ای</option>
+                    <option value="all">همه کاربران</option>
+                  </select>
+                </label>
+                <label>
+                  <span>نوع عملیات</span>
+                  <select value={bulkOperation} onChange={(event) => setBulkOperation(event.target.value)}>
+                    <option value="trialDays">تنظیم مدت تست</option>
+                    <option value="planFree">تبدیل اشتراک به رایگان</option>
+                    <option value="planPro">تبدیل اشتراک به حرفه‌ای</option>
+                    <option value="unlock">باز کردن قفل ورود</option>
+                  </select>
+                </label>
+                <label className="admin-bulk-value">
+                  <span>مقدار</span>
+                  {bulkOperation === "trialDays" ? (
+                    <RequiredNumberInput min={0} max={3650} value={bulkTrialDays} onValueChange={setBulkTrialDays} />
+                  ) : (
+                    <span className="admin-bulk-value-note">نیازی به مقدار ندارد</span>
+                  )}
+                </label>
+                <button className="primary-action" type="submit" disabled={savingBulk}>
+                  {savingBulk ? "در حال اجرا..." : "اجرای عملیات"}
+                </button>
+              </div>
+            </form>
           </div>
 
           <div className="admin-table-wrap scrollable-admin-table">
@@ -437,6 +737,7 @@ export function AdminPanel({
                     <th>رمز</th>
                     <th>ثبت‌نام</th>
                     <th>آخرین ورود</th>
+                    <th>تعداد ورود</th>
                     <th>وضعیت</th>
                     <th>عملیات</th>
                   </tr>
@@ -488,27 +789,30 @@ export function AdminPanel({
                         </td>
                         <td data-label="ثبت‌نام" className="col-desktop-only">{new Date(access.signupAt).toLocaleDateString("fa-IR")}</td>
                         <td data-label="آخرین ورود" className="col-desktop-only">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString("fa-IR") : "بدون ورود"}</td>
+                        <td data-label="تعداد ورود" className="col-desktop-only">{user.loginCount ?? 1}</td>
                         <td data-label="وضعیت" className="col-desktop-only">{locked ? "قفل موقت" : user.isProtected ? "حساب پایه" : "فعال"}</td>
                         <td data-label="عملیات" className="col-desktop-only actions-cell">
-                          <button
-                            type="button"
-                            className="secondary-action compact icon-only-action"
-                            title="ویرایش"
-                            aria-label={`ویرایش ${user.username}`}
-                            onClick={() => startEdit(user)}
-                          >
-                            <Pencil size={15} aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            className="danger-action compact icon-only-action"
-                            title="حذف"
-                            aria-label={`حذف ${user.username}`}
-                            disabled={!canDelete || pendingUserId === user.id}
-                            onClick={() => deleteAccount(user.id)}
-                          >
-                            <Trash2 size={15} aria-hidden="true" />
-                          </button>
+                          <div className="admin-table-actions">
+                            <button
+                              type="button"
+                              className="secondary-action compact icon-only-action"
+                              title="ویرایش"
+                              aria-label={`ویرایش ${user.username}`}
+                              onClick={() => startEdit(user)}
+                            >
+                              <Pencil size={15} aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              className="danger-action compact icon-only-action"
+                              title="حذف"
+                              aria-label={`حذف ${user.username}`}
+                              disabled={!canDelete || pendingUserId === user.id}
+                              onClick={() => deleteAccount(user.id)}
+                            >
+                              <Trash2 size={15} aria-hidden="true" />
+                            </button>
+                          </div>
                         </td>
 
                         {/* Collapsible Mobile Details */}
@@ -518,6 +822,7 @@ export function AdminPanel({
                               <span><strong>نقش:</strong> {user.role === "admin" ? "مدیر" : "کاربر"}</span>
                               <span><strong>ثبت‌نام:</strong> {new Date(access.signupAt).toLocaleDateString("fa-IR")}</span>
                               <span><strong>وضعیت:</strong> {locked ? "قفل" : "فعال"}</span>
+                              <span><strong>تعداد ورود:</strong> {user.loginCount ?? 1}</span>
                               <span><strong>رمز:</strong> {showPasswords ? user.passwordPreview || "فقط قابل تغییر" : "••••••••"}</span>
                             </div>
                             <div className="mobile-details-row-actions">
@@ -631,12 +936,11 @@ export function AdminPanel({
             </label>
             <label>
               <span>Timeout درخواست</span>
-              <input
-                type="number"
+              <RequiredNumberInput
                 min={3}
                 max={30}
                 value={smsConfig.timeoutSeconds}
-                onChange={(event) => setSmsConfig({ ...smsConfig, timeoutSeconds: Number(event.target.value) })}
+                onValueChange={(value) => setSmsConfig({ ...smsConfig, timeoutSeconds: value })}
               />
             </label>
             <label className="admin-switch">
@@ -691,11 +995,11 @@ export function AdminPanel({
               </label>
               <label>
                 <span>کل روزهای تست</span>
-                <input type="number" min={0} max={3650} value={createForm.trialDays} onChange={(event) => setCreateForm({ ...createForm, trialDays: Number(event.target.value) })} />
+                <RequiredNumberInput min={0} max={3650} value={createForm.trialDays} onValueChange={(value) => setCreateForm({ ...createForm, trialDays: value })} />
               </label>
               <label>
                 <span>روزهای باقی‌مانده</span>
-                <input type="number" min={0} max={3650} value={createForm.daysLeft} onChange={(event) => setCreateForm({ ...createForm, daysLeft: Number(event.target.value) })} />
+                <RequiredNumberInput min={0} max={3650} value={createForm.daysLeft} onValueChange={(value) => setCreateForm({ ...createForm, daysLeft: value })} />
               </label>
               <label>
                 <span>رمز عبور</span>
@@ -754,11 +1058,11 @@ export function AdminPanel({
               </label>
               <label>
                 <span>کل روزهای تست</span>
-                <input type="number" min={0} max={3650} value={editForm.trialDays} onChange={(event) => setEditForm({ ...editForm, trialDays: Number(event.target.value) })} />
+                <RequiredNumberInput min={0} max={3650} value={editForm.trialDays} onValueChange={(value) => setEditForm({ ...editForm, trialDays: value })} />
               </label>
               <label>
                 <span>روزهای باقی‌مانده</span>
-                <input type="number" min={0} max={3650} value={editForm.daysLeft} onChange={(event) => setEditForm({ ...editForm, daysLeft: Number(event.target.value) })} />
+                <RequiredNumberInput min={0} max={3650} value={editForm.daysLeft} onValueChange={(value) => setEditForm({ ...editForm, daysLeft: value })} />
               </label>
               <label>
                 <span>رمز جدید</span>

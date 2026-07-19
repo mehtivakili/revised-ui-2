@@ -68,8 +68,8 @@ export function RegisterForm() {
     setVerifiedPhone(data.phone);
     setRegistrationToken(data.registrationToken);
     setDisplayName(data.phone);
-    setPassword(data.phone);
-    setConfirmPassword(data.phone);
+    setPassword("");
+    setConfirmPassword("");
     setStep("details");
     setMessage("شماره تایید شد. اطلاعات حساب را کامل کنید.");
   }
@@ -78,6 +78,11 @@ export function RegisterForm() {
     event.preventDefault();
     setError("");
     setMessage("");
+
+    if (!password.trim() || !confirmPassword.trim()) {
+      setError("لطفاً فیلدهای ضروری را تکمیل کنید.");
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError("تکرار رمز عبور با رمز اصلی یکسان نیست.");
@@ -170,7 +175,7 @@ export function RegisterForm() {
         ) : null}
 
         {step === "details" ? (
-          <form className="form-stack" onSubmit={completeRegister}>
+          <form className="form-stack" onSubmit={completeRegister} noValidate>
             <label htmlFor="register-verified-phone">شماره تایید شده</label>
             <input
               id="register-verified-phone"
@@ -188,7 +193,7 @@ export function RegisterForm() {
               value={displayName}
               onChange={(event) => setDisplayName(event.target.value)}
             />
-            <label htmlFor="register-password">رمز عبور</label>
+            <label htmlFor="register-password">رمز عبور <span className="required-mark" aria-hidden="true">*</span></label>
             <input
               id="register-password"
               name="password"
@@ -199,7 +204,7 @@ export function RegisterForm() {
               onChange={(event) => setPassword(event.target.value)}
               required
             />
-            <label htmlFor="register-confirm-password">تکرار رمز عبور</label>
+            <label htmlFor="register-confirm-password">تکرار رمز عبور <span className="required-mark" aria-hidden="true">*</span></label>
             <input
               id="register-confirm-password"
               name="confirmPassword"

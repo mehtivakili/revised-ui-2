@@ -27,6 +27,7 @@ export default async function AdminPage() {
       SELECT id, username, role, plan, is_free_account as "isFreeAccount", 
              display_name as "displayName", signup_at as "signupAt", 
              created_at as "createdAt", last_login_at as "lastLoginAt", 
+             login_count as "loginCount",
              failed_logins as "failedLogins", is_protected as "isProtected",
              trial_days as "trialDays", password_preview as "passwordPreview"
       FROM users

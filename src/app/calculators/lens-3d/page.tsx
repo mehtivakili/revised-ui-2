@@ -474,7 +474,7 @@ export default function Lens3DPage() {
   }, []);
 
   const displayWidth = 170;
-  const aspect = 1.08;
+  const aspect = 1;
   const displayHeight = displayWidth / aspect;
 
   const currentDoriZone = useMemo(() => {

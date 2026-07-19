@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import type { DashboardTool } from "@/src/lib/dashboard";
 
 export function CalculatorShell({ tool, children }: { tool: DashboardTool; children: ReactNode }) {
@@ -29,21 +29,83 @@ export function NumberInput(props: {
   step?: number;
   unit?: string;
 }) {
+  const [draft, setDraft] = useState(() => String(props.value));
+  const focused = useRef(false);
+  const isEmpty = draft.trim() === "";
+
+  useEffect(() => {
+    if (!focused.current) setDraft(String(props.value));
+  }, [props.value]);
+
   return (
     <label className="calc-field">
-      <span>{props.label}</span>
-      <div className="calc-control input-with-unit">
+      <span>
+        {props.label} <b className="required-mark" aria-hidden="true">*</b>
+      </span>
+      <div className={`calc-control input-with-unit${isEmpty ? " invalid" : ""}`}>
         <input
           type="number"
-          value={props.value}
+          value={draft}
           min={props.min}
           max={props.max}
           step={props.step ?? 1}
-          onChange={(event) => props.onChange(Number(event.target.value))}
+          required
+          aria-invalid={isEmpty}
+          onFocus={() => { focused.current = true; }}
+          onBlur={() => { focused.current = false; }}
+          onChange={(event) => {
+            const next = event.target.value;
+            setDraft(next);
+            props.onChange(next === "" ? 0 : Number(next));
+          }}
         />
         {props.unit ? <small className="calc-unit">{props.unit}</small> : null}
       </div>
+      {isEmpty ? <small className="field-error">این فیلد نمی‌تواند خالی باشد.</small> : null}
     </label>
+  );
+}
+
+export function RequiredNumberInput({
+  value,
+  onValueChange,
+  ...inputProps
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "value" | "onChange"> & {
+  value: number;
+  onValueChange: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(() => String(value));
+  const focused = useRef(false);
+  const isEmpty = draft.trim() === "";
+
+  useEffect(() => {
+    if (!focused.current) setDraft(String(value));
+  }, [value]);
+
+  return (
+    <>
+      <input
+        {...inputProps}
+        type="number"
+        value={draft}
+        required
+        aria-invalid={isEmpty}
+        onFocus={(event) => {
+          focused.current = true;
+          inputProps.onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          focused.current = false;
+          inputProps.onBlur?.(event);
+        }}
+        onChange={(event) => {
+          const next = event.target.value;
+          setDraft(next);
+          onValueChange(next === "" ? 0 : Number(next));
+        }}
+      />
+      {isEmpty ? <small className="field-error">این فیلد نمی‌تواند خالی باشد.</small> : null}
+    </>
   );
 }
 

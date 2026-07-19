@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Download, Plus, Trash2 } from "lucide-react";
-import { CalculatorShell, ResultGrid, formatNumber } from "@/src/components/calculators/CalculatorUi";
+import { CalculatorShell, RequiredNumberInput, ResultGrid, formatNumber } from "@/src/components/calculators/CalculatorUi";
 import type { DashboardTool } from "@/src/lib/dashboard";
 
 type DiskUnit = "GB" | "TB";
@@ -322,13 +322,12 @@ export default function CapacityPage() {
                   </td>
                   <td className="col-number">
                     <span className="mobile-label">تعداد کانال</span>
-                    <input
-                      type="number"
+                    <RequiredNumberInput
                       min={0}
                       max={1024}
                       step={1}
                       value={channel.channelNumber}
-                      onChange={(event) => updateChannel(channel.id, "channelNumber", Number(event.target.value))}
+                      onValueChange={(value) => updateChannel(channel.id, "channelNumber", value)}
                     />
                   </td>
                   <td className="col-brand">
@@ -383,7 +382,7 @@ export default function CapacityPage() {
                   </td>
                   <td className="col-bitrate">
                     <span className="mobile-label">بیت‌ریت (Kbps)</span>
-                    <input type="number" min={0} step={1} value={channel.bitrate} onChange={(event) => updateChannel(channel.id, "bitrate", Number(event.target.value))} />
+                    <RequiredNumberInput min={0} step={1} value={channel.bitrate} onValueChange={(value) => updateChannel(channel.id, "bitrate", value)} />
                   </td>
                   <td className="col-delete">
                     <button className="danger-action compact" type="button" onClick={() => removeChannel(channel.id)} disabled={channels.length === 1}>
@@ -427,7 +426,7 @@ export default function CapacityPage() {
             <div className="capacity-input-grid">
               <label>
                 <span>فضای دیسک</span>
-                <input type="number" min={0} step={0.1} value={diskSize} onChange={(event) => setDiskSize(Number(event.target.value))} />
+                <RequiredNumberInput min={0} step={0.1} value={diskSize} onValueChange={setDiskSize} />
               </label>
               <label>
                 <span>واحد</span>
@@ -438,7 +437,7 @@ export default function CapacityPage() {
               </label>
               <label>
                 <span>ساعت ضبط در روز</span>
-                <input type="number" min={0} max={24} step={1} value={savingHours} onChange={(event) => setSavingHours(Number(event.target.value))} />
+                <RequiredNumberInput min={0} max={24} step={1} value={savingHours} onValueChange={setSavingHours} />
               </label>
               <label>
                 <span>تنظیم سریع ساعت</span>
@@ -460,7 +459,7 @@ export default function CapacityPage() {
             <div className="capacity-input-grid">
               <label>
                 <span>زمان نگهداری</span>
-                <input type="number" min={0} step={1} value={keepValue} onChange={(event) => setKeepValue(Number(event.target.value))} />
+                <RequiredNumberInput min={0} step={1} value={keepValue} onValueChange={setKeepValue} />
               </label>
               <label>
                 <span>واحد</span>
@@ -474,7 +473,7 @@ export default function CapacityPage() {
               </label>
               <label>
                 <span>ساعت ضبط در روز</span>
-                <input type="number" min={0} max={24} step={1} value={spaceHours} onChange={(event) => setSpaceHours(Number(event.target.value))} />
+                <RequiredNumberInput min={0} max={24} step={1} value={spaceHours} onValueChange={setSpaceHours} />
               </label>
               <label>
                 <span>تنظیم سریع ساعت</span>
