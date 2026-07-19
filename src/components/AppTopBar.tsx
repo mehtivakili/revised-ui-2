@@ -9,6 +9,9 @@ import { getUserById } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
 
+// Temporary: set to true to restore the planner and product links in the top bar.
+const showPlannerAndProductLinks = false;
+
 export async function AppTopBar() {
   const session = await getCurrentSession();
   const user = session ? await getUserById(session.id) : null;
@@ -54,8 +57,12 @@ export async function AppTopBar() {
         <TopSearch lockedToolSlugs={access.lockedToolSlugs} />
 
         <nav className="top-nav" aria-label="ناوبری اصلی">
-          <Link className="smart-nav-link" href="/planner"><Sparkles size={14} />طراحی هوشمند</Link>
-          <Link href="/catalog">محصولات</Link>
+          {showPlannerAndProductLinks ? (
+            <>
+              <Link className="smart-nav-link" href="/planner"><Sparkles size={14} />طراحی هوشمند</Link>
+              <Link href="/catalog">محصولات</Link>
+            </>
+          ) : null}
           <ToolsMenu lockedToolSlugs={access.lockedToolSlugs} />
           <Link href="/">خانه</Link>
           {session?.role === "admin" ? <Link href="/admin">مدیریت</Link> : null}
