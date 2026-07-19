@@ -10,7 +10,8 @@
     "cap:sync": "cap sync android",
     "cap:sync:hosted": "node scripts/capacitor-sync-hosted.mjs",
     "cap:open": "cap open android",
-    "cap:doctor": "cap doctor"
+    "cap:doctor": "cap doctor",
+    "seed:catalog": "node scripts/seed-catalog.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.7",

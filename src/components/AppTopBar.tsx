@@ -1,5 +1,5 @@
 ﻿import Link from "next/link";
-import { Phone, Bell, Download, LogIn } from "lucide-react";
+import { Phone, Bell, Download, LogIn, Sparkles } from "lucide-react";
 import { ProfileMenu } from "@/src/components/ProfileMenu";
 import { ToolsMenu } from "@/src/components/ToolsMenu";
 import { TopSearch } from "@/src/components/TopSearch";
@@ -52,8 +52,10 @@ export async function AppTopBar() {
         <TopSearch lockedToolSlugs={access.lockedToolSlugs} />
 
         <nav className="top-nav" aria-label="ناوبری اصلی">
+          <Link className="smart-nav-link" href="/planner"><Sparkles size={14} />طراحی هوشمند</Link>
+          <Link href="/catalog">محصولات</Link>
           <ToolsMenu lockedToolSlugs={access.lockedToolSlugs} />
-          <Link href="/#calculator-sections">داشبورد</Link>
+          <Link href="/">خانه</Link>
           {session?.role === "admin" ? <Link href="/admin">مدیریت</Link> : null}
         </nav>
 

@@ -1,127 +1,48 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Activity, Aperture, Camera, ChevronLeft, Clock, Database, Gauge, HardDrive, Network, Radio, Radar, Router, Wifi, Eye, Lock, type LucideIcon } from "lucide-react";
-import { dashboardCategories, type DashboardCategory, type DashboardTool } from "@/src/lib/dashboard";
-import { getUserById } from "@/src/lib/authStore";
+import { ArrowLeft, Calculator, Camera, Check, ChevronLeft, Database, HardDrive, Network, ShieldCheck, Sparkles, WandSparkles, Zap } from "lucide-react";
 import { getCurrentSession } from "@/src/lib/session";
-import { getSubscriptionAccess, isCategoryLocked } from "@/src/lib/subscription";
+import { getCatalogSnapshot } from "@/src/lib/catalog/repository";
 
-const iconMap: Record<DashboardTool["icon"] | DashboardCategory["icon"], LucideIcon> = {
-  activity: Activity,
-  aperture: Aperture,
-  camera: Camera,
-  clock: Clock,
-  database: Database,
-  gauge: Gauge,
-  "hard-drive": HardDrive,
-  network: Network,
-  radio: Radio,
-  radar: Radar,
-  router: Router,
-  wifi: Wifi,
-  eye: Eye
-};
-
-const toneByCategory: Record<DashboardCategory["id"], string> = {
-  storage: "orange",
-  network: "blue",
-  wireless: "teal",
-  lens: "violet"
-};
-
-function categoryById(id: string) {
-  return dashboardCategories.find((category) => category.id === id);
-}
-
-const storageCategory = categoryById("storage");
-const networkCategory = categoryById("network");
-const wirelessCategory = categoryById("wireless");
-const lensCategory = categoryById("lens");
+const categoryCounts = [
+  { id: "camera", label: "دوربین ساختاریافته", icon: Camera, tone: "blue" },
+  { id: "recorder", label: "ضبط‌کننده سازگار", icon: HardDrive, tone: "violet" },
+  { id: "switch", label: "تجهیزات شبکه", icon: Network, tone: "teal" }
+] as const;
 
 export default async function HomePage() {
-  const session = await getCurrentSession();
-  if (!session) redirect("/login");
-
-  const user = await getUserById(session.id);
-  const access = getSubscriptionAccess(user);
-
-  return (
-    <main className="dashboard-page">
-      <section className="dashboard-layout dashboard-layout-full" id="calculator-sections">
-        <div className="category-stack">
-          <div className="category-row category-row-paired">
-            {storageCategory ? <CategorySection category={storageCategory} locked={isCategoryLocked(access, storageCategory.id)} /> : null}
-            {networkCategory ? <CategorySection category={networkCategory} locked={isCategoryLocked(access, networkCategory.id)} /> : null}
-          </div>
-          {wirelessCategory ? <CategorySection category={wirelessCategory} variant="wide" locked={isCategoryLocked(access, wirelessCategory.id)} /> : null}
-          {lensCategory ? <CategorySection category={lensCategory} variant="wide" locked={isCategoryLocked(access, lensCategory.id)} /> : null}
-        </div>
-      </section>
-    </main>
-  );
-}
-
-function CategorySection({ category, variant, locked = false }: { category: DashboardCategory; variant?: "wide"; locked?: boolean }) {
-  const CategoryIcon = iconMap[category.icon];
-
-  return (
-    <section className={`category-section ${variant === "wide" ? "category-section-wide" : ""}`} aria-labelledby={`${category.id}-title`}>
-      <div className="category-section-content">
-        <div className="category-heading">
-          <div className="category-title">
-            <span className="category-icon">
-              <CategoryIcon size={20} aria-hidden="true" />
-            </span>
-            <div>
-              <h2 id={`${category.id}-title`}>{category.title}</h2>
-              <p>{category.subtitle}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="tool-card-grid">
-          {category.tools.map((tool) => (
-            <ToolCard key={tool.slug} tool={tool} tone={toneByCategory[category.id]} locked={locked} />
-          ))}
-        </div>
+  if (!(await getCurrentSession())) redirect("/login");
+  const catalog = await getCatalogSnapshot();
+  return <main className="app-shell smart-home">
+    <section className="smart-hero">
+      <div className="smart-hero-copy">
+        <span className="ai-kicker"><Sparkles size={16} />طراح هوشمند سیستم نظارت تصویری</span>
+        <h1>از چند نیاز ساده،<br /><em>یک راهکار کامل</em> بسازید.</h1>
+        <p>محیط، هدف نظارت و مدت آرشیو را مشخص کنید؛ همیار دوربین سازگاری فنی را بررسی می‌کند و سه سناریوی خرید قابل‌توضیح می‌سازد.</p>
+        <div className="hero-actions"><Link className="primary-action large" href="/planner">شروع طراحی هوشمند<ArrowLeft size={18} /></Link><Link className="secondary-action large" href="/catalog">مشاهده کاتالوگ<ChevronLeft size={18} /></Link></div>
+        <div className="hero-trust"><span><Check size={15} />کنترل سازگاری تجهیزات</span><span><Check size={15} />برآورد هزینه و ظرفیت</span><span><Check size={15} />دلیل انتخاب هر محصول</span></div>
+      </div>
+      <div className="solution-preview" aria-label="نمونه راهکار پیشنهادی">
+        <div className="preview-head"><div><span className="live-dot" /><small>تحلیل هوشمند تکمیل شد</small></div><strong>پلن متعادل</strong></div>
+        <div className="preview-score"><span>امتیاز تطابق</span><strong>۹۲<small>/۱۰۰</small></strong><div><span style={{ width: "92%" }} /></div></div>
+        <div className="preview-metrics"><div><Camera size={18} /><span>دوربین</span><strong>۸ × ۵MP</strong></div><div><Database size={18} /><span>آرشیو</span><strong>۳۰ روز</strong></div><div><Zap size={18} /><span>PoE</span><strong>۱۶ پورت</strong></div></div>
+        <div className="preview-products"><div><span>TC-C54KS</span><small>لنز وریفوکال، تشخیص انسان</small></div><div><span>TC-R3116</span><small>۱۶ کانال، H.265+</small></div><div><span>WD Purple 10TB</span><small>ضبط ۲۴/۷</small></div></div>
+        <div className="preview-foot"><ShieldCheck size={18} /><span>همه قیود فنی این ترکیب تأیید شده است</span></div>
       </div>
     </section>
-  );
-}
 
-function ToolCard({ tool, tone, locked = false }: { tool: DashboardTool; tone: string; locked?: boolean }) {
-  const ToolIcon = iconMap[tool.icon];
+    <section className="smart-shortcuts">
+      <div className="section-title"><div><p className="eyebrow">مسیرهای اصلی</p><h2>چطور می‌خواهید کار کنید؟</h2></div></div>
+      <div className="shortcut-grid">
+        <Link href="/planner" className="shortcut-card featured"><span className="shortcut-icon"><WandSparkles size={23} /></span><div><h3>طراحی خودکار پروژه</h3><p>با یک ویزارد کوتاه، دوربین، NVR، هارد، شبکه و UPS مناسب را یک‌جا دریافت کنید.</p></div><span className="shortcut-link">شروع طراحی<ChevronLeft size={15} /></span></Link>
+        <Link href="/catalog" className="shortcut-card"><span className="shortcut-icon"><Database size={23} /></span><div><h3>جست‌وجوی هوشمند محصول</h3><p>محصولات را بر اساس مشخصات واقعی و قابل‌مقایسه مرور کنید.</p></div><span className="shortcut-link">ورود به کاتالوگ<ChevronLeft size={15} /></span></Link>
+        <Link href="/calculators" className="shortcut-card"><span className="shortcut-icon"><Calculator size={23} /></span><div><h3>محاسبه‌گرهای مهندسی</h3><p>ظرفیت، DORI، لنز، شبکه و لینک وایرلس را مستقل محاسبه کنید.</p></div><span className="shortcut-link">همه ابزارها<ChevronLeft size={15} /></span></Link>
+      </div>
+    </section>
 
-  return (
-    <Link className={`tool-card ${locked ? "tool-card-locked" : ""}`} href={locked ? "/profile?upgrade=1" : `/calculators/${tool.slug}`}>
-      <div className="tool-card-head">
-        {locked && (
-          <span className="tool-lock-badge">
-            <Lock size={12} aria-hidden="true" />
-            <span>حرفه‌ای</span>
-          </span>
-        )}
-        <div className="tool-icon-wrapper">
-          <span className={`tool-icon tool-icon-${tone}`}>
-            <ToolIcon size={20} aria-hidden="true" />
-          </span>
-          {locked && <Lock className="tool-icon-lock-overlay" size={16} aria-hidden="true" />}
-        </div>
-      </div>
-      <div className="tool-card-body">
-        <h3>{tool.title}</h3>
-        <p>{tool.description}</p>
-      </div>
-      <div className="tool-card-foot">
-        <span>{locked ? "ارتقا حساب" : "شروع محاسبه"}</span>
-        <span className="tool-card-arrow">
-          {locked ? (
-            <Lock size={14} aria-hidden="true" />
-          ) : (
-            <ChevronLeft size={15} aria-hidden="true" />
-          )}
-        </span>
-      </div>
-    </Link>
-  );
+    <section className="catalog-snapshot">
+      <div className="section-title"><div><p className="eyebrow">زیرساخت داده</p><h2>کاتالوگ آماده تصمیم‌گیری</h2><p>داده‌های نمایشی بر اساس دسته‌ها و الگوی مشخصات محصولات پرشیا سیستم ساختاریافته شده‌اند.</p></div><Link href="/catalog">مشاهده همه محصولات<ChevronLeft size={16} /></Link></div>
+      <div className="snapshot-grid">{categoryCounts.map(({ id, label, icon: Icon, tone }) => <article key={id}><span className={`snapshot-icon ${tone}`}><Icon size={22} /></span><div><strong>{new Intl.NumberFormat("fa-IR").format(catalog.products.filter((product) => product.category === id).length)}</strong><span>{label}</span></div><small>آماده فیلتر و امتیازدهی</small></article>)}</div>
+    </section>
+  </main>;
 }
