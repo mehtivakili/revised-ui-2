@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Activity, CalendarDays, Download, Eye, EyeOff, MessageSquare, Pencil, Plus, Save, Settings2, Trash2, UsersRound, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Activity, CalendarDays, CheckCircle2, CloudDownload, Database, Download, Eye, EyeOff, MessageSquare, Pencil, Plus, RefreshCw, Save, Settings2, ShieldCheck, Trash2, UsersRound, X, ChevronDown, ChevronUp } from "lucide-react";
 import type { UserPlan, UserRole } from "@/src/lib/authStore";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
 import { RequiredNumberInput } from "@/src/components/calculators/CalculatorUi";
@@ -46,6 +46,42 @@ type DailyLoginStats = {
   day: string;
   logins: number;
 };
+
+type CatalogSyncResult = {
+  dryRun: boolean;
+  sourceReadOnly: boolean;
+  received: number;
+  storedSourceProducts: number;
+  normalized: number;
+  skipped: number;
+  categoryCounts: Record<string, number>;
+  warnings: { wooId: number; name: string; warning: string }[];
+};
+
+type CatalogSyncRun = {
+  id: number;
+  dryRun: boolean;
+  status: "queued" | "running" | "success" | "failed";
+  stage: string;
+  progressPercent: number;
+  progressCurrent: number;
+  progressTotal: number;
+  logs: { at: string; level: "info" | "success" | "warning" | "error"; message: string }[];
+  result: CatalogSyncResult | null;
+  error: string | null;
+  imageCache: { queued: number; downloading: number; completed: number; failed: number };
+};
+
+const catalogSyncStages = [
+  { key: "connecting", label: "اتصال امن" },
+  { key: "fetching", label: "دریافت صفحات" },
+  { key: "normalizing", label: "تحلیل ویژگی‌ها" },
+  { key: "saving-snapshots", label: "ذخیره Snapshot" },
+  { key: "saving-normalized", label: "استانداردسازی" },
+  { key: "committing", label: "صف تصاویر" }
+];
+
+const catalogStageOrder: Record<string, number> = { queued: 0, connecting: 0, fetching: 1, normalizing: 2, preparing: 3, "saving-snapshots": 3, "saving-normalized": 4, committing: 5, completed: 6, failed: -1 };
 
 function LoginActivityChart({ entries, rangeLabel }: { entries: DailyLoginStats[]; rangeLabel: string }) {
   const width = 440;
@@ -173,6 +209,12 @@ export function AdminPanel({
   const [activityStats, setActivityStats] = useState<ActivityStats | null>(null);
   const [dailyLogins, setDailyLogins] = useState<DailyLoginStats[]>([]);
   const [activityRange, setActivityRange] = useState<"week" | "month">("week");
+  const [catalogSyncing, setCatalogSyncing] = useState<"dry-run" | "sync" | null>(null);
+  const [catalogSyncResult, setCatalogSyncResult] = useState<CatalogSyncResult | null>(null);
+  const [catalogSyncRun, setCatalogSyncRun] = useState<CatalogSyncRun | null>(null);
+  const activeCatalogRunId = catalogSyncRun?.id;
+  const activeCatalogRunStatus = catalogSyncRun?.status;
+  const activeCatalogImages = (catalogSyncRun?.imageCache?.queued || 0) + (catalogSyncRun?.imageCache?.downloading || 0);
 
   useEffect(() => {
     let disposed = false;
@@ -196,6 +238,42 @@ export function AdminPanel({
       window.clearInterval(intervalId);
     };
   }, [activityRange]);
+
+  useEffect(() => {
+    let disposed = false;
+    void fetch("/api/admin/catalog/sync", { cache: "no-store" }).then((response) => response.json()).then((data) => {
+      if (disposed || !data.run) return;
+      setCatalogSyncRun(data.run);
+      if (data.run.status === "queued" || data.run.status === "running") setCatalogSyncing(data.run.dryRun ? "dry-run" : "sync");
+      if (data.run.result) setCatalogSyncResult(data.run.result);
+    }).catch(() => undefined);
+    return () => { disposed = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!activeCatalogRunId || ((activeCatalogRunStatus !== "queued" && activeCatalogRunStatus !== "running") && activeCatalogImages === 0)) return;
+    let disposed = false;
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/admin/catalog/sync?runId=${activeCatalogRunId}`, { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok || !data.run || disposed) return;
+        const run = data.run as CatalogSyncRun;
+        setCatalogSyncRun(run);
+        if (run.status === "success") {
+          setCatalogSyncing(null);
+          if (run.result) setCatalogSyncResult(run.result);
+          setMessage(run.dryRun ? "بررسی آزمایشی کامل شد؛ هیچ داده‌ای تغییر نکرد." : "محصولات در دیتابیس اپ ذخیره شدند و صف تصاویر فعال شد.");
+        } else if (run.status === "failed") {
+          setCatalogSyncing(null);
+          setError(run.error || "دریافت محصولات متوقف شد؛ جزئیات در لاگ آمده است.");
+        }
+      } catch { /* The next poll retries transient network errors. */ }
+    };
+    void poll();
+    const interval = window.setInterval(poll, 1_000);
+    return () => { disposed = true; window.clearInterval(interval); };
+  }, [activeCatalogRunId, activeCatalogRunStatus, activeCatalogImages]);
 
   const fetchPage = async (
     page: number,
@@ -486,6 +564,25 @@ export function AdminPanel({
       setError("خطا در ارتباط با سرور برای دریافت فایل اکسل.");
     } finally {
       setExportingUsers(false);
+    }
+  }
+
+  async function syncCatalog(dryRun: boolean) {
+    setCatalogSyncing(dryRun ? "dry-run" : "sync");
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch(`/api/admin/catalog/sync?dryRun=${dryRun}`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error || "همگام‌سازی کاتالوگ WooCommerce انجام نشد.");
+        return;
+      }
+      setCatalogSyncRun({ id: data.runId, dryRun, status: "queued", stage: "queued", progressPercent: 0, progressCurrent: 0, progressTotal: 0, logs: [], result: null, error: null, imageCache: { queued: 0, downloading: 0, completed: 0, failed: 0 } });
+      setMessage(data.alreadyRunning ? "یک عملیات قبلی در حال اجراست؛ نمایش وضعیت آن ادامه پیدا می‌کند." : "عملیات در پس‌زمینه آغاز شد؛ می‌توانید مراحل را زنده دنبال کنید.");
+    } catch {
+      setError("ارتباط با WooCommerce یا سرور برنامه برقرار نشد.");
+      setCatalogSyncing(null);
     }
   }
 
@@ -956,6 +1053,64 @@ export function AdminPanel({
             </button>
           </form>
         </article>
+
+        <article className="panel admin-card admin-sms-card">
+          <div className="admin-section-title">
+            <span className="category-icon">
+              <Database size={20} aria-hidden="true" />
+            </span>
+            <div>
+              <h2>دریافت فقط‌خواندنی WooCommerce</h2>
+              <p>سایت فقط با GET خوانده می‌شود؛ ذخیره‌سازی صرفاً در دیتابیس داخلی اپ انجام می‌شود</p>
+            </div>
+          </div>
+
+          <div className="admin-catalog-sync-layout">
+            <div className="admin-catalog-sync-toolbar">
+              <div className="admin-catalog-sync-note">
+                <ShieldCheck size={19} aria-hidden="true" />
+                <p>کلید WooCommerce فقط‌خواندنی است و هیچ عملیات ایجاد، ویرایش یا حذف روی سایت انجام نمی‌شود.</p>
+              </div>
+            <div className="admin-catalog-sync-actions">
+              <button className="catalog-sync-action catalog-sync-preview" type="button" disabled={catalogSyncing !== null} onClick={() => syncCatalog(true)}>
+                <span className="catalog-sync-action-icon"><RefreshCw className={catalogSyncing === "dry-run" ? "is-spinning" : ""} size={18} aria-hidden="true" /></span>
+                <span><strong>{catalogSyncing === "dry-run" ? "در حال بررسی..." : "بررسی آزمایشی"}</strong><small>فقط تحلیل، بدون ذخیره</small></span>
+              </button>
+              <button className="catalog-sync-action catalog-sync-import" type="button" disabled={catalogSyncing !== null} onClick={() => syncCatalog(false)}>
+                <span className="catalog-sync-action-icon"><CloudDownload className={catalogSyncing === "sync" ? "is-downloading" : ""} size={19} aria-hidden="true" /></span>
+                <span><strong>{catalogSyncing === "sync" ? "در حال دریافت..." : "دریافت محصولات"}</strong><small>ذخیره فقط در دیتابیس اپ</small></span>
+              </button>
+            </div>
+            </div>
+            {catalogSyncRun ? <CatalogSyncProgress run={catalogSyncRun} /> : null}
+            {catalogSyncResult ? (
+              <div className="admin-catalog-sync-result" role="status">
+                <div className="admin-catalog-result-head">
+                  <span className="admin-catalog-result-icon"><CheckCircle2 size={20} aria-hidden="true" /></span>
+                  <div><strong>{catalogSyncResult.dryRun ? "بررسی آزمایشی با موفقیت انجام شد" : "محصولات در دیتابیس اپ ذخیره شدند"}</strong><small>{catalogSyncResult.dryRun ? "هیچ داده‌ای تغییر نکرده است" : "منبع WooCommerce بدون تغییر باقی مانده است"}</small></div>
+                  <span className="admin-readonly-badge"><ShieldCheck size={14} aria-hidden="true" />{catalogSyncResult.sourceReadOnly ? "اتصال فقط‌خواندنی" : "وضعیت نامشخص"}</span>
+                </div>
+                <div className="admin-catalog-result-metrics">
+                  <div><small>دریافت‌شده</small><strong>{catalogSyncResult.received.toLocaleString("fa-IR")}</strong></div>
+                  {!catalogSyncResult.dryRun ? <div><small>Snapshot محلی</small><strong>{catalogSyncResult.storedSourceProducts.toLocaleString("fa-IR")}</strong></div> : null}
+                  <div><small>قابل استفاده</small><strong>{catalogSyncResult.normalized.toLocaleString("fa-IR")}</strong></div>
+                  <div><small>نیازمند نگاشت</small><strong>{catalogSyncResult.skipped.toLocaleString("fa-IR")}</strong></div>
+                  <div className={catalogSyncResult.warnings.length ? "has-warning" : ""}><small>هشدار کیفیت</small><strong>{catalogSyncResult.warnings.length.toLocaleString("fa-IR")}</strong></div>
+                </div>
+                {catalogSyncResult.warnings.length ? (
+                  <details>
+                    <summary>مشاهده هشدارهای کیفیت داده</summary>
+                    <ul>
+                      {catalogSyncResult.warnings.slice(0, 30).map((warning, index) => (
+                        <li key={`${warning.wooId}-${index}`}><b>{warning.name}:</b> {warning.warning}</li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </article>
       </section>
 
       {createModalOpen ? (
@@ -1087,4 +1242,32 @@ export function AdminPanel({
       {error ? <p className="form-message error">{error}</p> : null}
     </div>
   );
+}
+
+function CatalogSyncProgress({ run }: { run: CatalogSyncRun }) {
+  const activeIndex = catalogStageOrder[run.stage] ?? 0;
+  const visibleStages = run.dryRun ? catalogSyncStages.slice(0, 3) : catalogSyncStages;
+  const imageTotal = run.imageCache.queued + run.imageCache.downloading + run.imageCache.completed + run.imageCache.failed;
+  const imagePercent = imageTotal ? Math.round(run.imageCache.completed / imageTotal * 100) : 0;
+  const statusLabel = run.status === "failed" ? "متوقف‌شده" : run.status === "success" ? "کامل شد" : run.status === "queued" ? "در صف اجرا" : catalogSyncStages[Math.min(activeIndex, catalogSyncStages.length - 1)]?.label || "در حال اجرا";
+  return <section className={`catalog-sync-progress ${run.status}`} aria-live="polite">
+    <div className="catalog-sync-progress-head">
+      <div><span className="catalog-sync-live-dot" /><div><strong>{statusLabel}</strong><small>شناسه عملیات #{new Intl.NumberFormat("fa-IR").format(run.id)}</small></div></div>
+      <strong>{new Intl.NumberFormat("fa-IR").format(run.progressPercent)}٪</strong>
+    </div>
+    <div className="catalog-sync-progress-track"><span style={{ width: `${run.progressPercent}%` }} /></div>
+    {run.progressTotal > 0 ? <p>{new Intl.NumberFormat("fa-IR").format(run.progressCurrent)} از {new Intl.NumberFormat("fa-IR").format(run.progressTotal)} مورد پردازش شده است.</p> : <p>در حال آماده‌سازی عملیات...</p>}
+    <ol className={run.dryRun ? "catalog-sync-steps dry-run" : "catalog-sync-steps"}>
+      {visibleStages.map((stage, index) => {
+        const completed = run.status === "success" || activeIndex > index;
+        const active = run.status !== "failed" && activeIndex === index;
+        return <li key={stage.key} className={completed ? "completed" : active ? "active" : ""}><span>{completed ? <CheckCircle2 size={14} /> : index + 1}</span><small>{stage.label}</small></li>;
+      })}
+    </ol>
+    {!run.dryRun && imageTotal > 0 ? <div className="catalog-sync-image-progress"><div><strong>کش تصاویر در پس‌زمینه</strong><span>{new Intl.NumberFormat("fa-IR").format(run.imageCache.completed)} از {new Intl.NumberFormat("fa-IR").format(imageTotal)} تصویر · {new Intl.NumberFormat("fa-IR").format(imagePercent)}٪</span></div><div><i style={{ width: `${imagePercent}%` }} /></div><small>{run.imageCache.downloading > 0 ? `${new Intl.NumberFormat("fa-IR").format(run.imageCache.downloading)} تصویر در حال دریافت است` : run.imageCache.queued > 0 ? `${new Intl.NumberFormat("fa-IR").format(run.imageCache.queued)} تصویر در صف است` : run.imageCache.failed > 0 ? `${new Intl.NumberFormat("fa-IR").format(run.imageCache.failed)} تصویر ناموفق` : "تمام تصاویر دریافت شدند"}</small></div> : null}
+    <div className="catalog-sync-log">
+      <div><strong>گزارش زنده عملیات</strong><small>{new Intl.NumberFormat("fa-IR").format(run.logs.length)} رویداد</small></div>
+      <ul>{run.logs.slice(-40).map((entry, index) => <li key={`${entry.at}-${index}`} className={entry.level}><time>{new Date(entry.at).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><span>{entry.message}</span></li>)}</ul>
+    </div>
+  </section>;
 }

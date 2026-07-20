@@ -78,9 +78,9 @@ export const dashboardCategories: DashboardCategory[] = [
       },
       {
         slug: "sensitivity",
-        title: "مقایسه حساسیت",
+        title: "عملکرد نظری نور کم",
         subtitle: "مقایسه نور کم",
-        description: "مقایسه دو تنظیمات دوربین بر اساس عرض سنسور و عدد F.",
+        description: "مقایسه اثر دیافراگم و مساحت پیکسل با فرض شرایط تصویربرداری یکسان.",
         status: "ready",
         metric: "نسبت / استاپ",
         icon: "gauge"

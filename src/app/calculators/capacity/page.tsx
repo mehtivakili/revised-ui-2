@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Download, Plus, Trash2 } from "lucide-react";
 import { CalculatorShell, RequiredNumberInput, ResultGrid, formatNumber } from "@/src/components/calculators/CalculatorUi";
+import { DECIMAL_GIGABYTE, DECIMAL_TERABYTE, decimalDiskBytes, kbpsToMbps, storageBytesFromKbps } from "@/src/lib/calculators/storage";
 import type { DashboardTool } from "@/src/lib/dashboard";
 
 type DiskUnit = "GB" | "TB";
@@ -145,23 +146,23 @@ function calculateCapacity(params: {
   spaceHours: number;
 }) {
   const kbps = totalBitrateKbps(params.channels);
-  const totalBytes = Math.max(0, params.diskSize) * (params.diskUnit === "TB" ? 1024 ** 4 : 1024 ** 3);
-  const savingBytesPerDay = ((kbps * 1024) / 8) * 3600 * Math.max(0, params.savingHours);
+  const totalBytes = decimalDiskBytes(params.diskSize, params.diskUnit);
+  const savingBytesPerDay = storageBytesFromKbps(kbps, params.savingHours, 1);
   const retentionDays = kbps && params.diskSize && params.savingHours ? totalBytes / savingBytesPerDay : 0;
   let targetDays = Math.max(0, params.keepValue);
   if (params.keepUnit === "week") targetDays *= 7;
   if (params.keepUnit === "month") targetDays *= 30;
-  const requiredBytes = ((kbps * 1024) / 8) * 3600 * Math.max(0, params.spaceHours) * targetDays;
+  const requiredBytes = storageBytesFromKbps(kbps, params.spaceHours, targetDays);
 
   return {
     totalChannels: params.channels.reduce((sum, channel) => sum + clampChannelCount(channel.channelNumber), 0),
     totalKbps: kbps,
-    totalMbps: kbps / 1024,
+    totalMbps: kbpsToMbps(kbps),
     retentionDays,
     retentionWeeks: retentionDays / 7,
     retentionMonths: retentionDays / 30,
-    requiredGb: requiredBytes / 1024 ** 3,
-    requiredTb: requiredBytes / 1024 ** 4
+    requiredGb: requiredBytes / DECIMAL_GIGABYTE,
+    requiredTb: requiredBytes / DECIMAL_TERABYTE
   };
 }
 

@@ -41,6 +41,11 @@ export type RecorderSpecs = {
   builtInPoePorts: number;
   codecs: string[];
   maxCameraResolutionMp: number;
+  outgoingBandwidthMbps?: number;
+  decodeCapacityMp?: number;
+  maxSimultaneousDecodeChannels?: number;
+  basePowerW?: number;
+  drivePowerPerBayW?: number;
 };
 
 export type SwitchSpecs = {
@@ -52,6 +57,8 @@ export type SwitchSpecs = {
   extendRangeM: number;
   managed: boolean;
   surgeProtection: boolean;
+  systemPowerW?: number;
+  poeEfficiency?: number;
 };
 
 export type StorageSpecs = {
@@ -59,6 +66,7 @@ export type StorageSpecs = {
   workloadTbPerYear: number;
   surveillanceOptimized: boolean;
   warrantyMonths: number;
+  activePowerW?: number;
 };
 
 export type UpsSpecs = {
@@ -86,14 +94,104 @@ export type CatalogProduct = {
     source: "ddcpersia" | "ai-generated";
   }[];
   specs: CameraSpecs | RecorderSpecs | SwitchSpecs | StorageSpecs | UpsSpecs;
+  dataQuality?: { status: "verified" | "estimated" | "incomplete"; warnings: string[] };
 };
+
+export type SourceCatalogProduct = {
+  id: string;
+  wooId: number;
+  sku: string;
+  name: string;
+  brand: string;
+  category: ProductCategory | "other";
+  wooCategories: string[];
+  price: number;
+  stockStatus: StockStatus;
+  stockQuantity: number;
+  sourceUrl: string;
+  sourceModifiedAt?: string;
+  images: { url: string; originalUrl: string; alt: string; cached: boolean }[];
+  attributes: { name: string; slug?: string; options: string[] }[];
+  specs?: CameraSpecs | RecorderSpecs | SwitchSpecs | StorageSpecs | UpsSpecs;
+  normalizationStatus: "verified" | "estimated" | "unmapped";
+  normalizationWarnings: string[];
+};
+
+export type SourceCatalogPage = {
+  products: SourceCatalogProduct[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  facets: { brands: string[]; categoryCounts: Record<string, number> };
+  imageCache: { queued: number; downloading: number; completed: number; failed: number };
+};
+
+export type SurveillanceTask = "monitor" | "face-capture" | "face-identify" | "plate-capture" | "anpr";
 
 export type ProjectZone = {
   id: string;
   name: string;
   cameraCount: number;
   outdoor: boolean;
-  goal: "general" | "face" | "plate";
+  goal: SurveillanceTask;
+  targetDistanceM: number;
+  sceneWidthM: number;
+  mountingHeightM: number;
+  targetHeightM: number;
+  cameraTiltDeg: number;
+  minimumPpm?: number;
+  measuredBitrateKbps?: number;
+};
+
+export type EngineeringPoint = { xM: number; yM: number };
+export type EngineeringCameraPlacement = {
+  id: string;
+  zoneId: string;
+  zoneName: string;
+  productId: string;
+  productName: string;
+  xM: number;
+  yM: number;
+  mountingHeightM: number;
+  yawDeg: number;
+  tiltDeg: number;
+  horizontalFovDeg: number;
+  verticalFovDeg: number;
+  nearGroundM: number;
+  farGroundM: number;
+  coveragePolygon: EngineeringPoint[];
+  targetPlane: { center: EngineeringPoint; left: EngineeringPoint; right: EngineeringPoint; ppm: number };
+};
+
+export type EngineeringHeatmapCell = {
+  xM: number;
+  yM: number;
+  ppm: number;
+  cameraCount: number;
+  blind: boolean;
+};
+
+export type EngineeringMap = {
+  widthM: number;
+  heightM: number;
+  gridColumns: number;
+  gridRows: number;
+  placements: EngineeringCameraPlacement[];
+  heatmap: EngineeringHeatmapCell[];
+  blindSpotPercent: number;
+};
+
+export type InfrastructureEstimate = {
+  copperCableM: number;
+  fiberBackboneM: number;
+  rackCount: number;
+  recommendedRackU: number;
+  patchPanelCount: number;
+  sfpModuleCount: number;
+  floorDistributors: number;
+  upsLoadW: number;
+  upsRequiredW: number;
 };
 
 export type ProjectBrief = {
@@ -101,7 +199,7 @@ export type ProjectBrief = {
   cameraCount: number;
   outdoorCount: number;
   entrances: number;
-  goal: "general" | "face" | "plate" | "mixed";
+  goal: SurveillanceTask | "mixed";
   archiveDays: number;
   budget: "economy" | "balanced" | "professional";
   preferredBrand?: string;
@@ -113,6 +211,17 @@ export type ProjectBrief = {
   audioRequired?: boolean;
   localRecordingFallback?: boolean;
   redundancyRequired?: boolean;
+  upsRuntimeMinutes?: number;
+  budgetMinIrt?: number;
+  budgetMaxIrt?: number;
+  recordingMode: "continuous" | "motion";
+  motionActivityPercent: number;
+  bitrateMode: "CBR" | "VBR";
+  recordAudio: boolean;
+  audioBitrateKbps: number;
+  filesystemOverheadPercent: number;
+  vbrSafetyMarginPercent: number;
+  reservePercent: number;
   zones?: ProjectZone[];
 };
 
@@ -120,6 +229,15 @@ export type RecommendationItem = {
   product: CatalogProduct;
   quantity: number;
   reasons: string[];
+};
+
+export type ProductEvaluation = {
+  productId: string;
+  productName: string;
+  category: ProductCategory;
+  status: "selected" | "accepted" | "rejected";
+  reasons: string[];
+  failedConstraints: string[];
 };
 
 export type RecommendationPlan = {
@@ -130,18 +248,60 @@ export type RecommendationPlan = {
   totalPrice: number;
   items: RecommendationItem[];
   highlights: string[];
+  metrics: {
+    bandwidthMbps: number;
+    storageRequiredTb: number;
+    storageRawTb: number;
+    storageUsableTb: number;
+    raidLevel: string;
+    hotSpareDrives: number;
+    poeLoadW: number;
+    poeBudgetW: number;
+    upsLoadW: number;
+    upsRequiredW: number;
+    estimatedRuntimeMin?: number;
+    requiredRuntimeMin?: number;
+    expansionPorts: number;
+    recommendedResolutionMp: number;
+    minimumPpm: number;
+    averagePpm: number;
+    outgoingBandwidthMbps: number;
+    decodeDemandMp: number;
+    switchLocations: number;
+    storageBaseTb: number;
+    recordingDutyCycle: number;
+    budgetMinIrt?: number;
+    budgetMaxIrt?: number;
+    budgetDeltaIrt?: number;
+  };
+  scoreBreakdown: {
+    technicalFit: number;
+    capacityHeadroom: number;
+    imageQuality: number;
+    reliability: number;
+    stockAvailability: number;
+    priceFit: number;
+    preferredBrand: number;
+  };
+  constraints: {
+    checked: string[];
+    pending: string[];
+  };
+  evaluations: ProductEvaluation[];
+  engineeringMap: EngineeringMap;
+  infrastructure: InfrastructureEstimate;
 };
 
 export type RecommendationResult = {
   project: ProjectBrief;
-  metrics: {
-    totalBandwidthMbps: number;
-    storageRequiredTb: number;
-    poeRequiredW: number;
-    recommendedResolutionMp: number;
-  };
   plans: RecommendationPlan[];
   rejected: { productName: string; reason: string }[];
   generatedAt: string;
-  dataMode: "database-mock" | "mock-fallback";
+  dataMode: "woocommerce-live" | "database-mock" | "mock-fallback";
+  calculation: {
+    engineVersion: string;
+    inputVersion: string;
+    standardVersions: string[];
+    inputFingerprint: string;
+  };
 };

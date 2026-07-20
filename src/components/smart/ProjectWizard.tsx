@@ -2,34 +2,53 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Bookmark, Cable, Check, ChevronLeft, CircleAlert, Info, Layers3, LoaderCircle, MapPinned, Mic, Moon, Plus, RotateCcw, Save, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bookmark, Cable, Check, ChevronLeft, CircleAlert, FileDown, Info, Layers3, LoaderCircle, MapPinned, Mic, Moon, Plus, RotateCcw, Save, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
 import type { ProjectBrief, ProjectZone, RecommendationPlan, RecommendationResult } from "@/src/domain/catalog/types";
+import { TASK_LABELS, TASK_MINIMUM_PPM } from "@/src/lib/recommendation/camera-constraints";
+import { EngineeringPlanMap } from "@/src/components/smart/EngineeringPlanMap";
 
 const DEFAULTS_KEY = "hamyar-project-defaults-v2";
 const SOLUTION_KEY = "hamyar-preferred-solution-v2";
 const formatPrice = (value: number) => `${new Intl.NumberFormat("fa-IR").format(value)} تومان`;
+const budgetStatus = (plan: RecommendationPlan) => {
+  if (!plan.metrics.budgetMaxIrt) return "تعریف نشده";
+  if (plan.metrics.budgetMinIrt && plan.totalPrice < plan.metrics.budgetMinIrt) return `${formatPrice(plan.metrics.budgetMinIrt - plan.totalPrice)} پایین‌تر از کف`;
+  if (plan.totalPrice <= plan.metrics.budgetMaxIrt) return `${formatPrice(plan.metrics.budgetMaxIrt - plan.totalPrice)} زیر سقف`;
+  return `${formatPrice(plan.totalPrice - plan.metrics.budgetMaxIrt)} بالای سقف`;
+};
 
 const initialBrief: ProjectBrief = {
   projectType: "shop", cameraCount: 8, outdoorCount: 2, entrances: 2, goal: "mixed", archiveDays: 30, budget: "balanced", preferredBrand: "Tiandy",
-  siteAreaM2: 320, floors: 1, maxCableRunM: 90, remoteViewingUsers: 3, lowLightPriority: true, audioRequired: false, localRecordingFallback: true, redundancyRequired: false,
+  siteAreaM2: 320, floors: 1, maxCableRunM: 90, remoteViewingUsers: 3, upsRuntimeMinutes: 15, budgetMinIrt: 150_000_000, budgetMaxIrt: 280_000_000,
+  recordingMode: "motion", motionActivityPercent: 45, bitrateMode: "VBR", recordAudio: false, audioBitrateKbps: 64, filesystemOverheadPercent: 5, vbrSafetyMarginPercent: 20, reservePercent: 10,
+  lowLightPriority: true, audioRequired: false, localRecordingFallback: true, redundancyRequired: false,
   zones: [
-    { id: "entrance", name: "ورودی اصلی", cameraCount: 2, outdoor: false, goal: "face" },
-    { id: "sales", name: "سالن و صندوق", cameraCount: 4, outdoor: false, goal: "general" },
-    { id: "outside", name: "نمای بیرونی", cameraCount: 2, outdoor: true, goal: "general" }
+    { id: "entrance", name: "ورودی اصلی", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 5, sceneWidthM: 2.5, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 15 },
+    { id: "sales", name: "سالن و صندوق", cameraCount: 4, outdoor: false, goal: "monitor", targetDistanceM: 10, sceneWidthM: 9, mountingHeightM: 3.2, targetHeightM: 1.5, cameraTiltDeg: 12 },
+    { id: "outside", name: "نمای بیرونی", cameraCount: 2, outdoor: true, goal: "monitor", targetDistanceM: 15, sceneWidthM: 12, mountingHeightM: 4, targetHeightM: 1.5, cameraTiltDeg: 10 }
   ]
 };
 
 const projectTypes = [["shop", "فروشگاه"], ["office", "اداری"], ["factory", "کارخانه"], ["parking", "پارکینگ"], ["residential", "مسکونی"]] as const;
-const goals = [
-  ["general", "نظارت عمومی", "پوشش رفت‌وآمد و رخدادها"], ["face", "تشخیص چهره", "جزئیات کافی در نقاط حساس"],
-  ["plate", "پلاک‌خوانی", "ثبت خودرو در مسیر کنترل‌شده"], ["mixed", "ترکیبی", "چند هدف متفاوت در ناحیه‌ها"]
-] as const;
+const taskOptions = Object.entries(TASK_LABELS) as Array<[ProjectZone["goal"], string]>;
 
 const presets: { id: string; title: string; brief: Partial<ProjectBrief>; zones: ProjectZone[] }[] = [
-  { id: "retail", title: "فروشگاه کوچک", brief: { projectType: "shop", siteAreaM2: 180, entrances: 1, archiveDays: 21 }, zones: [{ id: "p1", name: "ورودی و صندوق", cameraCount: 3, outdoor: false, goal: "face" }, { id: "p2", name: "سالن فروش", cameraCount: 3, outdoor: false, goal: "general" }] },
-  { id: "parking", title: "پارکینگ", brief: { projectType: "parking", siteAreaM2: 1200, entrances: 2, archiveDays: 45, lowLightPriority: true }, zones: [{ id: "p1", name: "رمپ ورود", cameraCount: 2, outdoor: true, goal: "plate" }, { id: "p2", name: "محوطه پارک", cameraCount: 8, outdoor: false, goal: "general" }, { id: "p3", name: "مسیر عابر", cameraCount: 2, outdoor: false, goal: "face" }] },
-  { id: "factory", title: "کارخانه", brief: { projectType: "factory", siteAreaM2: 4500, floors: 2, entrances: 4, archiveDays: 60, redundancyRequired: true }, zones: [{ id: "p1", name: "خط تولید", cameraCount: 12, outdoor: false, goal: "general" }, { id: "p2", name: "انبار", cameraCount: 6, outdoor: false, goal: "general" }, { id: "p3", name: "گیت خودرو", cameraCount: 4, outdoor: true, goal: "plate" }] }
+  { id: "retail", title: "فروشگاه کوچک", brief: { projectType: "shop", siteAreaM2: 180, entrances: 1, archiveDays: 21 }, zones: [{ id: "p1", name: "ورودی و صندوق", cameraCount: 3, outdoor: false, goal: "face-capture", targetDistanceM: 4, sceneWidthM: 3, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 15 }, { id: "p2", name: "سالن فروش", cameraCount: 3, outdoor: false, goal: "monitor", targetDistanceM: 9, sceneWidthM: 8, mountingHeightM: 3.2, targetHeightM: 1.5, cameraTiltDeg: 12 }] },
+  { id: "parking", title: "پارکینگ", brief: { projectType: "parking", siteAreaM2: 1200, entrances: 2, archiveDays: 45, lowLightPriority: true }, zones: [{ id: "p1", name: "رمپ ورود", cameraCount: 2, outdoor: true, goal: "anpr", targetDistanceM: 14, sceneWidthM: 3.5, mountingHeightM: 4, targetHeightM: 0.8, cameraTiltDeg: 13 }, { id: "p2", name: "محوطه پارک", cameraCount: 8, outdoor: false, goal: "monitor", targetDistanceM: 18, sceneWidthM: 14, mountingHeightM: 4, targetHeightM: 1.5, cameraTiltDeg: 9 }, { id: "p3", name: "مسیر عابر", cameraCount: 2, outdoor: false, goal: "face-capture", targetDistanceM: 7, sceneWidthM: 4, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 11 }] },
+  { id: "factory", title: "کارخانه", brief: { projectType: "factory", siteAreaM2: 4500, floors: 2, entrances: 4, archiveDays: 60, redundancyRequired: true }, zones: [{ id: "p1", name: "خط تولید", cameraCount: 12, outdoor: false, goal: "monitor", targetDistanceM: 20, sceneWidthM: 16, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 10 }, { id: "p2", name: "انبار", cameraCount: 6, outdoor: false, goal: "monitor", targetDistanceM: 16, sceneWidthM: 12, mountingHeightM: 4.5, targetHeightM: 1.5, cameraTiltDeg: 10 }, { id: "p3", name: "گیت خودرو", cameraCount: 4, outdoor: true, goal: "anpr", targetDistanceM: 16, sceneWidthM: 4, mountingHeightM: 4, targetHeightM: 0.8, cameraTiltDeg: 12 }] }
 ];
+
+function migrateSavedZone(zone: Partial<ProjectZone>, index: number): ProjectZone {
+  const legacyGoal = String(zone.goal);
+  const goal: ProjectZone["goal"] = legacyGoal === "general" ? "monitor" : legacyGoal === "face" ? "face-identify" : legacyGoal === "plate" ? "plate-capture" : taskOptions.some(([value]) => value === legacyGoal) ? legacyGoal as ProjectZone["goal"] : "monitor";
+  return {
+    id: zone.id || `zone-${index}`, name: zone.name || `ناحیه ${index + 1}`, cameraCount: zone.cameraCount || 1,
+    outdoor: Boolean(zone.outdoor), goal,
+    targetDistanceM: zone.targetDistanceM || 10, sceneWidthM: zone.sceneWidthM || 8,
+    mountingHeightM: zone.mountingHeightM || 3, targetHeightM: zone.targetHeightM ?? 1.5,
+    cameraTiltDeg: zone.cameraTiltDeg ?? 12, minimumPpm: zone.minimumPpm, measuredBitrateKbps: zone.measuredBitrateKbps
+  };
+}
 
 export function ProjectWizard() {
   const [step, setStep] = useState(1);
@@ -49,11 +68,12 @@ export function ProjectWizard() {
   const update = <K extends keyof ProjectBrief>(key: K, value: ProjectBrief[K]) => setBrief((current) => ({ ...current, [key]: value }));
 
   function syncZones(zones: ProjectZone[]) {
+    const distinctGoals = new Set(zones.map((zone) => zone.goal));
     setBrief((current) => ({
       ...current, zones,
       cameraCount: zones.reduce((sum, zone) => sum + zone.cameraCount, 0),
       outdoorCount: zones.filter((zone) => zone.outdoor).reduce((sum, zone) => sum + zone.cameraCount, 0),
-      goal: zones.some((zone) => zone.goal === "plate") && zones.some((zone) => zone.goal === "face") ? "mixed" : zones.some((zone) => zone.goal === "plate") ? "plate" : zones.some((zone) => zone.goal === "face") ? "face" : "general"
+      goal: distinctGoals.size === 1 && zones[0] ? zones[0].goal : "mixed"
     }));
   }
 
@@ -64,7 +84,7 @@ export function ProjectWizard() {
 
   function loadDefaults() {
     const saved = window.localStorage.getItem(DEFAULTS_KEY);
-    if (saved) { try { setBrief({ ...initialBrief, ...JSON.parse(saved) }); setSavedMessage("پیش‌فرض ذخیره‌شده بارگذاری شد."); } catch { setSavedMessage("پیش‌فرض ذخیره‌شده قابل خواندن نیست."); } }
+    if (saved) { try { const parsed = JSON.parse(saved) as Partial<ProjectBrief>; const zones = parsed.zones?.map(migrateSavedZone) || initialBrief.zones; setBrief({ ...initialBrief, ...parsed, zones }); setSavedMessage("پیش‌فرض ذخیره‌شده بارگذاری شد."); } catch { setSavedMessage("پیش‌فرض ذخیره‌شده قابل خواندن نیست."); } }
   }
 
   function resetDefaults() {
@@ -74,7 +94,8 @@ export function ProjectWizard() {
   function applyPreset(preset: (typeof presets)[number]) {
     const zones = preset.zones.map((zone) => ({ ...zone }));
     const cameraCount = zones.reduce((sum, zone) => sum + zone.cameraCount, 0);
-    setBrief((current) => ({ ...current, ...preset.brief, zones, cameraCount, outdoorCount: zones.filter((zone) => zone.outdoor).reduce((sum, zone) => sum + zone.cameraCount, 0) }));
+    const distinctGoals = new Set(zones.map((zone) => zone.goal));
+    setBrief((current) => ({ ...current, ...preset.brief, zones, cameraCount, outdoorCount: zones.filter((zone) => zone.outdoor).reduce((sum, zone) => sum + zone.cameraCount, 0), goal: distinctGoals.size === 1 ? zones[0].goal : "mixed" }));
   }
 
   async function generate() {
@@ -118,30 +139,42 @@ export function ProjectWizard() {
     </div>}
 
     {step === 2 && <div className="wizard-stage-layout">
-      <WizardVisual image="/assets/wizard-environment.webp" title="پروژه را ناحیه‌بندی کنید" description="هر ناحیه می‌تواند هدف، تعداد دوربین و شرایط محیطی متفاوت داشته باشد." tips={["ورودی را از سالن جدا کنید", "فضای باز را علامت بزنید", "برای گیت خودرو هدف پلاک انتخاب کنید"]} />
+      <WizardVisual image="/assets/wizard-environment.webp" title="هندسه واقعی هر ناحیه" description="PPM از عرض صحنه و رزولوشن و پوشش اپتیکی از فاصله، ارتفاع و Tilt محاسبه می‌شود." tips={["Face و ANPR هدف‌های مستقل‌اند", "عرض صحنه، کل عرض قابل مشاهده است", "ارتفاع هدف برای چهره حدود ۱٫۷ متر است"]} />
       <div className="wizard-step">
         <div className="wizard-copy align-start"><p className="eyebrow">ویرایش کامل پروژه</p><h1>دوربین‌ها کجا نصب می‌شوند؟</h1><p>هر ردیف یک ناحیه مستقل است. جمع دوربین‌ها و فضای بیرونی خودکار محاسبه می‌شود.</p></div>
         <div className="zone-summary"><span><CameraCountIcon />{brief.cameraCount} دوربین</span><span><MapPinned size={16} />{brief.outdoorCount} دوربین بیرونی</span><span><Layers3 size={16} />{brief.zones?.length || 0} ناحیه</span></div>
         <div className="zone-editor">{(brief.zones || []).map((zone, index) => <ZoneRow key={zone.id} zone={zone} onChange={(next) => syncZones((brief.zones || []).map((item, itemIndex) => itemIndex === index ? next : item))} onRemove={() => syncZones((brief.zones || []).filter((_, itemIndex) => itemIndex !== index))} />)}</div>
-        <button type="button" className="add-zone-button" disabled={(brief.zones?.length || 0) >= 8} onClick={() => syncZones([...(brief.zones || []), { id: `zone-${Date.now()}`, name: "ناحیه جدید", cameraCount: 1, outdoor: false, goal: "general" }])}><Plus size={17} />افزودن ناحیه</button>
+        <button type="button" className="add-zone-button" disabled={(brief.zones?.length || 0) >= 8} onClick={() => syncZones([...(brief.zones || []), { id: `zone-${Date.now()}`, name: "ناحیه جدید", cameraCount: 1, outdoor: false, goal: "monitor", targetDistanceM: 10, sceneWidthM: 8, mountingHeightM: 3, targetHeightM: 1.5, cameraTiltDeg: 12 }])}><Plus size={17} />افزودن ناحیه</button>
       </div>
     </div>}
 
     {step === 3 && <div className="wizard-stage-layout">
-      <WizardVisual image="/assets/wizard-analytics.webp" title="کیفیت متناسب با هدف" description="موتور پیشنهاد وضوح، لنز، DORI، دید شب و قابلیت‌های هوشمند را با هدف شما تطبیق می‌دهد." tips={["چهره و پلاک به جزئیات بیشتری نیاز دارند", "دید شب روی لنز و سنسور اثر دارد", "صدا فقط در نقاط مجاز فعال شود"]} />
+      <WizardVisual image="/assets/wizard-analytics.webp" title="پروفایل ضبط و ظرفیت" description="Storage از Duty Cycle ضبط، VBR، صدا، سربار فایل‌سیستم و فضای رزرو ساخته می‌شود." tips={["Motion را با درصد فعالیت واقعی تنظیم کنید", "VBR برای صحنه شلوغ حاشیه می‌خواهد", "ضبط صدا به بیت‌ریت جدا نیاز دارد"]} />
       <div className="wizard-step">
-        <div className="wizard-copy align-start"><p className="eyebrow">کیفیت و تحلیل تصویر</p><h1>چه چیزی باید در تصویر قابل استفاده باشد؟</h1><p>هدف کلی از روی ناحیه‌ها پیشنهاد شده و همچنان قابل تغییر است.</p></div>
-        <div className="choice-grid">{goals.map(([value, title, description]) => <button type="button" key={value} className={brief.goal === value ? "choice-card choice-card-detail selected" : "choice-card choice-card-detail"} onClick={() => update("goal", value)}><span><strong>{title}</strong><small>{description}</small></span>{brief.goal === value && <Check size={18} />}</button>)}</div>
+        <div className="wizard-copy align-start"><p className="eyebrow">کیفیت و پروفایل ضبط</p><h1>تصویر چگونه ضبط و نگهداری شود؟</h1><p>هدف تصویری هر ناحیه در مرحله قبل تعیین شده و اینجا رفتار ضبط و ضرایب ظرفیت مشخص می‌شود.</p></div>
+        <div className="task-summary-grid">{Array.from(new Set((brief.zones || []).map((zone) => zone.goal))).map((goal) => <div key={goal}><strong>{TASK_LABELS[goal]}</strong><span>حد پایه {TASK_MINIMUM_PPM[goal]} PPM</span></div>)}</div>
         <div className="archive-field"><label><span>مدت نگهداری آرشیو</span><strong>{new Intl.NumberFormat("fa-IR").format(brief.archiveDays)} روز</strong></label><input type="range" min={7} max={180} value={brief.archiveDays} onChange={(event) => update("archiveDays", Number(event.target.value))} /><div><span>۷ روز</span><span>۱۸۰ روز</span></div></div>
+        <div className="field-grid three-fields">
+          <label className="wizard-select"><span>روش ضبط</span><select value={brief.recordingMode} onChange={(event) => update("recordingMode", event.target.value as ProjectBrief["recordingMode"])}><option value="continuous">پیوسته ۲۴/۷</option><option value="motion">براساس Motion/Event</option></select></label>
+          <label className="wizard-select"><span>کنترل Bitrate</span><select value={brief.bitrateMode} onChange={(event) => update("bitrateMode", event.target.value as ProjectBrief["bitrateMode"])}><option value="VBR">VBR</option><option value="CBR">CBR</option></select></label>
+          {brief.recordingMode === "motion" ? <LabeledNumber label="فعالیت صحنه" value={brief.motionActivityPercent} unit="٪" min={1} max={100} onChange={(value) => update("motionActivityPercent", value)} /> : <LabeledNumber label="Duty Cycle" value={100} unit="٪" min={100} max={100} onChange={() => undefined} />}
+        </div>
+        <div className="field-grid three-fields">
+          <LabeledNumber label="سربار فایل/Metadata" value={brief.filesystemOverheadPercent} unit="٪" min={0} max={50} onChange={(value) => update("filesystemOverheadPercent", value)} />
+          <LabeledNumber label="حاشیه VBR" value={brief.vbrSafetyMarginPercent} unit="٪" min={0} max={100} onChange={(value) => update("vbrSafetyMarginPercent", value)} />
+          <LabeledNumber label="فضای رزرو" value={brief.reservePercent} unit="٪" min={0} max={50} onChange={(value) => update("reservePercent", value)} />
+        </div>
         <div className="feature-toggle-grid">
           <FeatureToggle icon={<Moon size={18} />} title="اولویت دید در شب" description="مدل‌های IR قوی‌تر و سنسور بهتر" checked={Boolean(brief.lowLightPriority)} onChange={(value) => update("lowLightPriority", value)} />
-          <FeatureToggle icon={<Mic size={18} />} title="میکروفون داخلی" description="فقط مدل‌های دارای ضبط صدا" checked={Boolean(brief.audioRequired)} onChange={(value) => update("audioRequired", value)} />
+          <FeatureToggle icon={<Mic size={18} />} title="میکروفون داخلی" description="فقط مدل‌های دارای ضبط صدا" checked={Boolean(brief.audioRequired)} onChange={(value) => { update("audioRequired", value); if (!value) update("recordAudio", false); }} />
+          <FeatureToggle icon={<Mic size={18} />} title="ذخیره صدای دوربین" description={`${brief.audioBitrateKbps}Kbps برای هر دوربین`} checked={brief.recordAudio} onChange={(value) => { update("recordAudio", value); if (value) update("audioRequired", true); }} />
         </div>
+        {brief.recordAudio && <LabeledNumber label="بیت‌ریت صدای هر دوربین" value={brief.audioBitrateKbps} unit="Kbps" min={16} max={320} onChange={(value) => update("audioBitrateKbps", value)} />}
       </div>
     </div>}
 
     {step === 4 && <div className="wizard-stage-layout">
-      <WizardVisual image="/assets/wizard-plans.webp" title="سه راهکار قابل مقایسه" description="قیود فنی ابتدا کنترل می‌شوند و سپس سه ترکیب با سطح هزینه و توسعه متفاوت ساخته می‌شود." tips={["تمام اقلام هر پلن قابل ویرایش‌اند", "پلن منتخب را می‌توانید ذخیره کنید", "قیمت‌ها در این فاز نمایشی‌اند"]} />
+      <WizardVisual image="/assets/wizard-plans.webp" title="راهکارهای قابل مقایسه" description="قیود قابل محاسبه کنترل می‌شوند و مواردی که به بازدید یا دیتاشیت تکمیلی نیاز دارند، جداگانه اعلام می‌شوند." tips={["تمام اقلام هر پلن قابل ویرایش‌اند", "پلن منتخب را می‌توانید ذخیره کنید", "قیمت‌ها در این فاز نمایشی‌اند"]} />
       <div className="wizard-step">
         <div className="wizard-copy align-start"><p className="eyebrow">زیرساخت و خرید</p><h1>محدودیت‌های اجرایی را مشخص کنید</h1><p>این اطلاعات روی نوع سوئیچ، NVR، افزونگی و تجهیزات برق اثر می‌گذارد.</p></div>
         <div className="choice-grid choice-grid-three">{([[
@@ -152,11 +185,16 @@ export function ProjectWizard() {
           <LabeledNumber label="بلندترین مسیر کابل" value={brief.maxCableRunM || 0} unit="متر" min={10} max={250} onChange={(value) => update("maxCableRunM", value)} />
           <NumberField label="کاربران مشاهده همزمان" value={brief.remoteViewingUsers || 1} min={1} max={100} onChange={(value) => update("remoteViewingUsers", value)} />
         </div>
+        <div className="field-grid two-fields budget-fields">
+          <LabeledNumber label="حداقل بودجه تجهیزات" value={brief.budgetMinIrt || 0} unit="تومان" min={0} max={10_000_000_000} onChange={(value) => update("budgetMinIrt", value)} />
+          <LabeledNumber label="سقف بودجه تجهیزات" value={brief.budgetMaxIrt || 0} unit="تومان" min={1_000_000} max={10_000_000_000} onChange={(value) => update("budgetMaxIrt", value)} />
+        </div>
+        <label className="wizard-select"><span>زمان پشتیبانی موردنیاز UPS</span><select value={brief.upsRuntimeMinutes || 15} onChange={(event) => update("upsRuntimeMinutes", Number(event.target.value))}><option value={5}>خاموش‌سازی امن (۵ دقیقه)</option><option value={15}>۱۵ دقیقه</option><option value={30}>۳۰ دقیقه</option><option value={60}>۶۰ دقیقه</option></select></label>
         <div className="feature-toggle-grid">
           <FeatureToggle icon={<ShieldCheck size={18} />} title="افزونگی ذخیره‌سازی" description="اولویت NVR دارای RAID و ظرفیت رزرو" checked={Boolean(brief.redundancyRequired)} onChange={(value) => update("redundancyRequired", value)} />
           <FeatureToggle icon={<Cable size={18} />} title="ضبط محلی پشتیبان" description="ترجیح دوربین دارای حافظه داخلی" checked={Boolean(brief.localRecordingFallback)} onChange={(value) => update("localRecordingFallback", value)} />
         </div>
-        <div className="brief-summary"><ShieldCheck size={22} /><div><strong>آماده تحلیل {brief.zones?.length || 0} ناحیه</strong><p>{brief.cameraCount} دوربین، {brief.archiveDays} روز آرشیو، مسیر کابل تا {brief.maxCableRunM} متر و {brief.outdoorCount} دوربین بیرونی بررسی می‌شود.</p></div></div>
+        <div className="brief-summary"><ShieldCheck size={22} /><div><strong>آماده تحلیل مهندسی {brief.zones?.length || 0} ناحیه</strong><p>{brief.cameraCount} دوربین در {brief.floors} طبقه، {brief.remoteViewingUsers} کاربر همزمان، {brief.archiveDays} روز آرشیو و سقف بودجه {formatPrice(brief.budgetMaxIrt || 0)} بررسی می‌شود.</p></div></div>
       </div>
     </div>}
 
@@ -170,7 +208,29 @@ function WizardVisual({ image, title, description, tips }: { image: string; titl
 }
 
 function ZoneRow({ zone, onChange, onRemove }: { zone: ProjectZone; onChange: (zone: ProjectZone) => void; onRemove: () => void }) {
-  return <article className="zone-row"><label><span>نام ناحیه</span><input value={zone.name} onChange={(event) => onChange({ ...zone, name: event.target.value })} /></label><label><span>هدف</span><select value={zone.goal} onChange={(event) => onChange({ ...zone, goal: event.target.value as ProjectZone["goal"] })}><option value="general">نظارت عمومی</option><option value="face">تشخیص چهره</option><option value="plate">پلاک‌خوانی</option></select></label><div className="zone-count"><span>تعداد دوربین</span><div><button type="button" onClick={() => onChange({ ...zone, cameraCount: Math.max(1, zone.cameraCount - 1) })}>−</button><strong>{zone.cameraCount}</strong><button type="button" onClick={() => onChange({ ...zone, cameraCount: Math.min(32, zone.cameraCount + 1) })}>+</button></div></div><label className="zone-outdoor"><input type="checkbox" checked={zone.outdoor} onChange={(event) => onChange({ ...zone, outdoor: event.target.checked })} /><span>فضای باز</span></label><button type="button" className="zone-delete" onClick={onRemove} aria-label={`حذف ${zone.name}`}><Trash2 size={16} /></button></article>;
+  const requiredPpm = zone.minimumPpm || TASK_MINIMUM_PPM[zone.goal];
+  return <article className="zone-row">
+    <div className="zone-row-main">
+      <label><span>نام ناحیه</span><input value={zone.name} onChange={(event) => onChange({ ...zone, name: event.target.value })} /></label>
+      <label><span>هدف مهندسی</span><select value={zone.goal} onChange={(event) => { const goal = event.target.value as ProjectZone["goal"]; onChange({ ...zone, goal, minimumPpm: TASK_MINIMUM_PPM[goal] }); }}>{taskOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <div className="zone-count"><span>تعداد دوربین</span><div><button type="button" onClick={() => onChange({ ...zone, cameraCount: Math.max(1, zone.cameraCount - 1) })}>−</button><strong>{zone.cameraCount}</strong><button type="button" onClick={() => onChange({ ...zone, cameraCount: Math.min(32, zone.cameraCount + 1) })}>+</button></div></div>
+      <label className="zone-outdoor"><input type="checkbox" checked={zone.outdoor} onChange={(event) => onChange({ ...zone, outdoor: event.target.checked })} /><span>فضای باز</span></label>
+      <button type="button" className="zone-delete" onClick={onRemove} aria-label={`حذف ${zone.name}`}><Trash2 size={16} /></button>
+    </div>
+    <div className="zone-geometry-grid">
+      <ZoneNumber label="فاصله هدف" value={zone.targetDistanceM} unit="m" min={0.5} max={500} step={0.5} onChange={(value) => onChange({ ...zone, targetDistanceM: value })} />
+      <ZoneNumber label="عرض صحنه" value={zone.sceneWidthM} unit="m" min={0.5} max={200} step={0.5} onChange={(value) => onChange({ ...zone, sceneWidthM: value })} />
+      <ZoneNumber label="ارتفاع نصب" value={zone.mountingHeightM} unit="m" min={1.5} max={30} step={0.1} onChange={(value) => onChange({ ...zone, mountingHeightM: value })} />
+      <ZoneNumber label="ارتفاع هدف" value={zone.targetHeightM} unit="m" min={0} max={5} step={0.1} onChange={(value) => onChange({ ...zone, targetHeightM: value })} />
+      <ZoneNumber label="زاویه Tilt" value={zone.cameraTiltDeg} unit="°" min={0} max={89} step={1} onChange={(value) => onChange({ ...zone, cameraTiltDeg: value })} />
+      <ZoneNumber label="حداقل PPM" value={requiredPpm} unit="px/m" min={10} max={1000} step={5} onChange={(value) => onChange({ ...zone, minimumPpm: value })} />
+      <ZoneNumber label="Bitrate واقعی" value={zone.measuredBitrateKbps || 0} unit="Kbps" min={0} max={100000} step={64} onChange={(value) => onChange({ ...zone, measuredBitrateKbps: value > 0 ? value : undefined })} />
+    </div>
+  </article>;
+}
+
+function ZoneNumber({ label, value, unit, min, max, step, onChange }: { label: string; value: number; unit: string; min: number; max: number; step: number; onChange: (value: number) => void }) {
+  return <label className="zone-number"><span>{label}</span><div><input type="number" value={value} min={min} max={max} step={step} onChange={(event) => onChange(Math.max(min, Math.min(max, Number(event.target.value))))} /><small>{unit}</small></div></label>;
 }
 
 function NumberField({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) { return <label className="wizard-number"><span>{label}</span><div><button onClick={() => onChange(Math.max(min, value - 1))} type="button">−</button><strong>{new Intl.NumberFormat("fa-IR").format(value)}</strong><button onClick={() => onChange(Math.min(max, value + 1))} type="button">+</button></div></label>; }
@@ -182,6 +242,8 @@ function RecommendationResults({ result, onReset }: { result: RecommendationResu
   const [activePlan, setActivePlan] = useState(result.project.budget);
   const [quantities, setQuantities] = useState<Record<string, Record<string, number>>>({});
   const [saved, setSaved] = useState(false);
+  const [savingVersion, setSavingVersion] = useState(false);
+  const [saveVersionMessage, setSaveVersionMessage] = useState("");
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const raw = window.localStorage.getItem(SOLUTION_KEY);
@@ -201,17 +263,61 @@ function RecommendationResults({ result, onReset }: { result: RecommendationResu
   const quantityFor = (plan: RecommendationPlan, productId: string, initial: number) => quantities[plan.id]?.[productId] ?? initial;
   const editedTotal = selected?.items.reduce((sum, item) => sum + item.product.price * quantityFor(selected, item.product.id, item.quantity), 0) || 0;
   const setQuantity = (plan: RecommendationPlan, productId: string, value: number) => setQuantities((current) => ({ ...current, [plan.id]: { ...current[plan.id], [productId]: Math.max(0, Math.min(99, value)) } }));
-  const saveSolution = () => { if (!selected) return; window.localStorage.setItem(SOLUTION_KEY, JSON.stringify({ project: result.project, planId: selected.id, quantities: selected.items.map((item) => ({ productId: item.product.id, quantity: quantityFor(selected, item.product.id, item.quantity) })), savedAt: new Date().toISOString() })); setSaved(true); };
+  const saveSolution = async () => {
+    if (!selected || savingVersion) return;
+    const selectedQuantities = selected.items.map((item) => ({ productId: item.product.id, quantity: quantityFor(selected, item.product.id, item.quantity) }));
+    const localVersion = { project: result.project, planId: selected.id, quantities: selectedQuantities, calculation: result.calculation, engineeringMap: selected.engineeringMap, infrastructure: selected.infrastructure, savedAt: new Date().toISOString() };
+    window.localStorage.setItem(SOLUTION_KEY, JSON.stringify(localVersion));
+    setSaved(true);
+    setSavingVersion(true);
+    setSaveVersionMessage("نسخه محلی ذخیره شد؛ در حال ثبت تاریخچه سرور...");
+    try {
+      const response = await fetch("/api/projects/versions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ project: result.project, plan: selected, quantities: selectedQuantities, calculation: result.calculation })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "ثبت نسخه سرور انجام نشد.");
+      setSaveVersionMessage(`نسخه ${new Intl.NumberFormat("fa-IR").format(data.version.version_number)} در تاریخچه سرور ذخیره شد.`);
+    } catch (error) {
+      setSaveVersionMessage(`${error instanceof Error ? error.message : "ثبت نسخه سرور انجام نشد."} نسخه محلی محفوظ است.`);
+    } finally {
+      setSavingVersion(false);
+    }
+  };
+  const printEngineeringReport = () => {
+    const details = Array.from(document.querySelectorAll<HTMLDetailsElement>(".recommendation-results details"));
+    const previous = details.map((item) => item.open);
+    details.forEach((item) => { item.open = true; });
+    window.print();
+    window.setTimeout(() => details.forEach((item, index) => { item.open = previous[index]; }), 250);
+  };
 
   return <section className="recommendation-results">
-    <div className="results-hero"><div><p className="eyebrow">طراحی اولیه آماده است</p><h1>سه سناریوی قابل ویرایش</h1><p>هر قلم را کم، زیاد یا حذف کنید و ترکیب نهایی را برای دفعات بعد به‌عنوان انتخاب ترجیحی نگه دارید.</p></div><div className="result-actions"><button className="secondary-action" onClick={onReset}>ویرایش نیازها</button><button className="primary-action" onClick={saveSolution}><Save size={16} />{saved ? "پلن پیش‌فرض ذخیره است" : "ذخیره به‌عنوان پیش‌فرض"}</button></div></div>
-    <div className="metric-strip"><Metric label="پهنای‌باند کل" value={`${result.metrics.totalBandwidthMbps} Mbps`} /><Metric label="فضای آرشیو" value={`${result.metrics.storageRequiredTb} TB`} /><Metric label="بودجه PoE" value={`${result.metrics.poeRequiredW} W`} /><Metric label="وضوح پیشنهادی" value={`${result.metrics.recommendedResolutionMp} MP`} /></div>
-    <div className="plan-tabs">{result.plans.map((plan) => <button key={plan.id} className={selected?.id === plan.id ? "active" : ""} onClick={() => setActivePlan(plan.id)}><span>{plan.title}</span><small>امتیاز {new Intl.NumberFormat("fa-IR").format(plan.score)} از ۱۰۰</small></button>)}</div>
-    {selected && <div className="selected-plan"><div className="selected-plan-head"><div><span className="plan-score">{selected.score}% تطابق</span><h2>پلن {selected.title}</h2><p>{selected.subtitle}</p></div><div className="plan-price"><span>برآورد ویرایش‌شده تجهیزات</span><strong>{formatPrice(editedTotal)}</strong><small>{editedTotal !== selected.totalPrice ? `مبلغ اولیه ${formatPrice(selected.totalPrice)}` : "قیمت‌ها نمایشی و غیرقابل استناد هستند"}</small></div></div>
-      <div className="solution-items">{selected.items.map((item) => { const qty = quantityFor(selected, item.product.id, item.quantity); const image = item.product.images?.[0]; return <article key={item.product.id} className={qty === 0 ? "solution-item removed" : "solution-item"}>{image ? <div className="solution-product-image"><Image src={image.url} alt={image.alt} fill sizes="64px" /></div> : <div className="product-symbol">{item.product.category.toUpperCase()}</div>}<div className="solution-item-copy"><div><span className="item-quantity">{qty === 0 ? "حذف‌شده" : `${new Intl.NumberFormat("fa-IR").format(qty)} عدد`}</span><h3>{item.product.name}</h3><small>{item.product.sku} · {item.product.stockStatus === "in_stock" ? "موجود" : "موجودی محدود"}</small></div><ul>{item.reasons.map((reason) => <li key={reason}><Check size={14} />{reason}</li>)}</ul></div><div className="item-edit"><strong className="item-price">{formatPrice(item.product.price * qty)}</strong><div><button type="button" onClick={() => setQuantity(selected, item.product.id, qty - 1)}>−</button><span>{qty}</span><button type="button" onClick={() => setQuantity(selected, item.product.id, qty + 1)}>+</button></div>{qty > 0 ? <button type="button" className="remove-item" onClick={() => setQuantity(selected, item.product.id, 0)}><Trash2 size={13} />حذف</button> : <button type="button" className="restore-item" onClick={() => setQuantity(selected, item.product.id, item.quantity)}><RotateCcw size={13} />بازگردانی</button>}</div></article>; })}</div>
-      <div className="why-plan"><Sparkles size={20} /><div><strong>چرا این ترکیب؟</strong><p>{selected.highlights.join(" · ")}</p></div></div></div>}
+    <div className="results-hero"><div><p className="eyebrow">پیشنهاد اولیه آماده است</p><h1>سناریوهای قابل ویرایش</h1><p>موتور {result.calculation.engineVersion} · ورودی {result.calculation.inputVersion} · {result.calculation.inputFingerprint}</p><small className="calculation-standards">{result.calculation.standardVersions.join(" · ")}</small></div><div className="result-actions"><button className="secondary-action" onClick={onReset}>ویرایش نیازها</button><button className="secondary-action" onClick={printEngineeringReport}><FileDown size={16} />خروجی PDF مهندسی</button><button className="primary-action" onClick={saveSolution} disabled={savingVersion}><Save size={16} />{savingVersion ? "در حال ذخیره نسخه..." : saved ? "ذخیره نسخه جدید" : "ذخیره پلن و نسخه محاسبه"}</button>{saveVersionMessage ? <small>{saveVersionMessage}</small> : null}</div></div>
+    {selected && <div className="metric-strip"><Metric label="PPM متوسط / حداقل" value={`${selected.metrics.averagePpm} / ${selected.metrics.minimumPpm}`} /><Metric label="Incoming / Remote" value={`${selected.metrics.bandwidthMbps} / ${selected.metrics.outgoingBandwidthMbps} Mbps`} /><Metric label="تقاضای Decode" value={`${selected.metrics.decodeDemandMp} MP`} /><Metric label="Storage پایه / نهایی" value={`${selected.metrics.storageBaseTb} / ${selected.metrics.storageRequiredTb} TB`} /><Metric label="فضای usable / خام" value={`${selected.metrics.storageUsableTb} / ${selected.metrics.storageRawTb} TB`} /><Metric label="آرایش دیسک" value={selected.metrics.raidLevel} /><Metric label="بار / بودجه PoE" value={`${selected.metrics.poeLoadW} / ${selected.metrics.poeBudgetW} W`} /><Metric label="نقاط توزیع شبکه" value={`${selected.metrics.switchLocations}`} /><Metric label="Duty Cycle ضبط" value={`${Math.round(selected.metrics.recordingDutyCycle * 100)}%`} /><Metric label="زمان پشتیبانی" value={selected.metrics.estimatedRuntimeMin ? `${selected.metrics.estimatedRuntimeMin} min` : "لحاظ نشده"} /><Metric label="بازه بودجه" value={budgetStatus(selected)} /><Metric label="وضوح بیشینه" value={`${selected.metrics.recommendedResolutionMp} MP`} /></div>}
+    <div className="plan-tabs">{result.plans.map((plan) => <button key={plan.id} className={selected?.id === plan.id ? "active" : ""} onClick={() => setActivePlan(plan.id)}><span>{plan.title}</span><small>امتیاز محاسبه‌شده {new Intl.NumberFormat("fa-IR").format(plan.score)} از ۱۰۰</small></button>)}</div>
+    {selected && <><EngineeringPlanMap map={selected.engineeringMap} /><div className="infrastructure-grid"><Metric label="کابل مسی با ذخیره" value={`${selected.infrastructure.copperCableM} m`} /><Metric label="Backbone فیبر" value={`${selected.infrastructure.fiberBackboneM} m`} /><Metric label="Rack" value={`${selected.infrastructure.rackCount} × ${selected.infrastructure.recommendedRackU}U`} /><Metric label="Patch Panel / SFP" value={`${selected.infrastructure.patchPanelCount} / ${selected.infrastructure.sfpModuleCount}`} /></div></>}
+    {selected && <div className="selected-plan"><div className="selected-plan-head"><div><span className="plan-score">امتیاز فعلی {selected.score}/۱۰۰</span><h2>پلن {selected.title}</h2><p>{selected.subtitle}</p></div><div className="plan-price"><span>برآورد ویرایش‌شده تجهیزات</span><strong>{formatPrice(editedTotal)}</strong><small>{editedTotal !== selected.totalPrice ? `مبلغ اولیه ${formatPrice(selected.totalPrice)}` : "قیمت‌ها نمایشی و غیرقابل استناد هستند"}</small></div></div>
+      <div className="solution-items">{selected.items.map((item) => { const qty = quantityFor(selected, item.product.id, item.quantity); const image = item.product.images?.[0]; return <article key={item.product.id} className={qty === 0 ? "solution-item removed" : "solution-item"}>{image ? <div className="solution-product-image"><Image src={image.url} alt={image.alt} fill sizes="64px" /></div> : <div className="product-symbol">{item.product.category.toUpperCase()}</div>}<div className="solution-item-copy"><div><span className="item-quantity">{qty === 0 ? "حذف‌شده" : `${new Intl.NumberFormat("fa-IR").format(qty)} عدد`}</span><h3>{item.product.name}</h3><small>{item.product.sku} · {item.product.stockStatus === "in_stock" ? "موجود" : "موجودی محدود"}</small>{item.product.dataQuality?.status === "estimated" && <div className="estimated-specs-notice"><span className="estimated-badge">⚠️ محاسبات تخمینی:</span><span className="estimated-warnings">{item.product.dataQuality.warnings.join(" · ")}</span></div>}</div><ul>{item.reasons.map((reason) => <li key={reason}><Check size={14} />{reason}</li>)}</ul></div><div className="item-edit"><strong className="item-price">{formatPrice(item.product.price * qty)}</strong><div><button type="button" onClick={() => setQuantity(selected, item.product.id, qty - 1)}>−</button><span>{qty}</span><button type="button" onClick={() => setQuantity(selected, item.product.id, qty + 1)}>+</button></div>{qty > 0 ? <button type="button" className="remove-item" onClick={() => setQuantity(selected, item.product.id, 0)}><Trash2 size={13} />حذف</button> : <button type="button" className="restore-item" onClick={() => setQuantity(selected, item.product.id, item.quantity)}><RotateCcw size={13} />بازگردانی</button>}</div></article>; })}</div>
+      <div className="why-plan"><Sparkles size={20} /><div><strong>چرا این ترکیب؟</strong><p>{selected.highlights.join(" · ")}</p></div></div>
+      <details className="rejected-options"><summary>دامنه بررسی فنی این پلن <ChevronLeft size={16} /></summary><ul>{selected.constraints.checked.map((item) => <li key={item}><strong>بررسی شده</strong><span>{item}</span></li>)}{selected.constraints.pending.map((item) => <li key={item}><strong>نیازمند بررسی تکمیلی</strong><span>{item}</span></li>)}</ul></details>
+      <details className="rejected-options"><summary>جزئیات امتیاز محاسبه‌شده <ChevronLeft size={16} /></summary><ul>{Object.entries(selected.scoreBreakdown).map(([key, value]) => <li key={key}><strong>{scoreLabels[key as keyof RecommendationPlan["scoreBreakdown"]]}</strong><span>{value}</span></li>)}</ul></details></div>}
+    {selected && <details className="product-evaluation-report"><summary>گزارش قبول و رد تمام محصولات ({selected.evaluations.length} محصول) <ChevronLeft size={16} /></summary><div>{selected.evaluations.map((evaluation) => <article key={evaluation.productId} className={`evaluation-row ${evaluation.status}`}><div><span>{evaluation.status === "selected" ? "انتخاب‌شده" : evaluation.status === "accepted" ? "قابل قبول" : "ردشده"}</span><strong>{evaluation.productName}</strong><small>{evaluation.category}</small></div><ul>{[...evaluation.reasons, ...evaluation.failedConstraints].map((reason) => <li key={reason}>{reason}</li>)}</ul></article>)}</div></details>}
+    {!selected && <div className="wizard-error"><CircleAlert size={18} />هیچ پلنی تمام قیود فعلی را تأمین نکرد. گزارش ردها را برای اصلاح هندسه یا ظرفیت باز کنید.</div>}
     {result.rejected.length > 0 && <details className="rejected-options"><summary>چرا بعضی گزینه‌ها حذف شدند؟ <ChevronLeft size={16} /></summary><ul>{result.rejected.map((item) => <li key={`${item.productName}-${item.reason}`}><strong>{item.productName}</strong><span>{item.reason}</span></li>)}</ul></details>}
   </section>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) { return <div><span>{label}</span><strong dir="ltr">{value}</strong></div>; }
+
+const scoreLabels: Record<keyof RecommendationPlan["scoreBreakdown"], string> = {
+  technicalFit: "تطابق قیود محاسبه‌شده",
+  capacityHeadroom: "حاشیه ظرفیت",
+  imageQuality: "کیفیت تصویر اولیه",
+  reliability: "قابلیت اطمینان",
+  stockAvailability: "موجودی",
+  priceFit: "تناسب هزینه",
+  preferredBrand: "برند ترجیحی"
+};

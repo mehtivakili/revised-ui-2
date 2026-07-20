@@ -9,9 +9,6 @@ import { getUserById } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
 
-// Temporary: set to true to restore the planner and product links in the top bar.
-const showPlannerAndProductLinks = false;
-
 export async function AppTopBar() {
   const session = await getCurrentSession();
   const user = session ? await getUserById(session.id) : null;
@@ -22,7 +19,7 @@ export async function AppTopBar() {
       minimalOnContacts={!session}
       minimalChildren={
         <header className="top-bar minimal-bar">
-          <Link className="brand-mark minimal-brand" href="/calculators" aria-label="همیار دوربین">
+          <Link className="brand-mark minimal-brand" href="/" aria-label="همیار دوربین">
             <span>
               <strong>همیار دوربین</strong>
               <small>ابزارهای محاسباتی دوربین و شبکه</small>
@@ -43,26 +40,22 @@ export async function AppTopBar() {
     >
       {session ? <OnlinePresence /> : null}
       <header className="top-bar">
-        <Link className="brand-mark" href="/calculators" aria-label="همیار دوربین">
+        <Link className="brand-mark" href="/" aria-label="همیار دوربین">
           <span>
             <strong>همیار دوربین</strong>
             <small>ابزارهای محاسباتی دوربین و شبکه</small>
           </span>
         </Link>
 
-        <Link className="topbar-title" href="/calculators" aria-label="همیار دوربین">
+        <Link className="topbar-title" href="/" aria-label="همیار دوربین">
           همیار دوربین
         </Link>
 
         <TopSearch lockedToolSlugs={access.lockedToolSlugs} />
 
         <nav className="top-nav" aria-label="ناوبری اصلی">
-          {showPlannerAndProductLinks ? (
-            <>
-              <Link className="smart-nav-link" href="/planner"><Sparkles size={14} />طراحی هوشمند</Link>
-              <Link href="/catalog">محصولات</Link>
-            </>
-          ) : null}
+          <Link className="smart-nav-link" href="/planner"><Sparkles size={14} />طراحی هوشمند</Link>
+          <Link href="/catalog">محصولات</Link>
           <ToolsMenu lockedToolSlugs={access.lockedToolSlugs} />
           <Link href="/">خانه</Link>
           {session?.role === "admin" ? <Link href="/admin">مدیریت</Link> : null}

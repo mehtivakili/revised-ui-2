@@ -4,12 +4,25 @@ import { mockCatalogUpdatedAt, mockProducts } from "@/src/lib/catalog/mock-produ
 
 export type CatalogSnapshot = {
   products: CatalogProduct[];
-  dataMode: "database-mock" | "mock-fallback";
+  dataMode: "woocommerce-live" | "database-mock" | "mock-fallback";
   updatedAt: string;
 };
 
 export async function getCatalogSnapshot(): Promise<CatalogSnapshot> {
   try {
+    const live = await query(
+      `SELECT raw_payload, synced_at
+       FROM catalog_products
+       WHERE source = 'woocommerce'
+       ORDER BY category, name`
+    );
+    if (live.rows.length > 0) {
+      return {
+        products: live.rows.map((row) => row.raw_payload as CatalogProduct),
+        dataMode: "woocommerce-live",
+        updatedAt: new Date(live.rows[0].synced_at).toISOString()
+      };
+    }
     const result = await query(
       `SELECT raw_payload, synced_at
        FROM catalog_products

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CalculatorShell, NumberInput, ResultGrid, formatNumber } from "@/src/components/calculators/CalculatorUi";
+import { dbmToMilliwatts, milliwattsToDbm } from "@/src/lib/calculators/wireless";
 import type { DashboardTool } from "@/src/lib/dashboard";
 
 const tool: DashboardTool = {
@@ -14,26 +15,19 @@ const tool: DashboardTool = {
   icon: "activity"
 };
 
-function milliwattToDbm(mw: number) {
-  return mw > 0 ? 10 * Math.log10(mw) : 0;
-}
-
-function dbmToMilliwatt(dbm: number) {
-  return 10 ** (dbm / 10);
-}
-
 export default function PowerPage() {
   const [mw, setMw] = useState(1);
   const [dbm, setDbm] = useState(0);
 
   const updateFromMw = (value: number) => {
     setMw(value);
-    setDbm(value > 0 ? Number(milliwattToDbm(value).toFixed(2)) : 0);
+    const converted = milliwattsToDbm(value);
+    if (converted !== null) setDbm(Number(converted.toFixed(2)));
   };
 
   const updateFromDbm = (value: number) => {
     setDbm(value);
-    setMw(Number(dbmToMilliwatt(value).toFixed(4)));
+    setMw(Number(dbmToMilliwatts(value).toFixed(4)));
   };
 
   return (

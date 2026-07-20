@@ -31,35 +31,35 @@ const baseMockProducts: CatalogProduct[] = [
   },
   {
     id: "nvr-r3108", wooId: 92001, sku: "TC-R3108-I-B", name: "NVR تیاندی TC-R3108 هشت کانال", brand: "Tiandy", category: "recorder", price: 12_800_000, stockStatus: "in_stock", stockQuantity: 18, warrantyMonths: 24, sourceUrl: productUrl("دستگاه-nvr-تیاندی-مدلtc-r3108-speci-b"), source: "mock-ddcpersia",
-    specs: { technology: "NVR", channels: 8, incomingBandwidthMbps: 80, maxDecodeMp: 8, driveBays: 1, maxDriveCapacityTb: 10, raidLevels: [], builtInPoePorts: 0, codecs: ["H.265+", "H.265", "H.264"], maxCameraResolutionMp: 8 }
+    specs: { technology: "NVR", channels: 8, incomingBandwidthMbps: 80, maxDecodeMp: 8, driveBays: 1, maxDriveCapacityTb: 10, raidLevels: [], builtInPoePorts: 0, codecs: ["H.265+", "H.265", "H.264"], maxCameraResolutionMp: 8, outgoingBandwidthMbps: 48, decodeCapacityMp: 32, maxSimultaneousDecodeChannels: 8, basePowerW: 12, drivePowerPerBayW: 8 }
   },
   {
     id: "nvr-r3116", wooId: 92002, sku: "TC-R3116-I-B", name: "NVR تیاندی TC-R3116 شانزده کانال", brand: "Tiandy", category: "recorder", price: 21_500_000, stockStatus: "in_stock", stockQuantity: 12, warrantyMonths: 24, sourceUrl: productUrl("tc-r3116"), source: "mock-ddcpersia",
-    specs: { technology: "NVR", channels: 16, incomingBandwidthMbps: 160, maxDecodeMp: 8, driveBays: 2, maxDriveCapacityTb: 12, raidLevels: [], builtInPoePorts: 0, codecs: ["H.265+", "H.265", "H.264"], maxCameraResolutionMp: 8 }
+    specs: { technology: "NVR", channels: 16, incomingBandwidthMbps: 160, maxDecodeMp: 8, driveBays: 2, maxDriveCapacityTb: 12, raidLevels: [], builtInPoePorts: 0, codecs: ["H.265+", "H.265", "H.264"], maxCameraResolutionMp: 8, outgoingBandwidthMbps: 80, decodeCapacityMp: 48, maxSimultaneousDecodeChannels: 12, basePowerW: 18, drivePowerPerBayW: 8 }
   },
   {
     id: "nvr-r3220", wooId: 92003, sku: "TC-R3220-I-B-K", name: "NVR تیاندی TC-R3220 بیست کانال", brand: "Tiandy", category: "recorder", price: 35_900_000, stockStatus: "in_stock", stockQuantity: 8, warrantyMonths: 24, sourceUrl: productUrl("tc-r3220-speci-b-k-v3-1"), source: "mock-ddcpersia",
-    specs: { technology: "NVR", channels: 20, incomingBandwidthMbps: 200, maxDecodeMp: 8, driveBays: 2, maxDriveCapacityTb: 16, raidLevels: [], builtInPoePorts: 0, codecs: ["H.265+", "H.265", "H.264"], maxCameraResolutionMp: 8 }
+    specs: { technology: "NVR", channels: 20, incomingBandwidthMbps: 200, maxDecodeMp: 8, driveBays: 2, maxDriveCapacityTb: 16, raidLevels: [], builtInPoePorts: 0, codecs: ["H.265+", "H.265", "H.264"], maxCameraResolutionMp: 8, outgoingBandwidthMbps: 96, decodeCapacityMp: 64, maxSimultaneousDecodeChannels: 16, basePowerW: 22, drivePowerPerBayW: 8 }
   },
   {
     id: "nvr-r3232", wooId: 92004, sku: "TC-R3232-I-B-K", name: "NVR تیاندی TC-R3232 سی‌ودو کانال RAID", brand: "Tiandy", category: "recorder", price: 58_000_000, stockStatus: "low_stock", stockQuantity: 4, warrantyMonths: 30, sourceUrl: productUrl("دستگاه-nvr-تیاندی-32-کانال-مدل-tc-r3232-spec-i-b-k-v3-1"), source: "mock-ddcpersia",
-    specs: { technology: "NVR", channels: 32, incomingBandwidthMbps: 256, maxDecodeMp: 12, driveBays: 4, maxDriveCapacityTb: 18, raidLevels: ["RAID 0", "RAID 1", "RAID 5"], builtInPoePorts: 0, codecs: ["H.265+", "H.265", "H.264"], maxCameraResolutionMp: 12 }
+    specs: { technology: "NVR", channels: 32, incomingBandwidthMbps: 256, maxDecodeMp: 12, driveBays: 4, maxDriveCapacityTb: 18, raidLevels: ["RAID 0", "RAID 1", "RAID 5"], builtInPoePorts: 0, codecs: ["H.265+", "H.265", "H.264"], maxCameraResolutionMp: 12, outgoingBandwidthMbps: 128, decodeCapacityMp: 96, maxSimultaneousDecodeChannels: 24, basePowerW: 30, drivePowerPerBayW: 9 }
   },
   {
     id: "sw-fep-0812", wooId: 93001, sku: "FEP-0812", name: "سوئیچ PoE لول‌وان 8 پورت FEP-0812", brand: "LevelOne", category: "switch", price: 8_400_000, stockStatus: "in_stock", stockQuantity: 22, warrantyMonths: 18, sourceUrl: productUrl("fep-0812"), source: "mock-ddcpersia",
-    specs: { poePorts: 8, totalPorts: 10, poeBudgetW: 120, maxPowerPerPortW: 30, uplinkGbps: 2, extendRangeM: 250, managed: false, surgeProtection: true }
+    specs: { poePorts: 8, totalPorts: 10, poeBudgetW: 120, maxPowerPerPortW: 30, uplinkGbps: 2, extendRangeM: 250, managed: false, surgeProtection: true, systemPowerW: 8, poeEfficiency: 0.9 }
   },
   {
     id: "sw-fep-1612", wooId: 93002, sku: "FEP-1612", name: "سوئیچ PoE لول‌وان 16 پورت FEP-1612", brand: "LevelOne", category: "switch", price: 15_900_000, stockStatus: "in_stock", stockQuantity: 14, warrantyMonths: 18, sourceUrl: productUrl("fep-1612"), source: "mock-ddcpersia",
-    specs: { poePorts: 16, totalPorts: 18, poeBudgetW: 240, maxPowerPerPortW: 30, uplinkGbps: 2, extendRangeM: 250, managed: false, surgeProtection: true }
+    specs: { poePorts: 16, totalPorts: 18, poeBudgetW: 240, maxPowerPerPortW: 30, uplinkGbps: 2, extendRangeM: 250, managed: false, surgeProtection: true, systemPowerW: 14, poeEfficiency: 0.9 }
   },
   {
     id: "sw-ges-2452", wooId: 93003, sku: "GES-2452P", name: "سوئیچ مدیریتی PoE لول‌وان 24 پورت", brand: "LevelOne", category: "switch", price: 34_500_000, stockStatus: "low_stock", stockQuantity: 5, warrantyMonths: 24, sourceUrl: productUrl("ges-2452p"), source: "mock-ddcpersia",
-    specs: { poePorts: 24, totalPorts: 28, poeBudgetW: 370, maxPowerPerPortW: 30, uplinkGbps: 4, extendRangeM: 250, managed: true, surgeProtection: true }
+    specs: { poePorts: 24, totalPorts: 28, poeBudgetW: 370, maxPowerPerPortW: 30, uplinkGbps: 4, extendRangeM: 250, managed: true, surgeProtection: true, systemPowerW: 22, poeEfficiency: 0.92 }
   },
   ...[4, 6, 10, 12, 16].map((capacity, index): CatalogProduct => ({
     id: `hdd-wd-${capacity}`, wooId: 94001 + index, sku: `WD-PURPLE-${capacity}TB`, name: `هارد نظارتی WD Purple ظرفیت ${capacity}TB`, brand: "Western Digital", category: "storage", price: [7_600_000, 10_200_000, 17_900_000, 22_800_000, 31_500_000][index], stockStatus: index === 4 ? "low_stock" : "in_stock", stockQuantity: [32, 25, 18, 12, 6][index], warrantyMonths: 24, sourceUrl: productUrl(`wd-purple-${capacity}tb`), source: "mock-ddcpersia",
-    specs: { capacityTb: capacity, workloadTbPerYear: capacity >= 12 ? 360 : 180, surveillanceOptimized: true, warrantyMonths: 24 }
+    specs: { capacityTb: capacity, workloadTbPerYear: capacity >= 12 ? 360 : 180, surveillanceOptimized: true, warrantyMonths: 24, activePowerW: capacity >= 12 ? 9 : 7 }
   })),
   {
     id: "ups-2kva", wooId: 95001, sku: "UPS-2000VA", name: "UPS آنلاین 2000VA مناسب نظارت تصویری", brand: "Persia Power", category: "ups", price: 28_500_000, stockStatus: "in_stock", stockQuantity: 10, warrantyMonths: 18, sourceUrl: productUrl("ups-online-2000va"), source: "mock-ddcpersia",
@@ -145,7 +145,7 @@ const generatedRecorders: CatalogProduct[] = recorderModels.map(([id, wooId, bra
   id, wooId, sku: model.replaceAll(" ", "-"), name: `دستگاه NVR ${brand} مدل ${model}`, brand, category: "recorder", price: 9_800_000 + channels * 1_080_000 + bays * 1_500_000,
   stockStatus: index % 5 === 4 ? "low_stock" : "in_stock", stockQuantity: 4 + ((index * 3) % 15), warrantyMonths: brand === "Tiandy" ? 24 : 18, sourceUrl: productUrl(id.replace("nvr-", "")), source: "mock-ddcpersia",
   images: assetImages(recorderGalleries[gallery], `تصاویر ${model}`),
-  specs: { technology: "NVR", channels, incomingBandwidthMbps: bandwidth, maxDecodeMp: 12, driveBays: bays, maxDriveCapacityTb: maxTb, raidLevels: bays >= 4 ? ["RAID 0", "RAID 1", "RAID 5"] : [], builtInPoePorts: channels <= 16 ? channels : 0, codecs: ["H.265+", "H.265", "H.264"], maxCameraResolutionMp: 12 }
+  specs: { technology: "NVR", channels, incomingBandwidthMbps: bandwidth, maxDecodeMp: 12, driveBays: bays, maxDriveCapacityTb: maxTb, raidLevels: bays >= 4 ? ["RAID 0", "RAID 1", "RAID 5"] : [], builtInPoePorts: channels <= 16 ? channels : 0, codecs: ["H.265+", "H.265", "H.264"], maxCameraResolutionMp: 12, outgoingBandwidthMbps: Math.max(48, Math.round(bandwidth * 0.5)), decodeCapacityMp: Math.max(32, Math.min(160, channels * 4)), maxSimultaneousDecodeChannels: Math.max(8, Math.min(channels, 24)), basePowerW: 12 + channels * 0.55, drivePowerPerBayW: 9 }
 }));
 
 const switchModels = [
@@ -160,7 +160,7 @@ const generatedSwitches: CatalogProduct[] = switchModels.map(([id, wooId, model,
   id, wooId, sku: model, name: `سوئیچ PoE اپتینت مدل ${model}`, brand: "OptiNet", category: "switch", price: 4_800_000 + ports * 880_000 + budget * 12_000,
   stockStatus: index === 8 ? "low_stock" : "in_stock", stockQuantity: 5 + ((index * 5) % 20), warrantyMonths: 18, sourceUrl: productUrl(id.replace("sw-opti-", "")), source: "mock-ddcpersia",
   images: assetImages(switchGalleries[gallery], `تصویر سوئیچ ${model}`),
-  specs: { poePorts: ports, totalPorts: ports + (ports >= 16 ? 4 : 2), poeBudgetW: budget, maxPowerPerPortW: 30, uplinkGbps: ports >= 24 ? 4 : 2, extendRangeM: 250, managed: ports >= 16 || index % 3 === 0, surgeProtection: true }
+  specs: { poePorts: ports, totalPorts: ports + (ports >= 16 ? 4 : 2), poeBudgetW: budget, maxPowerPerPortW: 30, uplinkGbps: ports >= 24 ? 4 : 2, extendRangeM: 250, managed: ports >= 16 || index % 3 === 0, surgeProtection: true, systemPowerW: 6 + ports * 0.65, poeEfficiency: ports >= 24 ? 0.92 : 0.9 }
 }));
 
 const generatedStorage: CatalogProduct[] = [2, 8, 14, 18, 20, 22].map((capacity, index) => ({
@@ -168,7 +168,7 @@ const generatedStorage: CatalogProduct[] = [2, 8, 14, 18, 20, 22].map((capacity,
   name: `هارد نظارتی ${index % 2 ? "Seagate SkyHawk" : "WD Purple Pro"} ظرفیت ${capacity}TB`, brand: index % 2 ? "Seagate" : "Western Digital", category: "storage",
   price: 4_600_000 + capacity * 1_720_000, stockStatus: capacity >= 20 ? "low_stock" : "in_stock", stockQuantity: Math.max(3, 24 - capacity), warrantyMonths: capacity >= 14 ? 36 : 24,
   sourceUrl: productUrl(`surveillance-drive-${capacity}tb`), source: "mock-ddcpersia", images: assetImages(["ai-surveillance-drive.webp"], `تصویر مفهومی هارد ${capacity} ترابایت`, "ai-generated"),
-  specs: { capacityTb: capacity, workloadTbPerYear: capacity >= 14 ? 550 : 180, surveillanceOptimized: true, warrantyMonths: capacity >= 14 ? 36 : 24 }
+  specs: { capacityTb: capacity, workloadTbPerYear: capacity >= 14 ? 550 : 180, surveillanceOptimized: true, warrantyMonths: capacity >= 14 ? 36 : 24, activePowerW: capacity >= 14 ? 9.5 : 7.5 }
 }));
 
 const generatedUps: CatalogProduct[] = [
