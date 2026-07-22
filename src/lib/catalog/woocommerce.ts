@@ -135,7 +135,11 @@ function recorderSpecs(text: string, warnings: string[]): RecorderSpecs {
   const channels = numberFrom(text, /(\d+)\s*(?:channel|کانال)/i, 8, "تعداد کانال تخمینی است.", warnings);
   const incomingBandwidthMbps = numberFrom(text, /(\d+)\s*mbps/i, channels * 10, "پهنای‌باند تخمینی است.", warnings);
   const driveBays = numberFrom(text, /(\d+)\s*(?:hdd|sata|bay|هارد)/i, channels > 16 ? 4 : channels > 8 ? 2 : 1, "تعداد Bay تخمینی است.", warnings);
-  const raidLevels = ["RAID 0", "RAID 1", "RAID 5", "RAID 6", "RAID 10"].filter((level) => text.includes(level.toLowerCase()));
+  let raidLevels = ["RAID 0", "RAID 1", "RAID 5", "RAID 6", "RAID 10"].filter((level) => text.includes(level.toLowerCase()));
+  if (!raidLevels.length && driveBays >= 2) {
+    raidLevels = driveBays >= 6 ? ["RAID 0", "RAID 1", "RAID 5", "RAID 6", "RAID 10"] : driveBays >= 4 ? ["RAID 0", "RAID 1", "RAID 5", "RAID 10"] : ["RAID 0", "RAID 1"];
+    warnings.push("سطوح RAID پشتیبانی‌شده تخمینی است (بر اساس تعداد Bay).");
+  }
   return { technology: text.includes("dvr") ? "DVR" : "NVR", channels, incomingBandwidthMbps, outgoingBandwidthMbps: incomingBandwidthMbps * 0.5, maxDecodeMp: 8, decodeCapacityMp: Math.max(32, channels * 4), maxSimultaneousDecodeChannels: Math.min(channels, 24), driveBays, maxDriveCapacityTb: 18, raidLevels, builtInPoePorts: /poe/i.test(text) ? channels : 0, codecs: ["H.265+", "H.265", "H.264"], maxCameraResolutionMp: 12, basePowerW: 12 + channels * .55, drivePowerPerBayW: 9 };
 }
 

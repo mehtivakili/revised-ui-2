@@ -586,6 +586,10 @@ p {
 .selected-plan-head { align-items:flex-start; padding:20px; background:linear-gradient(135deg,#f5fbfe,#eef7fc); }
 .selected-plan-head h2 { margin:8px 0 2px; font-size:23px; }.selected-plan-head p { margin:0;color:var(--muted);font-size:12px; }
 .plan-score { padding:5px 8px; color:#147553; background:#dcf5eb; border-radius:7px; font-size:11px;font-weight:900; }
+.plan-price { display:flex; flex-direction:column; align-items:flex-end; gap:4px; text-align:left; }
+.plan-price span { color:var(--muted); font-size:11px; }
+.plan-price strong { font-size:24px; font-weight:900; color:#0f5f92; }
+.plan-price small { color:var(--muted); font-size:10px; }
 .rejected-options { margin-top:14px;padding:14px;background:#fff9ed;border:1px solid #f1dfb4;border-radius:13px; }
 .rejected-options summary { display:flex;align-items:center;justify-content:space-between;color:#8b641c;font-size:12px;font-weight:900;cursor:pointer; }
 .rejected-options ul { display:grid;gap:8px;margin:12px 0 0;padding:0;list-style:none; }.rejected-options li { display:grid;gap:2px;font-size:11px; }.rejected-options li span { color:#836f4b; }
@@ -6387,6 +6391,12 @@ h3 {
   display: grid;
   gap: 6px;
   justify-items: end;
+}
+
+.item-price {
+  font-size: 15px;
+  font-weight: 900;
+  color: #0f5f92;
 }
 
 .item-edit > div {

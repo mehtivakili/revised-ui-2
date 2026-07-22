@@ -28,7 +28,8 @@ type SwitchSelection = { product: CatalogProduct; quantity: number; poeBudgetW: 
 const round = (value: number, digits = 1) => Number(value.toFixed(digits));
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const productCost = (product: CatalogProduct, quantity = 1) => product.price * quantity;
-const available = (product: CatalogProduct) => product.stockStatus !== "out_of_stock";
+const available = (product: CatalogProduct) => product.stockStatus !== "out_of_stock" && product.price > 0;
+const unavailableReason = (product: CatalogProduct) => product.stockStatus === "out_of_stock" ? "محصول ناموجود است." : "قیمت معتبر برای این محصول ثبت نشده است.";
 
 function inputFingerprint(brief: ProjectBrief) {
   const value = JSON.stringify(brief);
@@ -162,7 +163,7 @@ function switchCandidate(
 ): { selection?: SwitchSelection; failures: string[] } {
   const specs = product.specs as SwitchSpecs;
   const failures: string[] = [];
-  if (!available(product)) failures.push("ناموجود است.");
+  if (!available(product)) failures.push(unavailableReason(product));
   if (specs.maxPowerPerPortW < maxCameraW) failures.push(`توان هر پورت ${specs.maxPowerPerPortW}W کمتر از ${maxCameraW}W است.`);
   if (professional && !specs.managed) failures.push("برای پلن حرفه‌ای Managed نیست.");
   if (maxCableRunM > 100 && specs.extendRangeM < maxCableRunM) failures.push("برد کابل اعلام‌شده کمتر از مسیر پروژه است.");
@@ -222,7 +223,7 @@ function remoteRequirements(cameraSelections: CameraSelection[], remoteUsers: nu
 
 function cameraEvaluations(products: CatalogProduct[], zones: ProjectZone[], brief: ProjectBrief, selectedIds: Set<string>): ProductEvaluation[] {
   return products.filter((product) => product.category === "camera").map((product) => {
-    if (!available(product)) return { productId: product.id, productName: product.name, category: product.category, status: "rejected", reasons: [], failedConstraints: ["محصول ناموجود است."] };
+    if (!available(product)) return { productId: product.id, productName: product.name, category: product.category, status: "rejected", reasons: [], failedConstraints: [unavailableReason(product)] };
     const evaluations = evaluateCameraProduct(product, zones, brief);
     const passed = evaluations.filter(({ evaluation }) => evaluation.accepted);
     const selected = selectedIds.has(product.id);
@@ -250,7 +251,7 @@ function catalogEvaluations(
     const failures = recorderFailures(product.specs as RecorderSpecs, cameraSelections, requiredChannels, incomingBandwidthMbps, outgoingBandwidthMbps, decodeDemandMp, simultaneousDecodeChannels);
     if (requireRaid && normalizedRaidLevels(product.specs as RecorderSpecs).length === 0) failures.push("RAID پشتیبانی نمی‌شود.");
     if (!storageOptions(products, product, storageRequiredTb, requireRaid, profile.id === "professional").length) failures.push("هیچ ترکیب هاردی ظرفیت usable لازم را تأمین نمی‌کند.");
-    if (!available(product)) failures.push("محصول ناموجود است.");
+    if (!available(product)) failures.push(unavailableReason(product));
     evaluations.push({
       productId: product.id, productName: product.name, category: product.category,
       status: selectedIds.has(product.id) ? "selected" : failures.length ? "rejected" : "accepted",
@@ -262,7 +263,7 @@ function catalogEvaluations(
   for (const product of products.filter((item) => item.category === "storage")) {
     const options = storageOptions([product], selectedRecorder, storageRequiredTb, requireRaid, profile.id === "professional");
     const failures = options.length ? [] : ["با تعداد Bay، سقف ظرفیت دیسک و RAID دستگاه منتخب به ظرفیت usable لازم نمی‌رسد."];
-    if (!available(product)) failures.push("محصول ناموجود است.");
+    if (!available(product)) failures.push(unavailableReason(product));
     evaluations.push({ productId: product.id, productName: product.name, category: product.category, status: selectedIds.has(product.id) ? "selected" : failures.length ? "rejected" : "accepted", reasons: failures.length ? [] : [`قابل استفاده در ${options.length} آرایش معتبر دیسک`], failedConstraints: failures });
   }
 
@@ -274,7 +275,7 @@ function catalogEvaluations(
   for (const product of products.filter((item) => item.category === "ups")) {
     const result = evaluateUps(product.specs as UpsSpecs, upsLoadW, requiredRuntimeMin);
     const failures: string[] = [];
-    if (!available(product)) failures.push("محصول ناموجود است.");
+    if (!available(product)) failures.push(unavailableReason(product));
     if (!result.wattCapacityOk) failures.push("توان خروجی با حاشیه ۲۵٪ کافی نیست.");
     if (!result.vaCapacityOk) failures.push("ظرفیت VA کافی نیست.");
     if (!result.runtimeOk) failures.push(`Runtime برآوردی ${round(result.estimatedRuntimeMin)} دقیقه کمتر از ${requiredRuntimeMin} دقیقه است.`);
