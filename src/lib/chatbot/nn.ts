@@ -33,13 +33,21 @@ export type NetworkConfig = {
   seed: number;
 };
 
+/**
+ * Capacity and regularisation are deliberately conservative.
+ *
+ * The first version used 192/96 hidden units with dropout 0.15 and decay 1e-5, which is
+ * ~216k parameters against a few hundred samples: it reached 100% training accuracy and
+ * 58% on held-out paraphrases. Halving the width and raising both regularisers trades
+ * training accuracy — which was meaningless — for generalisation.
+ */
 export const defaultNetworkConfig: NetworkConfig = {
   inputDim: 1024,
-  hiddenUnits: [192, 96],
+  hiddenUnits: [128, 64],
   outputDim: 0,
-  dropout: 0.15,
+  dropout: 0.25,
   learningRate: 0.006,
-  weightDecay: 1e-5,
+  weightDecay: 2e-4,
   batchSize: 32,
   seed: 20260722
 };
@@ -245,6 +253,21 @@ export class DeepClassifier {
     const keepScale = 1 / (1 - rate);
     for (let index = 0; index < size; index += 1) mask[index] = this.random() < rate ? 0 : keepScale;
     return mask;
+  }
+
+  /** Full-precision copy, used to roll back to the best validation epoch. */
+  snapshotWeights(): { weights: Float32Array; bias: Float32Array }[] {
+    return this.layers.map((layer) => ({
+      weights: Float32Array.from(layer.weights),
+      bias: Float32Array.from(layer.bias)
+    }));
+  }
+
+  restoreWeights(snapshot: { weights: Float32Array; bias: Float32Array }[]) {
+    for (let index = 0; index < this.layers.length; index += 1) {
+      this.layers[index].weights.set(snapshot[index].weights);
+      this.layers[index].bias.set(snapshot[index].bias);
+    }
   }
 
   /** int8-quantised snapshot small enough for localStorage. */

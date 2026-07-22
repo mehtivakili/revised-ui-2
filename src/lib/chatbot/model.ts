@@ -1,4 +1,4 @@
-import { buildTrainingSamples, chatIntents, corpusFingerprint, type ChatIntent } from "@/src/lib/chatbot/corpus";
+import { buildSplitSamples, chatIntents, corpusFingerprint, type ChatIntent } from "@/src/lib/chatbot/corpus";
 import { DeepClassifier, defaultNetworkConfig, mulberry32, type SerializedModel, type SparseVector } from "@/src/lib/chatbot/nn";
 import { vectorize } from "@/src/lib/chatbot/vectorizer";
 
@@ -29,13 +29,15 @@ export type Classification = {
   ranked: { intent: ChatIntent; score: number }[];
 };
 
-const totalEpochs = 90;
+const totalEpochs = 80;
 /** Wall-clock budget per slice. Long enough to make progress, short enough not to stutter. */
 const sliceBudgetMs = 40;
+/** Epochs of no validation improvement before training stops. */
+const patience = 14;
 const storagePrefix = "hamyardoorbin.assistant.model";
 
 function storageKey() {
-  return `${storagePrefix}.v1.${corpusFingerprint()}`;
+  return `${storagePrefix}.v2.${corpusFingerprint()}`;
 }
 
 export class AssistantModel {
@@ -44,6 +46,11 @@ export class AssistantModel {
   private classifier: DeepClassifier | null = null;
   private vectors: SparseVector[] = [];
   private labels: number[] = [];
+  private validationVectors: SparseVector[] = [];
+  private validationLabels: number[] = [];
+  private bestValidation = -1;
+  private bestSnapshot: ReturnType<DeepClassifier["snapshotWeights"]> | null = null;
+  private epochsSinceImprovement = 0;
   private listeners = new Set<(state: ModelState) => void>();
   private started = false;
   private random = mulberry32(defaultNetworkConfig.seed ^ 0x5f3759df);
@@ -89,9 +96,11 @@ export class AssistantModel {
     // Vectorising the whole corpus is cheap but not free; keep it off the first paint.
     this.defer(() => {
       const config = { ...defaultNetworkConfig, outputDim: chatIntents.length };
-      const samples = buildTrainingSamples();
-      this.vectors = samples.map((sample) => vectorize(sample.text, config.inputDim));
-      this.labels = samples.map((sample) => sample.label);
+      const { train, validation } = buildSplitSamples();
+      this.vectors = train.map((sample) => vectorize(sample.text, config.inputDim));
+      this.labels = train.map((sample) => sample.label);
+      this.validationVectors = validation.map((sample) => vectorize(sample.text, config.inputDim));
+      this.validationLabels = validation.map((sample) => sample.label);
 
       if (this.loadFromCache(config)) return;
 
@@ -165,15 +174,33 @@ export class AssistantModel {
       epoch += 1;
     } while (epoch < totalEpochs && Date.now() < deadline);
 
+    // Early stopping. Validation is measured on held-out *utterances*, so an improvement
+    // here reflects generalisation rather than another pass over memorised sentences.
+    const validationAccuracy = this.evaluate(this.validationVectors, this.validationLabels);
+    if (validationAccuracy > this.bestValidation) {
+      this.bestValidation = validationAccuracy;
+      this.bestSnapshot = classifier.snapshotWeights();
+      this.epochsSinceImprovement = 0;
+    } else {
+      this.epochsSinceImprovement += 1;
+    }
+
     const target = epoch;
-    const done = target >= totalEpochs;
+    const exhausted = target >= totalEpochs;
+    const stalled = this.epochsSinceImprovement >= patience;
+    const done = exhausted || stalled;
+
+    // Roll back to the best validation epoch rather than shipping the last one, which
+    // is usually further into overfitting.
+    if (done && this.bestSnapshot) classifier.restoreWeights(this.bestSnapshot);
+
     this.setState({
       epoch: target,
-      progress: target / totalEpochs,
+      progress: done ? 1 : target / totalEpochs,
       loss: batches ? loss / batches : this.state.loss,
       status: done ? "ready" : "training",
       origin: done ? "trained" : this.state.origin,
-      accuracy: done ? this.evaluate() : this.state.accuracy
+      accuracy: done ? this.bestValidation : this.state.accuracy
     });
 
     if (done) this.persist();
@@ -189,19 +216,19 @@ export class AssistantModel {
     return order;
   }
 
-  private evaluate(): number {
+  private evaluate(vectors = this.vectors, labels = this.labels): number {
     const classifier = this.classifier;
-    if (!classifier || !this.vectors.length) return 0;
+    if (!classifier || !vectors.length) return 0;
     let correct = 0;
-    for (let index = 0; index < this.vectors.length; index += 1) {
-      const output = classifier.predict(this.vectors[index]);
+    for (let index = 0; index < vectors.length; index += 1) {
+      const output = classifier.predict(vectors[index]);
       let best = 0;
       for (let unit = 1; unit < output.length; unit += 1) {
         if (output[unit] > output[best]) best = unit;
       }
-      if (best === this.labels[index]) correct += 1;
+      if (best === labels[index]) correct += 1;
     }
-    return correct / this.vectors.length;
+    return correct / vectors.length;
   }
 
   private persist() {

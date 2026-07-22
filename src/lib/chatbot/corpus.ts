@@ -1,3 +1,5 @@
+import { augmentUtterance, utteranceSeed } from "@/src/lib/chatbot/augment";
+
 /**
  * Labelled Persian training corpus for the intent network.
  *
@@ -62,7 +64,10 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "hi",
     "hello",
     "سلام هستی؟",
-    "سلام دستیار"
+    "سلام دستیار",
+    "سلام خسته نباشید",
+    "سلام خوبید",
+    "وقت بخیر"
   ],
   identity: [
     "تو کی هستی",
@@ -84,7 +89,10 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "خیلی ممنونم کمک کردی",
     "عالی بود دمت گرم",
     "سپاسگزارم",
-    "لطف کردی"
+    "لطف کردی",
+    "مرسی از راهنمایی",
+    "ممنون از کمکت",
+    "تشکر"
   ],
   help_menu: [
     "چه کارهایی میتونی انجام بدی",
@@ -108,7 +116,11 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "محاسبه storage دوربین مداربسته",
     "فضای دیسک مورد نیاز ۱۲ دوربین ۵ مگاپیکسل",
     "برای ذخیره یک هفته تصویر چقدر هارد بخرم",
-    "حجم ضبط ۲۴ ساعته چقدره"
+    "حجم ضبط ۲۴ ساعته چقدره",
+    "میخوام بدونم برای ۲۴ تا دوربین چند ترابایت هارد بخرم",
+    "هارد ۸ ترابایت برای ۱۲ دوربین چند روز کفاف میده",
+    "فضای مورد نیاز برای بایگانی دو ماهه",
+    "چقدر جا میخواد برای نگهداری تصاویر"
   ],
   calc_bandwidth: [
     "پهنای باند ۱۶ دوربین چقدره",
@@ -120,7 +132,10 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "پهنای باند آپلود برای ۸ دوربین",
     "مجموع بیتریت ۲۰ دوربین ۴ مگاپیکسل",
     "چقدر باند مصرف میکنه",
-    "نیاز شبکه به مگابیت بر ثانیه"
+    "نیاز شبکه به مگابیت بر ثانیه",
+    "اینترنت من ۲۰ مگ آپلود داره برای ۱۰ دوربین کافیه",
+    "مصرف شبکه هر دوربین ۴ مگاپیکسل چقدره",
+    "سرعت اینترنت برای دیدن دوربین از بیرون"
   ],
   calc_lens_focal: [
     "لنز چند میلیمتر بگیرم",
@@ -132,7 +147,10 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "focal length چقدر باشه",
     "لنز ۴ میلیمتر تا کجا رو میبینه",
     "انتخاب لنز بر اساس فاصله",
-    "چه لنزی برای عرض ۱۰ متر"
+    "چه لنزی برای عرض ۱۰ متر",
+    "میخوام از ۴۰ متری صورت طرف رو تشخیص بدم چه لنزی",
+    "برای شناسایی چهره در ۲۵ متری چه لنزی بگیرم",
+    "لنز چند میلیمتری برای این فاصله مناسبه"
   ],
   calc_fov: [
     "زاویه دید لنز ۴ میلیمتر چقدره",
@@ -245,7 +263,10 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "4k یعنی چند مگاپیکسل",
     "full hd چه رزولوشنی است",
     "دوربین ۸ مگاپیکسل بهتره",
-    "کیفیت تصویر چقدر باشه خوبه"
+    "کیفیت تصویر چقدر باشه خوبه",
+    "دوربین ۸ مگ بگیرم یا ۴ مگ بهتره",
+    "چند مگاپیکسل برای مغازه کافیه",
+    "بین ۲ و ۵ مگاپیکسل کدوم رو انتخاب کنم"
   ],
   info_sensor: [
     "سنسور دوربین چیه",
@@ -253,14 +274,20 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "سنسور یک دوم اینچ بهتره یا یک سوم",
     "starvis چیه",
     "اندازه سنسور چه تاثیری داره",
-    "cmos و ccd فرق دارن"
+    "cmos و ccd فرق دارن",
+    "چرا تصویر شب دوربینم پر نویزه سنسورش ضعیفه",
+    "سنسور بزرگتر چه فایده ای داره",
+    "کدوم سنسور تو تاریکی بهتر جواب میده"
   ],
   info_codec: [
     "فرق h264 و h265 چیه",
     "کدک بهتر برای دوربین",
     "h265+ چقدر حجم کم میکنه",
     "smart codec یعنی چی",
-    "codec تصویر چیه"
+    "codec تصویر چیه",
+    "h265 چقدر تو حجم صرفه جویی میکنه",
+    "کدوم فشرده سازی حجم کمتری میگیره",
+    "دستگاهم h265 نداره مشکلی پیش میاد"
   ],
   info_ip_rating: [
     "ip66 یعنی چی",
@@ -268,7 +295,10 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "دوربین ضد آب کدومه",
     "ik10 چیه",
     "برای فضای باز چه ip ratingی",
-    "مقاومت دوربین در برابر گرد و غبار"
+    "مقاومت دوربین در برابر گرد و غبار",
+    "دوربین بیرونی باید چه استانداردی داشته باشه بارون نخوره",
+    "دوربین ضد ضربه برای پارکینگ میخوام",
+    "این دوربین زیر بارون خراب نمیشه"
   ],
   info_night_vision: [
     "دید در شب چطور کار میکنه",
@@ -283,7 +313,10 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "فرق dwdr و true wdr",
     "نور پشت سوژه رو چطور حل کنم",
     "blc و hlc یعنی چی",
-    "۱۲۰ دسیبل wdr خوبه"
+    "۱۲۰ دسیبل wdr خوبه",
+    "جلوی در نور خورشید میزنه چهره سیاه میشه",
+    "پشت سوژه نور زیاده تصویر تیره میشه",
+    "نور چراغ ماشین تصویر رو میسوزونه"
   ],
   info_ptz: [
     "دوربین ptz چیه",
@@ -311,14 +344,20 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "802.3af و 802.3at فرقشون",
     "poe++ چند وات میده",
     "پسیو poe خوبه",
-    "برق دوربین از کابل شبکه"
+    "برق دوربین از کابل شبکه",
+    "سوییچ من at هست دوربینم af میخوره",
+    "دوربینم چند وات برق میخواد از سوییچ",
+    "استاندارد تغذیه دوربین روی کابل شبکه"
   ],
   info_onvif: [
     "onvif چیه",
     "profile s یعنی چی",
     "دوربین برند دیگه به دستگاه وصل میشه",
     "rtsp چیه",
-    "سازگاری برندهای مختلف"
+    "سازگاری برندهای مختلف",
+    "دوربین داهوا رو به ان وی ار هایک وصل کنم میشه",
+    "دوربین تیاندی با دستگاه برند دیگه کار میکنه",
+    "دوربین یه برند دیگه رو دستگاهم شناسایی نمیشه"
   ],
   info_ai: [
     "قابلیت هوش مصنوعی دوربین",
@@ -327,7 +366,10 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "تشخیص انسان و خودرو",
     "پلاک خوان چطوره",
     "خط کشی مجازی و تجاوز به محدوده",
-    "perimeter protection یعنی چی"
+    "perimeter protection یعنی چی",
+    "میخوام وقتی آدم رد شد زنگ بزنه نه وقتی گربه",
+    "دوربین هوشمند که آدم و ماشین رو تشخیص بده",
+    "هشدار الکی زیاد میده چیکار کنم"
   ],
   info_lens_type: [
     "لنز واریفوکال چیه",
@@ -371,7 +413,11 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "مدل tc-c32 رو نشون بده",
     "جستجوی محصول",
     "دوربین بولت بیرونی موجود",
-    "چه برندهایی دارید"
+    "چه برندهایی دارید",
+    "چه دوربینایی دارید",
+    "چی موجود دارید نشونم بدید",
+    "محصولاتتون رو ببینم",
+    "دوربین تیاندی موجود دارید"
   ],
   product_price: [
     "قیمت دوربین چنده",
@@ -382,7 +428,11 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "گرون ترین محصول",
     "لیست قیمت",
     "بودجه ۵۰ میلیون چی میتونم بگیرم",
-    "قیمت سوئیچ poe"
+    "قیمت سوئیچ poe",
+    "ارزونترین ان وی ار چنده",
+    "ارزون ترین دوربین چقدره",
+    "قیمت دوربین تیاندی چنده",
+    "یه پکیج کامل چقدر آب میخوره"
   ],
   product_compare: [
     "این دو تا رو مقایسه کن",
@@ -400,7 +450,10 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "برای پارکینگ چی بگیرم",
     "طراحی سیستم نظارتی برای دفتر",
     "چه چیزهایی برای راه اندازی لازم دارم",
-    "یک راهکار پیشنهاد بده"
+    "یک راهکار پیشنهاد بده",
+    "برای یه انبار ۲۰۰۰ متری چی لازم دارم",
+    "میخوام برای ویلام دوربین بذارم چی پیشنهاد میدی",
+    "کل سیستم برای یه ساختمان چی میخواد"
   ],
   brand_info: [
     "برند tiandy خوبه",
@@ -408,7 +461,10 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "hikvision یا dahua",
     "گارانتی برندها چطوره",
     "درباره برند هایلوک بگو",
-    "برند ایرانی داریم"
+    "برند ایرانی داریم",
+    "تیاندی بهتره یا هایک ویژن",
+    "داهوا خوبه یا تیاندی",
+    "کدوم برند گارانتی بهتری داره"
   ],
   contact: [
     "شماره تماس",
@@ -416,7 +472,11 @@ export const trainingCorpus: Record<ChatIntent, string[]> = {
     "آدرس فروشگاه",
     "پشتیبانی",
     "ساعت کاری",
-    "با کارشناس صحبت کنم"
+    "با کارشناس صحبت کنم",
+    "شماره تلفنتون چنده",
+    "شماره تماستون رو بدید",
+    "کجا هستید آدرستون",
+    "چطور سفارش بدم"
   ]
 };
 
@@ -424,12 +484,50 @@ export const chatIntents = Object.keys(trainingCorpus) as ChatIntent[];
 
 export type TrainingSample = { text: string; label: number };
 
+/**
+ * Paraphrases generated per hand-written utterance.
+ *
+ * Chosen so the corpus lands near 2,000 samples: enough to stop the network memorising
+ * individual sentences, small enough that a cold first-load still trains in seconds.
+ */
+export const variantsPerUtterance = 4;
+
 export function buildTrainingSamples(): TrainingSample[] {
   const samples: TrainingSample[] = [];
   chatIntents.forEach((intent, label) => {
-    for (const text of trainingCorpus[intent]) samples.push({ text, label });
+    for (const text of trainingCorpus[intent]) {
+      for (const variant of augmentUtterance(text, variantsPerUtterance, utteranceSeed(text, label))) {
+        samples.push({ text: variant, label });
+      }
+    }
   });
   return samples;
+}
+
+/**
+ * Stratified split for early stopping.
+ *
+ * The split is by *source utterance*, not by sample: putting a paraphrase of sentence X
+ * in validation while X itself is in training leaks, and would report an accuracy the
+ * model has not earned.
+ */
+export function buildSplitSamples(validationRatio = 0.18): { train: TrainingSample[]; validation: TrainingSample[] } {
+  const train: TrainingSample[] = [];
+  const validation: TrainingSample[] = [];
+
+  chatIntents.forEach((intent, label) => {
+    const utterances = trainingCorpus[intent];
+    // Deterministic every-Nth pick keeps at least one utterance per intent in validation.
+    const stride = Math.max(2, Math.round(1 / validationRatio));
+    utterances.forEach((text, index) => {
+      const target = index % stride === stride - 1 ? validation : train;
+      for (const variant of augmentUtterance(text, variantsPerUtterance, utteranceSeed(text, label))) {
+        target.push({ text: variant, label });
+      }
+    });
+  });
+
+  return { train, validation };
 }
 
 /** Version tag for the cached weights. Bump implicitly whenever the corpus changes. */

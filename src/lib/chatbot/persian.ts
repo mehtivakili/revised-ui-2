@@ -99,12 +99,74 @@ const lexicalSynonyms: Record<string, string> = {
   "mbps": "مگابیت",
   "kbps": "کیلوبیت",
   "tb": "ترابایت",
-  "gb": "گیگابایت"
+  "gb": "گیگابایت",
+
+  // Colloquial spellings. Held-out testing showed these were the single biggest source
+  // of zero-confidence classifications: the written form never appears in the corpus.
+  "ارزون": "ارزان",
+  "ارزونترین": "ارزان",
+  "گرون": "گران",
+  "گرونترین": "گران",
+  "چنده": "چند",
+  "چقدره": "چقدر",
+  "چیه": "چیست",
+  "کدوم": "کدام",
+  "اینا": "این",
+  "دوربینا": "دوربین",
+  "دوربینایی": "دوربین",
+  "دوربینامو": "دوربین",
+  "دوربینام": "دوربین",
+  "میخوام": "خواستن",
+  "میخام": "خواستن",
+  "بخرم": "خرید",
+  "بگیرم": "خرید",
+  "نگهداری": "آرشیو",
+  "بایگانی": "آرشیو",
+
+  // Persian-script brand names, folded onto the Latin form the corpus uses.
+  "تیاندی": "tiandy",
+  "هایک": "hikvision",
+  "هایکویژن": "hikvision",
+  "داهوا": "dahua",
+  "دیهوا": "dahua",
+  "هایلوک": "hilook",
+  "یونیویو": "uniview",
+  "ویوتک": "vivotek",
+  "اکسیس": "axis"
 };
+
+/**
+ * Multi-word forms collapsed before tokenisation.
+ *
+ * Applied in `tokenize` only, never in `normalizePersian`: the slot extractor matches
+ * unit spellings such as "میلی وات" against the normalised string, and rewriting them
+ * here would break those patterns.
+ */
+const phraseSynonyms: [RegExp, string][] = [
+  [/\bهایک ویژن\b/g, "hikvision"],
+  [/\bهایک ویزن\b/g, "hikvision"],
+  [/\bیونی ویو\b/g, "uniview"],
+  [/\bان وی ار\b/g, "nvr"],
+  [/\bدی وی ار\b/g, "dvr"],
+  [/\bاکس وی ار\b/g, "xvr"],
+  [/\bپی او ای\b/g, "poe"],
+  [/\bیو پی اس\b/g, "ups"],
+  [/\bدی بی ام\b/g, "dbm"],
+  [/\bدی بی ای\b/g, "dbi"],
+  [/\bمدار بسته\b/g, "مداربسته"],
+  [/\bفضای باز\b/g, "بیرونی"],
+  [/\bدید در شب\b/g, "دیدرشب"],
+  [/\bپلاک خوان\b/g, "anpr"],
+  [/\bپلاک خون\b/g, "anpr"],
+  [/\bزاویه دید\b/g, "زاویه‌دید"],
+  [/\bپهنای باند\b/g, "پهنای‌باند"],
+  [/\bفاصله کانونی\b/g, "کانونی"]
+];
 
 /** Suffixes stripped by the light stemmer, longest first. */
 const suffixes = [
   "هایی",
+  "ایی",
   "هایم",
   "هایت",
   "هایش",
@@ -150,12 +212,16 @@ export function stem(token: string): string {
       return token.slice(0, -suffix.length);
     }
   }
+  // Colloquial plural ("دوربینا"). Length-gated so ordinary words ending in alef
+  // — بالا، دنیا، صدا — are left alone.
+  if (token.length >= 6 && token.endsWith("ا")) return token.slice(0, -1);
   return token;
 }
 
 export function tokenize(input: string): string[] {
-  const normalized = normalizePersian(input);
+  let normalized = normalizePersian(input);
   if (!normalized) return [];
+  for (const [pattern, replacement] of phraseSynonyms) normalized = normalized.replace(pattern, replacement);
   return normalized
     .split(" ")
     .filter(Boolean)

@@ -1,0 +1,162 @@
+import type { SurveillanceTask } from "@/src/domain/catalog/types";
+
+/**
+ * Floor plan model for the site designer.
+ *
+ * Everything is stored in metres in plan space, with +x to the right and +z "down" the
+ * page — the same convention the three.js scene uses for its ground plane, so no unit or
+ * axis conversion happens between the editor, the coverage engine and the 3D view.
+ *
+ * Heights are metres above the floor of the storey the element belongs to, not absolute
+ * elevation; a floor's own `elevationM` positions it in the stacked 3D view.
+ */
+
+export type Vec2 = { x: number; z: number };
+
+export type PlanWall = {
+  id: string;
+  a: Vec2;
+  b: Vec2;
+  heightM: number;
+  thicknessM: number;
+  /** Glass and low partitions bound the space without blocking the camera's line of sight. */
+  blocksView: boolean;
+};
+
+export type ObstacleKind = "block" | "pillar" | "shelf" | "vehicle" | "counter";
+
+export type PlanObstacle = {
+  id: string;
+  label: string;
+  kind: ObstacleKind;
+  center: Vec2;
+  widthM: number;
+  depthM: number;
+  heightM: number;
+  rotationDeg: number;
+  blocksView: boolean;
+};
+
+/**
+ * Optics for one placed camera.
+ *
+ * Held per camera rather than per project so a single floor can mix, for example, a
+ * long-lens plate reader on the ramp with a wide turret over the till.
+ */
+export type PlanCameraOptics = {
+  megapixel: number;
+  sensorWidthMm: number;
+  focalMm: number;
+  mountHeightM: number;
+  tiltDeg: number;
+  irRangeM: number;
+  /** Hard cap on the drawn wedge; beyond this the image is not useful regardless of maths. */
+  maxRangeM: number;
+};
+
+export type PlanCamera = {
+  id: string;
+  name: string;
+  /** Links the placement back to a wizard zone so counts and goals stay in sync. */
+  zoneId?: string;
+  position: Vec2;
+  yawDeg: number;
+  goal: SurveillanceTask;
+  optics: PlanCameraOptics;
+  productId?: string;
+};
+
+/**
+ * An uploaded plan drawing positioned in plan space.
+ *
+ * `metresPerPixel` comes from the two-point calibration: the user clicks a known span on
+ * the image and types its real length. Until that is done the image is decorative and
+ * the designer will not derive dimensions from it.
+ */
+export type PlanBackdrop = {
+  imageUrl: string;
+  widthPx: number;
+  heightPx: number;
+  /** Plan-space position of the image's top-left corner. */
+  originM: Vec2;
+  metresPerPixel: number;
+  opacity: number;
+  calibrated: boolean;
+};
+
+export type FloorPlan = {
+  id: string;
+  name: string;
+  elevationM: number;
+  heightM: number;
+  walls: PlanWall[];
+  obstacles: PlanObstacle[];
+  cameras: PlanCamera[];
+  backdrop?: PlanBackdrop;
+};
+
+export type BuildingPlan = {
+  floors: FloorPlan[];
+  activeFloorId: string;
+  gridSizeM: number;
+  snapM: number;
+};
+
+export type PlanTool = "select" | "wall" | "obstacle" | "camera" | "measure";
+export type PlanViewMode = "top" | "orbit";
+
+export type PlanSelection =
+  | { kind: "wall"; id: string }
+  | { kind: "obstacle"; id: string }
+  | { kind: "camera"; id: string }
+  | null;
+
+export const defaultCameraOptics: PlanCameraOptics = {
+  megapixel: 4,
+  sensorWidthMm: 5.12,
+  focalMm: 4,
+  mountHeightM: 3,
+  tiltDeg: 12,
+  irRangeM: 30,
+  maxRangeM: 35
+};
+
+export const defaultWallHeightM = 3;
+export const defaultWallThicknessM = 0.2;
+
+export function createFloor(name: string, index: number, storeyHeightM = 3.2): FloorPlan {
+  return {
+    id: `floor-${Date.now().toString(36)}-${index}`,
+    name,
+    elevationM: index * storeyHeightM,
+    heightM: storeyHeightM,
+    walls: [],
+    obstacles: [],
+    cameras: []
+  };
+}
+
+/** Fresh ids throughout, so editing the copy never mutates the floor it came from. */
+export function duplicateFloor(source: FloorPlan, name: string, index: number): FloorPlan {
+  const stamp = Date.now().toString(36);
+  return {
+    id: `floor-${stamp}-${index}`,
+    name,
+    elevationM: index * source.heightM,
+    heightM: source.heightM,
+    walls: source.walls.map((wall, order) => ({ ...wall, id: `wall-${stamp}-${order}`, a: { ...wall.a }, b: { ...wall.b } })),
+    obstacles: source.obstacles.map((obstacle, order) => ({ ...obstacle, id: `obs-${stamp}-${order}`, center: { ...obstacle.center } })),
+    cameras: source.cameras.map((camera, order) => ({
+      ...camera,
+      id: `cam-${stamp}-${order}`,
+      position: { ...camera.position },
+      optics: { ...camera.optics }
+    })),
+    backdrop: source.backdrop ? { ...source.backdrop, originM: { ...source.backdrop.originM } } : undefined
+  };
+}
+
+export function createEmptyPlan(): BuildingPlan {
+  const ground = createFloor("طبقه همکف", 0);
+  return { floors: [ground], activeFloorId: ground.id, gridSizeM: 1, snapM: 0.25 };
+}

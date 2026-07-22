@@ -1,0 +1,215 @@
+import type { PlanObstacle, PlanWall, Vec2 } from "@/src/domain/planner/types";
+
+/** 2D plan geometry: areas, segment maths and the ray casting the coverage engine uses. */
+
+export type Segment = { a: Vec2; b: Vec2; heightM: number };
+
+export const add = (p: Vec2, q: Vec2): Vec2 => ({ x: p.x + q.x, z: p.z + q.z });
+export const sub = (p: Vec2, q: Vec2): Vec2 => ({ x: p.x - q.x, z: p.z - q.z });
+export const scale = (p: Vec2, k: number): Vec2 => ({ x: p.x * k, z: p.z * k });
+export const length = (p: Vec2) => Math.hypot(p.x, p.z);
+export const distance = (p: Vec2, q: Vec2) => Math.hypot(p.x - q.x, p.z - q.z);
+
+export function snapTo(value: number, step: number) {
+  return step > 0 ? Math.round(value / step) * step : value;
+}
+
+export function snapPoint(point: Vec2, step: number): Vec2 {
+  return { x: snapTo(point.x, step), z: snapTo(point.z, step) };
+}
+
+/** Shoelace. Returns absolute area, so winding order does not matter. */
+export function polygonArea(points: Vec2[]): number {
+  if (points.length < 3) return 0;
+  let total = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    total += current.x * next.z - next.x * current.z;
+  }
+  return Math.abs(total) / 2;
+}
+
+/** Andrew's monotone chain. Used as the area fallback when walls do not close a loop. */
+export function convexHull(points: Vec2[]): Vec2[] {
+  if (points.length < 3) return [...points];
+  const sorted = [...points].sort((p, q) => p.x - q.x || p.z - q.z);
+  const cross = (o: Vec2, a: Vec2, b: Vec2) => (a.x - o.x) * (b.z - o.z) - (a.z - o.z) * (b.x - o.x);
+
+  const build = (source: Vec2[]) => {
+    const chain: Vec2[] = [];
+    for (const point of source) {
+      while (chain.length >= 2 && cross(chain[chain.length - 2], chain[chain.length - 1], point) <= 0) chain.pop();
+      chain.push(point);
+    }
+    chain.pop();
+    return chain;
+  };
+
+  return [...build(sorted), ...build([...sorted].reverse())];
+}
+
+/** The four edges of a rotated rectangle, in plan space. */
+export function obstacleCorners(obstacle: PlanObstacle): Vec2[] {
+  const radians = (obstacle.rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const halfWidth = obstacle.widthM / 2;
+  const halfDepth = obstacle.depthM / 2;
+  return [
+    { x: -halfWidth, z: -halfDepth },
+    { x: halfWidth, z: -halfDepth },
+    { x: halfWidth, z: halfDepth },
+    { x: -halfWidth, z: halfDepth }
+  ].map((corner) => ({
+    x: obstacle.center.x + corner.x * cos - corner.z * sin,
+    z: obstacle.center.z + corner.x * sin + corner.z * cos
+  }));
+}
+
+export function obstacleSegments(obstacle: PlanObstacle): Segment[] {
+  const corners = obstacleCorners(obstacle);
+  return corners.map((corner, index) => ({
+    a: corner,
+    b: corners[(index + 1) % corners.length],
+    heightM: obstacle.heightM
+  }));
+}
+
+export function wallSegment(wall: PlanWall): Segment {
+  return { a: wall.a, b: wall.b, heightM: wall.heightM };
+}
+
+/** Occluding geometry for one floor, ready for ray casting. */
+export function collectOccluders(walls: PlanWall[], obstacles: PlanObstacle[]): Segment[] {
+  const segments: Segment[] = [];
+  for (const wall of walls) if (wall.blocksView) segments.push(wallSegment(wall));
+  for (const obstacle of obstacles) if (obstacle.blocksView) segments.push(...obstacleSegments(obstacle));
+  return segments;
+}
+
+/**
+ * Distance from `origin` along `angle` to the first segment hit, or `maxRange`.
+ *
+ * `sightHeightAt` lets the caller decide whether a given obstacle is actually tall enough
+ * to block: a camera three metres up looking down at a person sees straight over a
+ * waist-high counter, and treating that counter as a wall would invent blind spots.
+ */
+export function castRay(
+  origin: Vec2,
+  angleRad: number,
+  maxRange: number,
+  segments: Segment[],
+  sightHeightAt?: (distanceAlongRay: number) => number
+): number {
+  const dirX = Math.cos(angleRad);
+  const dirZ = Math.sin(angleRad);
+  let nearest = maxRange;
+
+  for (const segment of segments) {
+    const segX = segment.b.x - segment.a.x;
+    const segZ = segment.b.z - segment.a.z;
+    const denominator = dirX * segZ - dirZ * segX;
+    if (Math.abs(denominator) < 1e-9) continue;
+
+    const deltaX = segment.a.x - origin.x;
+    const deltaZ = segment.a.z - origin.z;
+    // t = distance along the ray, u = normalised position along the segment.
+    const t = (deltaX * segZ - deltaZ * segX) / denominator;
+    const u = (deltaX * dirZ - deltaZ * dirX) / denominator;
+    if (t <= 1e-6 || t >= nearest || u < 0 || u > 1) continue;
+
+    if (sightHeightAt && segment.heightM < sightHeightAt(t)) continue;
+    nearest = t;
+  }
+
+  return nearest;
+}
+
+/** Ordered fan of visible points across a field of view, used as the coverage polygon. */
+export function visibilityFan(
+  origin: Vec2,
+  headingRad: number,
+  fovRad: number,
+  maxRange: number,
+  segments: Segment[],
+  rays: number,
+  sightHeightAt?: (distanceAlongRay: number) => number
+): Vec2[] {
+  const points: Vec2[] = [origin];
+  const steps = Math.max(8, rays);
+  for (let index = 0; index <= steps; index += 1) {
+    const angle = headingRad - fovRad / 2 + (fovRad * index) / steps;
+    const reach = castRay(origin, angle, maxRange, segments, sightHeightAt);
+    points.push({ x: origin.x + Math.cos(angle) * reach, z: origin.z + Math.sin(angle) * reach });
+  }
+  return points;
+}
+
+export function pointInPolygon(point: Vec2, polygon: Vec2[]): boolean {
+  let inside = false;
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
+    const current = polygon[index];
+    const last = polygon[previous];
+    const straddles = current.z > point.z !== last.z > point.z;
+    if (!straddles) continue;
+    const crossingX = ((last.x - current.x) * (point.z - current.z)) / (last.z - current.z) + current.x;
+    if (point.x < crossingX) inside = !inside;
+  }
+  return inside;
+}
+
+export type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number };
+
+export function boundsOf(points: Vec2[]): Bounds | null {
+  if (!points.length) return null;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const point of points) {
+    if (point.x < minX) minX = point.x;
+    if (point.x > maxX) maxX = point.x;
+    if (point.z < minZ) minZ = point.z;
+    if (point.z > maxZ) maxZ = point.z;
+  }
+  return { minX, maxX, minZ, maxZ };
+}
+
+/**
+ * Traces wall endpoints into a closed loop.
+ *
+ * Returns null when the walls do not form a single closed ring, which is the normal case
+ * mid-drawing; callers fall back to the convex hull so the reported area never jumps to
+ * zero while the user is still working.
+ */
+export function traceWallLoop(walls: PlanWall[], tolerance = 0.05): Vec2[] | null {
+  if (walls.length < 3) return null;
+
+  const remaining = walls.map((wall) => ({ a: wall.a, b: wall.b }));
+  const start = remaining.shift()!;
+  const loop: Vec2[] = [start.a, start.b];
+
+  while (remaining.length) {
+    const tail = loop[loop.length - 1];
+    const index = remaining.findIndex(
+      (wall) => distance(wall.a, tail) <= tolerance || distance(wall.b, tail) <= tolerance
+    );
+    if (index === -1) return null;
+    const [next] = remaining.splice(index, 1);
+    loop.push(distance(next.a, tail) <= tolerance ? next.b : next.a);
+  }
+
+  const closed = distance(loop[0], loop[loop.length - 1]) <= tolerance;
+  if (!closed) return null;
+  loop.pop();
+  return loop.length >= 3 ? loop : null;
+}
+
+/** Enclosed floor area in square metres, from a wall ring when possible. */
+export function floorAreaM2(walls: PlanWall[]): number {
+  const loop = traceWallLoop(walls);
+  if (loop) return polygonArea(loop);
+  const endpoints = walls.flatMap((wall) => [wall.a, wall.b]);
+  return endpoints.length >= 3 ? polygonArea(convexHull(endpoints)) : 0;
+}

@@ -1,5 +1,6 @@
 import type { ChatIntent } from "@/src/lib/chatbot/corpus";
 import { checkDomain } from "@/src/lib/chatbot/domain";
+import { isExplicitlyOffTopic, matchRule, type RuleMatch } from "@/src/lib/chatbot/rules";
 import { knowledgeByIntent, type KnowledgeArticle } from "@/src/lib/chatbot/knowledge";
 import { AssistantModel } from "@/src/lib/chatbot/model";
 import { formatFa } from "@/src/lib/chatbot/persian";
@@ -83,15 +84,17 @@ export async function respond(message: string): Promise<ChatReply> {
   const model = AssistantModel.getInstance();
   const classification = model.classify(text);
   const hits = searchKnowledge(text, 3);
+  const rule = matchRule(slots.text, slots);
 
   // Nothing in the message belongs to this subject matter: say so rather than
-  // letting a confident softmax pick the least-wrong CCTV article.
-  if (!checkDomain(text).inDomain) {
+  // letting a confident softmax pick the least-wrong CCTV article. A named off-topic
+  // subject overrides even a rule match — "قیمت دلار" shares vocabulary with the catalog.
+  if (isExplicitlyOffTopic(slots.text) || (!rule && !checkDomain(text).inDomain)) {
     return reply(offTopicAnswer(), "fallback", 0, classification, [], slots);
   }
 
-  const intent = decideIntent(classification, hits);
-  const confidence = classification?.confidence ?? (hits[0]?.score ?? 0);
+  const intent = decideIntent(classification, hits, rule);
+  const confidence = rule ? 1 : classification?.confidence ?? (hits[0]?.score ?? 0);
 
   const answer = await buildAnswer(intent, slots, hits);
   return reply(answer, intent, confidence, classification, hits, slots);
@@ -99,9 +102,14 @@ export async function respond(message: string): Promise<ChatReply> {
 
 function decideIntent(
   classification: ReturnType<AssistantModel["classify"]>,
-  hits: RetrievalHit[]
+  hits: RetrievalHit[],
+  rule: RuleMatch | null
 ): ChatIntent | "fallback" {
   const top = hits[0];
+
+  // A unit signature beats the network outright, including when the network is confident
+  // — the confidently-wrong routings were all cases a rule resolves unambiguously.
+  if (rule) return rule.intent;
 
   if (!classification) return top && top.score >= 0.05 ? top.article.intent : "fallback";
   if (classification.confidence >= confidentThreshold) return classification.intent;
@@ -118,8 +126,18 @@ async function buildAnswer(intent: ChatIntent | "fallback", slots: Slots, hits: 
 
   const calculation = calculationSkills[intent];
   if (calculation) {
-    const answer = calculation(slots);
     const article = pickArticle(intent, hits);
+    const requirement = requiredSlots[intent];
+    const hasOperand = !requirement || requirement.some((slot) => slots[slot] !== undefined);
+
+    if (!hasOperand) {
+      // A calculator with none of its operands would headline an invented number.
+      // Explain the method when the question is conceptual, ask for inputs when it
+      // looks like a real request that simply did not parse.
+      return hasNumbers(slots) ? clarifyAnswer(intent, article) : methodAnswer(intent, article);
+    }
+
+    const answer = calculation(slots);
     // Conceptual questions ("چطور حساب می‌شود") deserve the method note beside the number.
     if (article && !hasNumbers(slots)) {
       return {
@@ -150,6 +168,83 @@ async function buildAnswer(intent: ChatIntent | "fallback", slots: Slots, hits: 
   }
 
   return fallbackAnswer(hits);
+}
+
+/**
+ * The operands each calculator genuinely needs. If none are present the skill would be
+ * running entirely on defaults, and presenting that as the user's answer is worse than
+ * asking — this is an engineering tool, and a confident wrong number costs more than a
+ * follow-up question.
+ */
+const requiredSlots: Partial<Record<ChatIntent, (keyof Slots)[]>> = {
+  calc_storage: ["cameraCount", "days", "terabytes", "bitrateKbps"],
+  calc_bandwidth: ["cameraCount", "megapixel", "bitrateKbps"],
+  calc_lens_focal: ["distanceM", "sceneWidthM"],
+  calc_fov: ["focalMm", "sensorInch"],
+  calc_dori: ["megapixel", "focalMm", "distanceM"],
+  calc_ppm: ["distanceM", "focalMm", "megapixel"],
+  calc_raid: ["diskCount", "terabytes", "raidLevel"],
+  calc_poe_budget: ["cameraCount", "watts"],
+  calc_ups: ["cameraCount", "watts", "minutes"],
+  calc_subnet: ["prefix", "ipAddress"],
+  calc_wireless_link: ["distanceKm", "distanceM", "dbi", "frequencyGhz"],
+  calc_fresnel: ["distanceKm", "distanceM", "frequencyGhz"],
+  calc_ack: ["distanceKm", "distanceM"],
+  calc_dbm: ["milliwatts", "dbm", "watts"],
+  calc_channels: ["cameraCount", "channels"],
+  calc_cable: ["distanceM"]
+};
+
+/** What to ask for, per calculator, when the message had numbers but not the right ones. */
+const clarifyPrompts: Partial<Record<ChatIntent, string>> = {
+  calc_storage: "تعداد دوربین، رزولوشن و مدت آرشیو را بگویید. مثلاً: «۱۶ دوربین ۴ مگاپیکسل، ۳۰ روز»",
+  calc_bandwidth: "تعداد دوربین و رزولوشن را بگویید. مثلاً: «۱۶ دوربین ۴ مگاپیکسل»",
+  calc_lens_focal: "فاصله دوربین تا سوژه و عرض صحنه را بگویید. مثلاً: «فاصله ۲۵ متر، عرض ۶ متر»",
+  calc_fov: "فاصله کانونی لنز و اندازه سنسور را بگویید. مثلاً: «لنز ۴ میلی‌متر، سنسور ۱/۲.۸»",
+  calc_dori: "رزولوشن، لنز و فاصله را بگویید. مثلاً: «۴ مگاپیکسل، لنز ۶ میلی‌متر»",
+  calc_ppm: "فاصله سوژه و رزولوشن دوربین را بگویید. مثلاً: «۲۰ متر، ۵ مگاپیکسل»",
+  calc_raid: "تعداد و ظرفیت دیسک‌ها و سطح RAID را بگویید. مثلاً: «۶ دیسک ۴ ترابایتی، RAID 5»",
+  calc_poe_budget: "تعداد دوربین و توان مصرفی هرکدام را بگویید. مثلاً: «۱۶ دوربین ۱۲ وات»",
+  calc_ups: "تعداد دوربین و زمان پشتیبانی موردنیاز را بگویید. مثلاً: «۱۶ دوربین، ۳۰ دقیقه»",
+  calc_subnet: "آدرس و پیشوند شبکه را بگویید. مثلاً: «192.168.1.10/24»",
+  calc_wireless_link: "فاصله لینک و گین آنتن را بگویید. مثلاً: «۵ کیلومتر، آنتن ۲۴ دی‌بی»",
+  calc_fresnel: "فاصله لینک و فرکانس را بگویید. مثلاً: «۳ کیلومتر، ۵ گیگاهرتز»",
+  calc_ack: "فاصله لینک را بگویید. مثلاً: «۱۰ کیلومتر»",
+  calc_dbm: "مقدار و واحد را بگویید. مثلاً: «۱۰۰ میلی‌وات» یا «۲۰ dBm»",
+  calc_channels: "تعداد دوربین را بگویید. مثلاً: «۱۸ دوربین»",
+  calc_cable: "طول مسیر کابل را بگویید. مثلاً: «۱۸۰ متر»"
+};
+
+function clarifyAnswer(intent: ChatIntent, article?: KnowledgeArticle): Answer {
+  return {
+    source: "system",
+    title: "برای محاسبه به یک ورودی دیگر نیاز دارم",
+    lines: [
+      clarifyPrompts[intent] ?? "لطفاً عدد و واحد موردنیاز را در جمله بیاورید.",
+      "",
+      "عددی را حدس نمی‌زنم تا پاسخ اشتباه به شما ندهم."
+    ],
+    tool: article ? undefined : undefined,
+    followUps: article?.followUps
+  };
+}
+
+/** No numbers at all: the user is asking how it works, so explain the method. */
+function methodAnswer(intent: ChatIntent, article?: KnowledgeArticle): Answer {
+  if (article) {
+    return {
+      source: "knowledge",
+      title: article.title,
+      lines: [
+        ...article.body,
+        "",
+        "---",
+        clarifyPrompts[intent] ? `**برای محاسبه عددی:** ${clarifyPrompts[intent]}` : ""
+      ].filter((line, index, all) => line !== "" || all[index - 1] !== ""),
+      followUps: article.followUps
+    };
+  }
+  return clarifyAnswer(intent);
 }
 
 function pickArticle(intent: ChatIntent, hits: RetrievalHit[]): KnowledgeArticle | undefined {

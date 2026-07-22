@@ -53,9 +53,19 @@ export type Slots = {
  * — "۸ ترابایتی", "۱۲ واتی", "۳۰ روزه" — which would otherwise fail the word boundary.
  */
 function unit(text: string, pattern: string): number | undefined {
-  const match = new RegExp(`(\\d+(?:\\.\\d+)?)\\s*(?:${pattern})(?:ای|ی|ه)?(?![\\p{L}\\d])`, "u").exec(text);
+  const match = new RegExp(
+    `(\\d+(?:\\.\\d+)?)\\s*${countParticles}\\s*(?:${pattern})(?:ای|ی|ه)?(?![\\p{L}\\d])`,
+    "u"
+  ).exec(text);
   return match ? Number(match[1]) : undefined;
 }
+
+/**
+ * Counting particles Persian inserts between a number and its noun — "۲۴ تا دوربین",
+ * "۸ عدد هارد". Without this the number and the unit never met and the skill silently
+ * fell back to its default, which is how "۲۴ دوربین" produced an answer for 8.
+ */
+const countParticles = "(?:تا|تای|عدد|عددی|دستگاه|دونه|دانه)?";
 
 /** Unit spelled before the number, e.g. "فاصله ۲۵ متر" handled by callers via `unit`. */
 function prefixed(text: string, pattern: string): number | undefined {
@@ -104,6 +114,8 @@ export function extractSlots(input: string): Slots {
   if (slots.megapixel === undefined && /\b4k\b|فورکی/.test(text)) slots.megapixel = 8;
   if (slots.megapixel === undefined && /\b(?:full ?hd|1080p?)\b/.test(text)) slots.megapixel = 2;
 
+  const bareMeg = unit(text, "مگ");
+
   slots.cameraCount = unit(text, "دوربین|دوربینی|cam");
   slots.channels = unit(text, "کانال|کاناله|ch");
   slots.days = unit(text, "روز|روزه|شبانه روز");
@@ -116,6 +128,14 @@ export function extractSlots(input: string): Slots {
 
   slots.bitrateKbps = unit(text, "کیلوبیت|kbps|kb");
   slots.bandwidthMbps = unit(text, "مگابیت|mbps|mb");
+  // Resolved after the explicit bitrate/bandwidth units, which would otherwise overwrite
+  // it with undefined. "۵ مگ" is megapixels on a camera but megabits on a link, so the
+  // surrounding words decide rather than a fixed guess.
+  if (bareMeg !== undefined) {
+    if (/[آا]پلود|دانلود|اینترنت|سرعت|پهنای|باند|لینک/.test(text)) slots.bandwidthMbps ??= bareMeg;
+    else slots.megapixel ??= bareMeg;
+  }
+
   slots.terabytes = unit(text, "ترابایت|ترا بایت|tb|ترا");
   slots.gigabytes = unit(text, "گیگابایت|گیگا بایت|gb|گیگ");
   slots.diskCount = unit(text, "دیسک|هارد|درایو|disk|hdd");
@@ -126,19 +146,28 @@ export function extractSlots(input: string): Slots {
   const megahertz = unit(text, "مگاهرتز|مگا هرتز|mhz");
   if (slots.frequencyGhz === undefined && megahertz !== undefined) slots.frequencyGhz = megahertz / 1000;
   slots.milliwatts = unit(text, "میلی وات|میلیوات|mw");
-  slots.dbm = unit(text, "dbm|دسی بل میلی وات");
-  slots.dbi = unit(text, "dbi|گین آنتن");
+  slots.dbm = unit(text, "dbm|دسی بل میلی وات|دی بی ام|دسیبل میلی وات");
+  // Checked after dBm so "۲۴ دی بی ام" is never read as antenna gain.
+  slots.dbi = unit(text, "dbi|دی بی ای|گین آنتن|دی بی|دسی بل");
   slots.hotSpare = prefixed(text, "hot spare|هات اسپر|اسپر");
 
   const raid = /(?:raid|رید|رید)\s*(0|1|5|6|10)/.exec(text);
   if (raid) slots.raidLevel = raid[1];
 
+  // Sensor formats are resolved first and then blanked out, because "۱/۲.۸ اینچ" and a
+  // "/24" network prefix are the same characters. Previously the CIDR pattern won and a
+  // sensor question came back carrying prefix=2.
+  let networkText = text;
   const sensorFraction = /(?:^|\s)(1\/(?:1\.2|1\.8|2\.5|2\.7|2\.8|2\.9|2|3|4))(?=\s|$|اینچ)/.exec(text);
-  if (sensorFraction) slots.sensorInch = sensorWidths[sensorFraction[1]];
+  if (sensorFraction) {
+    slots.sensorInch = sensorWidths[sensorFraction[1]];
+    networkText = networkText.replace(sensorFraction[1], " ");
+  }
 
-  const ip = /\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/.exec(text);
+  const ip = /\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/.exec(networkText);
   if (ip) slots.ipAddress = ip[1];
-  const prefix = /\/(\d{1,2})\b/.exec(text);
+  // The negative lookahead rejects "/2.8"; a real prefix is never followed by a dot.
+  const prefix = /\/(\d{1,2})(?![\d.])/.exec(networkText);
   if (prefix) {
     const value = Number(prefix[1]);
     if (value >= 0 && value <= 32) slots.prefix = value;
