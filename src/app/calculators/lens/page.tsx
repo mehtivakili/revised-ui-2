@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CalculatorShell, NumberInput, ResultGrid, SelectInput, formatNumber } from "@/src/components/calculators/CalculatorUi";
+import { focalLengthMm } from "@/src/lib/calculators/optics";
 import type { DashboardTool } from "@/src/lib/dashboard";
 
 const tool: DashboardTool = {
@@ -23,15 +24,11 @@ const sensorWidths = [
   { label: '1" (12.8 mm)', value: 12.8 }
 ];
 
-function calculateLens(sceneWidthM: number, distanceM: number, sensorWidthMm: number) {
-  return sceneWidthM > 0 ? (distanceM * sensorWidthMm) / sceneWidthM : 0;
-}
-
 export default function LensPage() {
   const [width, setWidth] = useState(10);
   const [distance, setDistance] = useState(10);
   const [sensor, setSensor] = useState(4.8);
-  const result = calculateLens(width, distance, sensor);
+  const result = focalLengthMm(width, distance, sensor);
 
   return (
     <CalculatorShell tool={tool}>

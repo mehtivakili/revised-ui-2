@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CalculatorShell, NumberInput, ResultGrid, formatNumber } from "@/src/components/calculators/CalculatorUi";
+import { ackRoundTripMicroseconds } from "@/src/lib/calculators/rf";
 import type { DashboardTool } from "@/src/lib/dashboard";
 
 const tool: DashboardTool = {
@@ -14,13 +15,9 @@ const tool: DashboardTool = {
   icon: "clock"
 };
 
-function calculateAck(distanceKm: number) {
-  return distanceKm > 0 ? ((2 * distanceKm * 1000) / 299792.458) * 1e6 : 0;
-}
-
 export default function AckPage() {
   const [distance, setDistance] = useState(10);
-  const result = calculateAck(distance);
+  const result = ackRoundTripMicroseconds(distance);
 
   return (
     <CalculatorShell tool={tool}>

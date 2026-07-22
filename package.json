@@ -7,7 +7,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test": "node --experimental-strip-types --import ./tests/register-alias.mjs --test tests/*.test.mjs",
     "cap:sync": "cap sync android",
     "cap:sync:hosted": "node scripts/capacitor-sync-hosted.mjs",
     "cap:open": "cap open android",

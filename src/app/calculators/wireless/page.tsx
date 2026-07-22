@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CalculatorShell, NumberInput, ResultGrid, formatNumber } from "@/src/components/calculators/CalculatorUi";
+import { calculateLinkBudget } from "@/src/lib/calculators/rf";
 import type { DashboardTool } from "@/src/lib/dashboard";
 
 const tool: DashboardTool = {
@@ -14,14 +15,6 @@ const tool: DashboardTool = {
   icon: "wifi"
 };
 
-function calculateWireless(params: { txPower: number; txGain: number; txLoss: number; rxGain: number; rxLoss: number; frequencyMHz: number; distanceKm: number }) {
-  const fspl = params.frequencyMHz > 0 && params.distanceKm > 0
-    ? 32.44 + 20 * Math.log10(params.distanceKm) + 20 * Math.log10(params.frequencyMHz)
-    : 0;
-  const rxPower = params.txPower + params.txGain - params.txLoss + params.rxGain - params.rxLoss - fspl;
-  return { fspl, rxPower };
-}
-
 export default function WirelessPage() {
   const [txPower, setTxPower] = useState(20);
   const [txGain, setTxGain] = useState(15);
@@ -30,7 +23,7 @@ export default function WirelessPage() {
   const [rxLoss, setRxLoss] = useState(1);
   const [frequencyMHz, setFrequencyMHz] = useState(2400);
   const [distanceKm, setDistanceKm] = useState(10);
-  const result = calculateWireless({ txPower, txGain, txLoss, rxGain, rxLoss, frequencyMHz, distanceKm });
+  const result = calculateLinkBudget({ txPower, txGain, txLoss, rxGain, rxLoss, frequencyMHz, distanceKm });
 
   return (
     <CalculatorShell tool={tool}>

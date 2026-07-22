@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { AppTopBar } from "@/src/components/AppTopBar";
+import { ChatAssistant } from "@/src/components/chat/ChatAssistant";
 import { PwaInstallPrompt } from "@/src/components/PwaInstallPrompt";
 import { ScrollReset } from "@/src/components/ScrollReset";
 import { SiteFooter } from "@/src/components/SiteFooter";
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <PwaInstallPrompt />
         <AppTopBar />
         {children}
+        <ChatAssistant />
         <SiteFooter />
       </body>
     </html>

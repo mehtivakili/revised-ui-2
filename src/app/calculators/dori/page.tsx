@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CalculatorShell, NumberInput, ResultGrid, SelectInput, formatNumber } from "@/src/components/calculators/CalculatorUi";
+import { doriDistances } from "@/src/lib/calculators/optics";
 import type { DashboardTool } from "@/src/lib/dashboard";
 
 const tool: DashboardTool = {
@@ -41,22 +42,10 @@ const resolutions = [
   { label: "QCIF (176×144)", width: 176 }
 ];
 
-function calculateDori(widthPx: number, fovDeg: number) {
-  const fovRad = (fovDeg * Math.PI) / 180;
-  const denom = 2 * Math.tan(fovRad / 2);
-  const distanceFor = (ppm: number) => (denom > 0 ? widthPx / (ppm * denom) : 0);
-  return {
-    detection: distanceFor(25),
-    observation: distanceFor(62),
-    recognition: distanceFor(125),
-    identification: distanceFor(250)
-  };
-}
-
 export default function DoriPage() {
   const [resolutionWidth, setResolutionWidth] = useState(1920);
   const [fov, setFov] = useState(90);
-  const result = calculateDori(resolutionWidth, fov);
+  const result = doriDistances(resolutionWidth, fov);
 
   return (
     <CalculatorShell tool={tool}>

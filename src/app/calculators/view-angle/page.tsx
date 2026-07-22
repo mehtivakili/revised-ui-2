@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CalculatorShell, NumberInput, ResultGrid, SelectInput, formatNumber } from "@/src/components/calculators/CalculatorUi";
+import { horizontalFovDeg } from "@/src/lib/calculators/optics";
 import type { DashboardTool } from "@/src/lib/dashboard";
 
 const tool: DashboardTool = {
@@ -23,14 +24,10 @@ const sensorWidths = [
   { label: '1" (12.8 mm)', value: 12.8 }
 ];
 
-function calculateViewAngle(focalMm: number, sensorWidthMm: number) {
-  return focalMm > 0 ? (2 * Math.atan(sensorWidthMm / (2 * focalMm)) * 180) / Math.PI : 0;
-}
-
 export default function ViewAnglePage() {
   const [focal, setFocal] = useState(4);
   const [sensor, setSensor] = useState(4.8);
-  const result = calculateViewAngle(focal, sensor);
+  const result = horizontalFovDeg(focal, sensor);
 
   return (
     <CalculatorShell tool={tool}>

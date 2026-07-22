@@ -11,6 +11,8 @@ const categories: { value: CatalogCategory; label: string }[] = [
   { value: "all", label: "همه محصولات" }, { value: "camera", label: "دوربین" }, { value: "recorder", label: "ضبط‌کننده" }, { value: "switch", label: "سوئیچ PoE" }, { value: "storage", label: "ذخیره‌سازی" }, { value: "ups", label: "برق اضطراری" }, { value: "other", label: "سایر محصولات" }
 ];
 const money = (value: number) => value > 0 ? `${new Intl.NumberFormat("fa-IR").format(value)} تومان` : "قیمت ثبت نشده";
+/** Only absolute http(s) permalinks are safe to link out to; anything else stays plain text. */
+const externalProductUrl = (value?: string) => (value && /^https?:\/\//i.test(value) ? value : null);
 
 export function CatalogExplorer({ initialPage }: { initialPage: SourceCatalogPage }) {
   const [result, setResult] = useState(initialPage);
@@ -67,7 +69,8 @@ function ProductCard({ product }: { product: SourceCatalogProduct }) {
   const [activeImage, setActiveImage] = useState(0);
   const Icon = product.category === "camera" ? Camera : product.category === "recorder" ? Server : product.category === "switch" ? Zap : product.category === "storage" ? HardDrive : Database;
   const currentImage = product.images[activeImage] || product.images[0];
-  return <article className="catalog-card source-catalog-card">
+  const productHref = externalProductUrl(product.sourceUrl);
+  return <article className={productHref ? "catalog-card source-catalog-card is-linked" : "catalog-card source-catalog-card"}>
     <div className="catalog-card-top"><span className={`catalog-product-icon ${product.category}`}><Icon size={22} /></span><div><span className={product.stockStatus === "out_of_stock" ? "stock out" : product.stockStatus === "low_stock" ? "stock low" : "stock"}><CheckCircle2 size={13} />{product.stockStatus === "out_of_stock" ? "ناموجود" : product.stockStatus === "low_stock" ? "موجودی محدود" : "موجود"}</span><small>{product.brand}</small></div></div>
     <div className="catalog-gallery">
       <div className="catalog-main-image">
@@ -76,10 +79,10 @@ function ProductCard({ product }: { product: SourceCatalogProduct }) {
       </div>
       {product.images.length > 1 ? <div className="catalog-thumbnails">{product.images.slice(0, 6).map((image, index) => <button type="button" className={activeImage === index ? "active" : ""} key={`${image.url}-${index}`} onClick={() => setActiveImage(index)} aria-label={`تصویر ${index + 1} از ${product.name}`}><img src={image.url} alt="" loading="lazy" /></button>)}</div> : null}
     </div>
-    <div className="catalog-card-copy"><h2>{product.name}</h2><p dir="ltr">{product.sku}</p>{product.wooCategories.length ? <small>{product.wooCategories.join(" · ")}</small> : null}</div>
+    <div className="catalog-card-copy"><h2>{productHref ? <a className="catalog-card-link" href={productHref} target="_blank" rel="noreferrer">{product.name}</a> : product.name}</h2><p dir="ltr">{product.sku}</p>{product.wooCategories.length ? <small>{product.wooCategories.join(" · ")}</small> : null}</div>
     <div className="spec-chips">{getHighlights(product).map((value, index) => <span key={`${value}-${index}`}>{value}</span>)}</div>
     {product.attributes.length ? <details className="catalog-product-details"><summary>همه ویژگی‌ها ({new Intl.NumberFormat("fa-IR").format(product.attributes.length)})</summary><dl>{product.attributes.map((attribute, index) => <div key={`${attribute.name}-${index}`}><dt>{attribute.name}</dt><dd>{attribute.options.join("، ") || "—"}</dd></div>)}</dl></details> : null}
-    <div className="catalog-card-foot"><div><small>{product.normalizationStatus === "unmapped" ? "قیمت WooCommerce" : "قیمت محصول"}</small><strong>{money(product.price)}</strong></div><a href={product.sourceUrl} target="_blank" rel="noreferrer" aria-label="مشاهده منبع محصول"><ExternalLink size={17} /></a></div>
+    <div className="catalog-card-foot"><div><small>{product.normalizationStatus === "unmapped" ? "قیمت WooCommerce" : "قیمت محصول"}</small><strong>{money(product.price)}</strong></div>{productHref ? <a className="catalog-card-cta" href={productHref} target="_blank" rel="noreferrer" aria-label={`مشاهده ${product.name} در ddcpersia`}><span>مشاهده در ddcpersia</span><ExternalLink size={14} aria-hidden="true" /></a> : null}</div>
   </article>;
 }
 

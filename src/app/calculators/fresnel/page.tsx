@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CalculatorShell, NumberInput, ResultGrid, formatNumber } from "@/src/components/calculators/CalculatorUi";
+import { fresnelRadiusM } from "@/src/lib/calculators/rf";
 import type { DashboardTool } from "@/src/lib/dashboard";
 
 const tool: DashboardTool = {
@@ -14,14 +15,10 @@ const tool: DashboardTool = {
   icon: "radio"
 };
 
-function calculateFresnel(distanceKm: number, frequencyGHz: number) {
-  return distanceKm > 0 && frequencyGHz > 0 ? 17.32 * Math.sqrt(distanceKm / (4 * frequencyGHz)) : 0;
-}
-
 export default function FresnelPage() {
   const [distance, setDistance] = useState(10);
   const [frequency, setFrequency] = useState(2.4);
-  const result = calculateFresnel(distance, frequency);
+  const result = fresnelRadiusM(distance, frequency);
 
   return (
     <CalculatorShell tool={tool}>
