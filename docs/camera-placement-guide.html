@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>راهنمای جانمایی دوربین مداربسته</title>
+<style>
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("../public/fonts/Vazirmatn-VariableFont_wght.ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: block;
+}
+
+@page { size: A4; margin: 11mm 10mm 12mm; }
+
+:root {
+  --ink: #16222c;
+  --muted: #55697a;
+  --faint: #8ba0af;
+  --line: #d6e3ec;
+  --accent: #0f5f99;
+  --accent-soft: #eaf4fb;
+  --amber: #9a6407;
+  --amber-soft: #fdf6e6;
+  --danger: #a32b20;
+  --danger-soft: #fdf0ee;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Vazirmatn, Tahoma, sans-serif;
+  font-size: 8pt;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+/* ── Compact masthead instead of a full cover page ─────────────── */
+.masthead {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 6mm;
+  padding-bottom: 2.5mm; margin-bottom: 4mm; border-bottom: 2.5px solid var(--accent);
+}
+.masthead h1 { margin: 0; font-size: 16pt; font-weight: 900; line-height: 1.25; }
+.masthead .eyebrow { color: var(--accent); font-size: 8pt; font-weight: 800; margin-bottom: .8mm; }
+.masthead .sub { color: var(--muted); font-size: 8pt; max-width: 105mm; margin: 1mm 0 0; }
+.masthead .stats { text-align: left; color: var(--faint); font-size: 7pt; white-space: nowrap; line-height: 1.7; }
+
+h2 {
+  margin: 5mm 0 2mm; padding-bottom: 1mm; font-size: 11pt; font-weight: 900;
+  color: var(--accent); border-bottom: 1.5px solid var(--accent); page-break-after: avoid;
+}
+h3 { margin: 3.5mm 0 1.2mm; font-size: 9pt; font-weight: 800; page-break-after: avoid; }
+p { margin: 0 0 1.6mm; }
+ul, ol { margin: 0 0 2mm; padding-inline-start: 4.5mm; }
+li { margin-bottom: .5mm; }
+strong { font-weight: 800; }
+.lead { color: var(--muted); font-size: 7.6pt; margin-bottom: 1.2mm; }
+
+table { width: 100%; border-collapse: collapse; margin: 1.5mm 0 3mm; font-size: 7.3pt; page-break-inside: avoid; }
+thead { background: var(--accent); color: #fff; }
+th { padding: 1.3mm 1.8mm; text-align: right; font-weight: 700; font-size: 7.2pt; }
+td { padding: 1.1mm 1.8mm; border-bottom: .5px solid var(--line); vertical-align: top; line-height: 1.45; }
+tbody tr:nth-child(even) { background: #f7fafd; }
+td.num { direction: ltr; text-align: center; white-space: nowrap; font-weight: 700; }
+
+.box { padding: 1.8mm 2.5mm; border-radius: 1.2mm; margin: 1.5mm 0 2.5mm; page-break-inside: avoid; border-right: 2.5px solid; font-size: 7.4pt; }
+.box p:last-child { margin-bottom: 0; }
+.box b { font-weight: 800; }
+.tip { background: var(--accent-soft); border-color: var(--accent); }
+.tip b { color: var(--accent); }
+.warn { background: var(--amber-soft); border-color: var(--amber); }
+.warn b { color: var(--amber); }
+.crit { background: var(--danger-soft); border-color: var(--danger); }
+.crit b { color: var(--danger); }
+
+.p1, .p2, .p3 { padding: .2mm 1.4mm; border-radius: 8px; font-size: 6.6pt; font-weight: 800; white-space: nowrap; }
+.p1 { background: #fde8e5; color: var(--danger); }
+.p2 { background: #fdf1dc; color: var(--amber); }
+.p3 { background: #e7f1f8; color: var(--accent); }
+.no { color: var(--danger); font-weight: 800; }
+
+/* Venue blocks flow two-up where they fit, halving the page count. */
+.venues { column-count: 2; column-gap: 6mm; }
+.venue { break-inside: avoid; margin-bottom: 3.5mm; }
+.venue table { font-size: 6.9pt; }
+.venue th, .venue td { padding: .9mm 1.2mm; }
+
+.two-col { column-count: 2; column-gap: 6mm; }
+.two-col > * { break-inside: avoid; }
+
+.checklist { list-style: none; padding: 0; margin: 0; }
+.checklist li { position: relative; padding-inline-start: 4mm; margin-bottom: .7mm; break-inside: avoid; }
+.checklist li::before {
+  content: ""; position: absolute; inset-inline-start: 0; top: 1.1mm;
+  width: 2.3mm; height: 2.3mm; border: .8px solid var(--accent); border-radius: .4mm;
+}
+.footer-note { margin-top: 4mm; padding-top: 1.5mm; border-top: .5px solid var(--line); color: var(--faint); font-size: 6.8pt; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div>
+    <div class="eyebrow">همیار دوربین · سند فنی</div>
+    <h1>راهنمای جانمایی دوربین مداربسته</h1>
+    <p class="sub">فهرست نقاطی که صاحب هر مکان نسبت به آن‌ها دغدغه دارد، با سطح اولویت، هدف نظارتی و نکته اجرایی</p>
+  </div>
+  <div class="stats">۱۴ نوع کاربری<br />بیش از ۱۵۰ نقطه نصب<br />مبتنی بر EN 62676-4</div>
+</div>
+
+<!-- ══════════ 1. METHOD ══════════ -->
+<section>
+<h2>۱. روش کار و مبانی</h2>
+
+<div class="two-col">
+  <div>
+    <h3>ترتیب درست طراحی</h3>
+    <ol>
+      <li><strong>دغدغه را بشناسید، نه محل را.</strong> بپرسید «نگران چه چیزی هستید؟» پاسخ (سرقت، تقلب کارکنان، ادعای خسارت، ایمنی) اولویت‌ها را تعیین می‌کند.</li>
+      <li><strong>برای هر نقطه یک وظیفه تعریف کنید</strong> — این تراکم پیکسل لازم را مشخص می‌کند.</li>
+      <li><strong>سپس لنز و رزولوشن را انتخاب کنید</strong>، نه برعکس. انتخاب دوربین پیش از تعریف وظیفه، رایج‌ترین خطای طراحی است.</li>
+      <li><strong>محدودیت اجرایی را بسنجید</strong> — مسیر کابل، برق، ارتفاع سقف، نور محیط.</li>
+    </ol>
+    <p class="lead"><span class="p1">حیاتی</span> بدون آن سامانه هدفش را برآورده نمی‌کند &nbsp;·&nbsp; <span class="p2">مهم</span> شکاف واقعی، اما سامانه کار می‌کند &nbsp;·&nbsp; <span class="p3">تکمیلی</span> پوشش کامل‌تر</p>
+  </div>
+  <div>
+    <h3>سطوح وظیفه (EN 62676-4)</h3>
+    <table>
+      <thead><tr><th>وظیفه</th><th class="num" style="width:17mm">تراکم</th><th>یعنی چه</th></tr></thead>
+      <tbody>
+        <tr><td>کشف</td><td class="num">۲۵ px/m</td><td>حضور شیء معلوم می‌شود</td></tr>
+        <tr><td>مشاهده</td><td class="num">۶۲ px/m</td><td>رفتار و جهت حرکت</td></tr>
+        <tr><td>بازشناسی</td><td class="num">۱۲۵ px/m</td><td>آشنا بودن فرد</td></tr>
+        <tr><td>شناسایی</td><td class="num">۲۵۰ px/m</td><td>هویت قطعی، قابل استناد</td></tr>
+        <tr><td>پلاک‌خوانی</td><td class="num">۱۵۰–۲۰۰</td><td>خواندن پلاک در حرکت</td></tr>
+      </tbody>
+    </table>
+    <div class="box tip"><b>قاعده کلیدی:</b> این اعداد کف مطلق در شرایط ایده‌آل‌اند. در نور کم، سوژه متحرک یا فشرده‌سازی زیاد، ۲۰ تا ۳۰ درصد حاشیه اضافه کنید.</div>
+  </div>
+</div>
+</section>
+
+<!-- ══════════ 2. UNIVERSAL ══════════ -->
+<section>
+<h2>۲. نقاط بحرانی مشترک در همه پروژه‌ها</h2>
+<table>
+  <thead><tr><th style="width:34mm">نقطه</th><th style="width:14mm">اولویت</th><th style="width:22mm">وظیفه</th><th>دلیل و نکته اجرایی</th></tr></thead>
+  <tbody>
+    <tr><td>درِ ورودی اصلی</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>مهم‌ترین نقطه هر پروژه. ارتفاع ۲٫۵ تا ۳ متر و True WDR الزامی است.</td></tr>
+    <tr><td>درهای فرعی و خروج اضطراری</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>اغلب فراموش می‌شوند و دقیقاً به همین دلیل مسیر ورود غیرمجازند.</td></tr>
+    <tr><td>محل وجه نقد یا اقلام باارزش</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>گاوصندوق، صندوق فروش، انبار کالای گران.</td></tr>
+    <tr><td>محل نصب NVR و رک</td><td><span class="p1">حیاتی</span></td><td>بازشناسی</td><td>سارق حرفه‌ای اول دستگاه ضبط را می‌برد. رک قفل‌دار، دور از دید، با پشتیبان خارج از محل.</td></tr>
+    <tr><td>پارکینگ و محل توقف خودرو</td><td><span class="p2">مهم</span></td><td>پلاک + دید کلی</td><td>هم سرقت، هم خسارت و ادعاهای بعدی.</td></tr>
+    <tr><td>راهروها و مسیرهای ارتباطی</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>زنجیره حرکت افراد را کامل می‌کند؛ بدون آن مسیر یک فرد قابل دنبال‌کردن نیست.</td></tr>
+    <tr><td>پیرامون و دیوار محوطه</td><td><span class="p2">مهم</span></td><td>کشف / مشاهده</td><td>با تحلیل انسان/خودرو تا هشدار کاذب باد و حیوان حذف شود.</td></tr>
+    <tr><td>تابلو برق و تأسیسات</td><td><span class="p3">تکمیلی</span></td><td>مشاهده</td><td>هم ایمنی، هم جلوگیری از خرابکاری عمدی.</td></tr>
+    <tr><td>پشت‌بام و نورگیر</td><td><span class="p3">تکمیلی</span></td><td>کشف</td><td>در ساختمان کوتاه یا مجاور، مسیر نفوذ واقعی است.</td></tr>
+  </tbody>
+</table>
+<div class="box crit"><b>نکته‌ای که اغلب نادیده گرفته می‌شود:</b> یک دوربین برای «ورودی» کافی نیست. ورودی به دو دوربین نیاز دارد: یکی رو به داخل برای ثبت چهره در نور مناسب، و یکی دید کلی برای زمینه و همراهان. دوربینی که مستقیم رو به در شیشه‌ای یا آفتاب باشد، در روز فقط یک سایه سیاه ثبت می‌کند.</div>
+</section>
+
+<!-- ══════════ 3. VENUES ══════════ -->
+<section>
+<h2>۳. چک‌لیست بر اساس نوع کاربری</h2>
+
+<div class="venues">
+
+<div class="venue">
+<h3>۳٫۱ منزل، ویلا و خانه‌باغ</h3>
+<p class="lead"><b>دغدغه:</b> ورود غیرمجاز در ساعات خلوت، امنیت کودکان، تحویل مرسولات، پایش از راه دور در غیاب.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>درِ حیاط / پارکینگ</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>زنگ در تصویری مکمل خوبی است.</td></tr>
+    <tr><td>درِ ورودی ساختمان</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>ارتفاع ۲٫۴ تا ۲٫۷ متر.</td></tr>
+    <tr><td>حیاط و محوطه</td><td><span class="p2">مهم</span></td><td>کشف / مشاهده</td><td>تحلیل انسان برای حذف هشدار گربه و شاخه.</td></tr>
+    <tr><td>دیوار پشتی و نقاط کور</td><td><span class="p2">مهم</span></td><td>کشف</td><td>مسیر نفوذ واقعی، نه درِ جلو.</td></tr>
+    <tr><td>راه‌پله و ورودی طبقات</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>در خانه چندطبقه.</td></tr>
+    <tr><td>استخر و فضای بازی کودک</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>دغدغه ایمنی؛ بدون نقطه کور.</td></tr>
+    <tr><td>پارکینگ خودرو</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>ثبت خط‌افتادگی و خسارت.</td></tr>
+    <tr><td>انباری و موتورخانه</td><td><span class="p3">تکمیلی</span></td><td>کشف</td><td>—</td></tr>
+    <tr><td>پشت‌بام و روف‌گاردن</td><td><span class="p3">تکمیلی</span></td><td>کشف</td><td>کنار ساختمان بلندتر مهم می‌شود.</td></tr>
+  </tbody>
+</table>
+<div class="box warn"><b>حریم خصوصی:</b> دوربین نباید ملک همسایه یا معبر عمومی فراتر از حریم را ثبت کند؛ در صورت اجتناب‌ناپذیری Privacy Mask بگذارید.</div>
+</div>
+
+<div class="venue">
+<h3>۳٫۲ مغازه و فروشگاه کوچک</h3>
+<p class="lead"><b>دغدغه:</b> سرقت از قفسه، تقلب کارکنان، اختلاف بر سر پرداخت، ادعای خسارت مشتری.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>صندوق، رو به صندوقدار</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>باید هم‌زمان دست، کشوی پول و صورت مشتری را ببیند.</td></tr>
+    <tr><td>درِ ورودی، رو به داخل</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>True WDR الزامی.</td></tr>
+    <tr><td>ویترین و قفسه کالای گران</td><td><span class="p1">حیاتی</span></td><td>بازشناسی</td><td>زاویه باید دست را هنگام برداشتن ببیند.</td></tr>
+    <tr><td>انبار و درِ پشتی</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>مسیر رایج خروج کالا بدون ثبت.</td></tr>
+    <tr><td>سالن و راهروی قفسه‌ها</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>بدون نقطه کور بین قفسه‌های بلند.</td></tr>
+    <tr><td>نمای بیرونی و سردر</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>ثبت وقایع و بازدارندگی.</td></tr>
+    <tr><td>محل تحویل بار</td><td><span class="p3">تکمیلی</span></td><td>بازشناسی</td><td>کنترل کالای دریافتی.</td></tr>
+    <tr><td>اتاق پرو</td><td class="no">ممنوع</td><td>—</td><td>فقط راهروی مقابل و شمارش اقلام.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="venue">
+<h3>۳٫۳ سوپرمارکت و هایپرمارکت</h3>
+<p class="lead"><b>دغدغه:</b> کسری انبار، تقلب صندوق، ازدحام و ایمنی، بهینه‌سازی چیدمان.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>هر خط صندوق</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>یکی برای هر صندوق؛ ادغام با POS ارزش را چند برابر می‌کند.</td></tr>
+    <tr><td>ورودی و خروجی مشتری</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>به‌علاوه شمارش نفرات.</td></tr>
+    <tr><td>قفسه اقلام گران و کوچک</td><td><span class="p1">حیاتی</span></td><td>بازشناسی</td><td>آرایشی، تیغ، باتری — بیشترین نرخ سرقت.</td></tr>
+    <tr><td>انبار و سردخانه</td><td><span class="p1">حیاتی</span></td><td>بازشناسی</td><td>دوربین سردخانه باید تحمل دما داشته باشد.</td></tr>
+    <tr><td>بارانداز و درِ تخلیه</td><td><span class="p1">حیاتی</span></td><td>شناسایی + پلاک</td><td>نقطه اصلی کسری انبار.</td></tr>
+    <tr><td>اتاق پول و شمارش</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>دسترسی محدود، ضبط جداگانه.</td></tr>
+    <tr><td>راهروهای اصلی</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>دوربین انتهای راهرو کارآمدتر از وسط است.</td></tr>
+    <tr><td>پارکینگ مشتری</td><td><span class="p2">مهم</span></td><td>پلاک + دید کلی</td><td>—</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="venue">
+<h3>۳٫۴ طلافروشی، صرافی و بانک</h3>
+<p class="lead"><b>دغدغه:</b> سرقت مسلحانه، شناسایی قطعی مجرم، اثبات قضایی، الزامات بیمه.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>درِ ورودی، هم‌سطح چهره</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>ارتفاع ۲٫۲ تا ۲٫۵ متر؛ چهره باید پیش از ورود کامل ثبت شود.</td></tr>
+    <tr><td>پیشخوان و محل معامله</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>ثبت هم‌زمان چهره، دست و کالا.</td></tr>
+    <tr><td>گاوصندوق و اتاق امن</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>ضبط دائم، نه بر اساس حرکت.</td></tr>
+    <tr><td>ویترین‌ها</td><td><span class="p1">حیاتی</span></td><td>بازشناسی</td><td>هر ویترین پوشش مستقل.</td></tr>
+    <tr><td>نمای بیرونی و پیاده‌رو</td><td><span class="p1">حیاتی</span></td><td>شناسایی + پلاک</td><td>ثبت خودرو و مسیر فرار.</td></tr>
+    <tr><td>محل NVR</td><td><span class="p1">حیاتی</span></td><td>—</td><td>اتاق قفل‌دار جدا + پشتیبان خارج از محل.</td></tr>
+    <tr><td>دکمه اضطراری و مسیر خروج</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>ادغام با دزدگیر.</td></tr>
+  </tbody>
+</table>
+<div class="box crit"><b>سطح حفاظتی متفاوت:</b> هدف شناسایی قطعی است، نه مشاهده. تصویری که در دادگاه قابل استناد نباشد بی‌ارزش است. ۲۵۰ px/m و ۲۵ فریم حداقل مطلق‌اند.</div>
+</div>
+
+<div class="venue">
+<h3>۳٫۵ دفتر کار و ساختمان اداری</h3>
+<p class="lead"><b>دغدغه:</b> کنترل تردد، حفاظت تجهیزات و اطلاعات، اختلافات کاری، حضور و غیاب.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>لابی و پذیرش</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>نقطه کنترل اصلی ورود.</td></tr>
+    <tr><td>اتاق سرور و رک شبکه</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>دسترسی به سرور یعنی دسترسی به همه اطلاعات.</td></tr>
+    <tr><td>درِ ورودی هر طبقه</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>ادغام با کنترل تردد.</td></tr>
+    <tr><td>بایگانی و اتاق اسناد</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>—</td></tr>
+    <tr><td>راهروها و آسانسور</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>داخل کابین لنز زاویه باز.</td></tr>
+    <tr><td>انبار تجهیزات و لپ‌تاپ</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>—</td></tr>
+    <tr><td>پارکینگ کارکنان</td><td><span class="p2">مهم</span></td><td>پلاک</td><td>—</td></tr>
+    <tr><td>فضای کار باز</td><td><span class="p3">تکمیلی</span></td><td>مشاهده</td><td>پایش میز کارکنان حساسیت‌برانگیز است؛ اطلاع کتبی الزامی.</td></tr>
+    <tr><td>اتاق جلسات</td><td class="no">پرهیز</td><td>—</td><td>در صورت نصب، ضبط صدا غیرفعال.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="venue">
+<h3>۳٫۶ کارخانه، انبار و سوله</h3>
+<p class="lead"><b>دغدغه:</b> کسری موجودی، ایمنی کارکنان، بهره‌وری خط، حفاظت پیرامونی محوطه بزرگ.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>گیت ورود و خروج خودرو</td><td><span class="p1">حیاتی</span></td><td>پلاک‌خوانی</td><td>لنز بلند، زاویه کم، شاتر سریع، HLC. مهم‌ترین نقطه کنترل کسری.</td></tr>
+    <tr><td>بارانداز و بارگیری</td><td><span class="p1">حیاتی</span></td><td>بازشناسی</td><td>شمارش و تطبیق با بارنامه.</td></tr>
+    <tr><td>ورود و خروج پرسنل</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>ادغام با حضور و غیاب.</td></tr>
+    <tr><td>انبار مواد و محصول</td><td><span class="p1">حیاتی</span></td><td>بازشناسی</td><td>راهروهای بین قفسه‌های مرتفع نقطه کور می‌سازند.</td></tr>
+    <tr><td>پیرامون و حصار محوطه</td><td><span class="p1">حیاتی</span></td><td>کشف</td><td>تحلیل انسان/خودرو و خط مجازی.</td></tr>
+    <tr><td>خط تولید</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>ایمنی و بررسی توقف خط.</td></tr>
+    <tr><td>مخازن سوخت و مواد خطرناک</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>در محیط قابل اشتعال تجهیز ضدانفجار لازم است.</td></tr>
+    <tr><td>اتاق برق و تأسیسات</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>دوربین حرارتی برای داغ‌شدگی ارزشمند است.</td></tr>
+    <tr><td>محل جرثقیل و لیفتراک</td><td><span class="p3">تکمیلی</span></td><td>مشاهده</td><td>بررسی حوادث و ادعای خسارت.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="venue">
+<h3>۳٫۷ پارکینگ عمومی و مجتمع</h3>
+<p class="lead"><b>دغدغه:</b> سرقت خودرو و لوازم، خسارت و ادعای متقابل، کنترل ورود و خروج، درآمد.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>رمپ ورود</td><td><span class="p1">حیاتی</span></td><td>پلاک‌خوانی</td><td>لنز ۱۲–۱۶ mm، ارتفاع ۳٫۵–۴ متر، زاویه زیر ۳۰ درجه.</td></tr>
+    <tr><td>رمپ خروج</td><td><span class="p1">حیاتی</span></td><td>پلاک‌خوانی</td><td>تطبیق زمان ورود و خروج مبنای اثبات است.</td></tr>
+    <tr><td>مسیر عابر و درِ ارتباطی</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>محل ورود فرد پیاده.</td></tr>
+    <tr><td>راهروهای پارک</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>نور کم؛ دیافراگم باز و سنسور بزرگ.</td></tr>
+    <tr><td>آسانسور و راه‌پله</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>—</td></tr>
+    <tr><td>اتاق کنترل و صندوق</td><td><span class="p2">مهم</span></td><td>شناسایی</td><td>—</td></tr>
+    <tr><td>محل شارژ خودروی برقی</td><td><span class="p3">تکمیلی</span></td><td>بازشناسی</td><td>تجهیز گران و در معرض خرابکاری.</td></tr>
+  </tbody>
+</table>
+<div class="box warn"><b>خطای رایج:</b> یک دوربین نمی‌تواند هم‌زمان پلاک بخواند و دید کلی بدهد. برای هر رمپ دو دوربین در نظر بگیرید.</div>
+</div>
+
+<div class="venue">
+<h3>۳٫۸ رستوران، کافه و فست‌فود</h3>
+<p class="lead"><b>دغدغه:</b> تقلب صندوق، کسری مواد اولیه، بهداشت، اختلاف با مشتری.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>صندوق و محل پرداخت</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>تقلب صندوق شایع‌ترین مسئله این صنف است.</td></tr>
+    <tr><td>ورودی مشتری</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>—</td></tr>
+    <tr><td>آشپزخانه</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>تحمل بخار و چربی؛ نصب دور از اجاق.</td></tr>
+    <tr><td>انبار مواد غذایی</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>کنترل کسری.</td></tr>
+    <tr><td>سالن پذیرایی</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>حل اختلاف و کیفیت خدمات.</td></tr>
+    <tr><td>درِ پشتی و محل زباله</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>مسیر رایج خروج غیرمجاز مواد.</td></tr>
+    <tr><td>محل تحویل بیرون‌بر</td><td><span class="p3">تکمیلی</span></td><td>بازشناسی</td><td>اختلاف بر سر سفارش.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="venue">
+<h3>۳٫۹ مدرسه، مهدکودک و آموزشگاه</h3>
+<p class="lead"><b>دغدغه:</b> ورود افراد غیرمجاز، ایمنی کودکان، تحویل امن دانش‌آموز.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>درِ ورودی اصلی</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>اصلی‌ترین دغدغه والدین.</td></tr>
+    <tr><td>محل تحویل دانش‌آموز</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>ثبت اینکه کودک با چه کسی رفته است.</td></tr>
+    <tr><td>حیاط و زمین بازی</td><td><span class="p1">حیاتی</span></td><td>مشاهده</td><td>ایمنی و بررسی حوادث.</td></tr>
+    <tr><td>راهروها و راه‌پله</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>—</td></tr>
+    <tr><td>محوطه پیرامونی و دیوار</td><td><span class="p2">مهم</span></td><td>کشف</td><td>جلوگیری از ورود از دیوار.</td></tr>
+    <tr><td>آزمایشگاه و کارگاه</td><td><span class="p3">تکمیلی</span></td><td>مشاهده</td><td>ایمنی تجهیزات.</td></tr>
+    <tr><td>سرویس بهداشتی و رختکن</td><td class="no">ممنوع</td><td>—</td><td>حداکثر راهروی منتهی به آن.</td></tr>
+  </tbody>
+</table>
+<div class="box crit"><b>الزام قانونی:</b> سیاست نگهداری تصاویر و فهرست افراد دارای دسترسی باید مکتوب و به والدین اطلاع‌رسانی شود.</div>
+</div>
+
+<div class="venue">
+<h3>۳٫۱۰ بیمارستان، درمانگاه و داروخانه</h3>
+<p class="lead"><b>دغدغه:</b> تنش در اورژانس، کنترل دارو، سرقت تجهیزات، محرمانگی بیمار.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>اورژانس و ورودی</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>محل بیشترین تنش و درگیری.</td></tr>
+    <tr><td>پذیرش و صندوق</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>—</td></tr>
+    <tr><td>انبار دارو و مخدرها</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>الزام قانونی؛ ضبط دائم.</td></tr>
+    <tr><td>راهروها</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>—</td></tr>
+    <tr><td>پارکینگ آمبولانس</td><td><span class="p2">مهم</span></td><td>پلاک</td><td>—</td></tr>
+    <tr><td>اتاق بیمار و معاینه</td><td class="no">ممنوع</td><td>—</td><td>نقض حریم و محرمانگی پزشکی.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="venue">
+<h3>۳٫۱۱ هتل و اقامتگاه</h3>
+<p class="lead"><b>دغدغه:</b> ثبت هویت میهمان، سرقت از اتاق و امانات، ایمنی مشاعات.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>لابی و پذیرش</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>ثبت هویت میهمانان.</td></tr>
+    <tr><td>راهروی طبقات</td><td><span class="p1">حیاتی</span></td><td>بازشناسی</td><td>پوشش طولی تا درِ همه اتاق‌ها دیده شود.</td></tr>
+    <tr><td>صندوق امانات</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>—</td></tr>
+    <tr><td>آسانسور</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>—</td></tr>
+    <tr><td>پارکینگ میهمان</td><td><span class="p2">مهم</span></td><td>پلاک</td><td>—</td></tr>
+    <tr><td>رستوران و سالن</td><td><span class="p3">تکمیلی</span></td><td>مشاهده</td><td>—</td></tr>
+    <tr><td>داخل اتاق</td><td class="no">ممنوع</td><td>—</td><td>ممنوع مطلق.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="venue">
+<h3>۳٫۱۲ پمپ بنزین و جایگاه سوخت</h3>
+<p class="lead"><b>دغدغه:</b> فرار بدون پرداخت، ایمنی تخلیه سوخت، سرقت از فروشگاه.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>هر جایگاه سوخت‌گیری</td><td><span class="p1">حیاتی</span></td><td>پلاک + بازشناسی</td><td>اثبات فرار بدون پرداخت.</td></tr>
+    <tr><td>ورودی و خروجی جایگاه</td><td><span class="p1">حیاتی</span></td><td>پلاک‌خوانی</td><td>—</td></tr>
+    <tr><td>صندوق و فروشگاه</td><td><span class="p1">حیاتی</span></td><td>شناسایی</td><td>—</td></tr>
+    <tr><td>مخازن و محل تخلیه</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>تجهیزات باید استاندارد محیط قابل اشتعال را رعایت کنند.</td></tr>
+    <tr><td>محوطه و پیرامون</td><td><span class="p2">مهم</span></td><td>کشف</td><td>—</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="venue">
+<h3>۳٫۱۳ مجتمع مسکونی و برج</h3>
+<p class="lead"><b>دغدغه:</b> ورود غیرساکن، سرقت در پارکینگ و انباری، اختلاف بین ساکنان.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>لابی و درِ ورودی</td><td><span class="p1">حیاتی</span></td><td>شناسایی چهره</td><td>—</td></tr>
+    <tr><td>درِ پارکینگ خودرو</td><td><span class="p1">حیاتی</span></td><td>پلاک‌خوانی</td><td>کنترل ورود خودروی غیرساکن.</td></tr>
+    <tr><td>پارکینگ و راهروهای آن</td><td><span class="p1">حیاتی</span></td><td>بازشناسی</td><td>شایع‌ترین محل سرقت در مجتمع.</td></tr>
+    <tr><td>آسانسورها</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>کابل از مسیر تراولینگ عبور کند.</td></tr>
+    <tr><td>راه‌پله و خروج اضطراری</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>—</td></tr>
+    <tr><td>انباری‌ها</td><td><span class="p2">مهم</span></td><td>بازشناسی</td><td>—</td></tr>
+    <tr><td>محوطه، بام و مشاعات</td><td><span class="p3">تکمیلی</span></td><td>مشاهده</td><td>—</td></tr>
+    <tr><td>موتورخانه و تأسیسات</td><td><span class="p3">تکمیلی</span></td><td>کشف</td><td>—</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="venue">
+<h3>۳٫۱۴ باغ، مزرعه و دامداری</h3>
+<p class="lead"><b>دغدغه:</b> سرقت ادوات و محصول، سرقت کابل، پایش دام، محیط وسیع بدون زیرساخت.</p>
+<table>
+  <thead><tr><th>نقطه</th><th style="width:12mm">اولویت</th><th style="width:19mm">وظیفه</th><th>نکته</th></tr></thead>
+  <tbody>
+    <tr><td>درِ ورودی و مسیر دسترسی</td><td><span class="p1">حیاتی</span></td><td>پلاک + شناسایی</td><td>—</td></tr>
+    <tr><td>محیط پیرامونی</td><td><span class="p1">حیاتی</span></td><td>کشف</td><td>لنز بلند یا حرارتی مقرون‌به‌صرفه‌تر از تعداد زیاد دوربین است.</td></tr>
+    <tr><td>انبار محصول و ادوات</td><td><span class="p1">حیاتی</span></td><td>بازشناسی</td><td>ادوات کشاورزی هدف اصلی سرقت‌اند.</td></tr>
+    <tr><td>جایگاه دام و آبشخور</td><td><span class="p2">مهم</span></td><td>مشاهده</td><td>هم امنیت، هم پایش سلامت دام.</td></tr>
+    <tr><td>چاه، پمپ و تابلو برق</td><td><span class="p2">مهم</span></td><td>کشف</td><td>سرقت کابل مسی بسیار شایع است.</td></tr>
+  </tbody>
+</table>
+<div class="box tip"><b>زیرساخت:</b> بیش از ۱۰۰ متر، لینک بی‌سیم یا فیبر جایگزین کابل شبکه می‌شود. برق خورشیدی با باتری برای نقاط دور رایج است.</div>
+</div>
+
+</div>
+</section>
+
+<!-- ══════════ 4. TECHNICAL ══════════ -->
+<section>
+<h2>۴. ملاحظات فنی</h2>
+
+<div class="two-col">
+  <div>
+    <h3>ارتفاع نصب</h3>
+    <table>
+      <thead><tr><th>هدف</th><th class="num" style="width:20mm">ارتفاع</th><th>توضیح</th></tr></thead>
+      <tbody>
+        <tr><td>شناسایی چهره</td><td class="num">۲٫۴–۳ m</td><td>بالاتر، زاویه به فرق سر می‌افتد.</td></tr>
+        <tr><td>پلاک‌خوانی</td><td class="num">۳٫۵–۴ m</td><td>زاویه عمودی زیر ۳۰ درجه.</td></tr>
+        <tr><td>دید کلی محوطه</td><td class="num">۳٫۵–۴٫۵ m</td><td>—</td></tr>
+        <tr><td>در معرض تخریب</td><td class="num">بالای ۴ m</td><td>همراه با بدنه IK10.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>درجه حفاظت</h3>
+    <table>
+      <thead><tr><th>محل</th><th class="num" style="width:18mm">حداقل</th></tr></thead>
+      <tbody>
+        <tr><td>فضای داخلی خشک</td><td class="num">IP40</td></tr>
+        <tr><td>فضای باز زیر سایبان</td><td class="num">IP65</td></tr>
+        <tr><td>فضای باز، در معرض باران</td><td class="num">IP66</td></tr>
+        <tr><td>آشپزخانه صنعتی، شست‌وشو</td><td class="num">IP67</td></tr>
+        <tr><td>مکان عمومی، خطر تخریب</td><td class="num">IK10</td></tr>
+      </tbody>
+    </table>
+    <div class="box warn"><b>هشدار:</b> IP66 بدنه، محل اتصال RJ45 را پوشش نمی‌دهد. اتصالات باید داخل جعبه آب‌بند باشند — رایج‌ترین علت خرابی دوربین بیرونی همین است، نه خود دوربین.</div>
+  </div>
+
+  <div>
+    <h3>انتخاب لنز <span style="font-weight:400;color:var(--faint)">(۴ مگاپیکسل، سنسور ۱/۲٫۸ اینچ)</span></h3>
+    <table>
+      <thead><tr><th class="num">لنز</th><th class="num">زاویه</th><th class="num">شناسایی</th><th class="num">بازشناسی</th><th>کاربرد</th></tr></thead>
+      <tbody>
+        <tr><td class="num">۲٫۸</td><td class="num">~۱۰۰°</td><td class="num">~۵ m</td><td class="num">~۱۰ m</td><td>اتاق کوچک، آسانسور</td></tr>
+        <tr><td class="num">۴</td><td class="num">~۷۵°</td><td class="num">~۸ m</td><td class="num">~۱۶ m</td><td>سالن، راهرو</td></tr>
+        <tr><td class="num">۶</td><td class="num">~۵۳°</td><td class="num">~۱۲ m</td><td class="num">~۲۴ m</td><td>محوطه متوسط</td></tr>
+        <tr><td class="num">۸</td><td class="num">~۴۰°</td><td class="num">~۱۶ m</td><td class="num">~۳۲ m</td><td>ورودی از فاصله</td></tr>
+        <tr><td class="num">۱۲</td><td class="num">~۲۷°</td><td class="num">~۲۴ m</td><td class="num">~۴۸ m</td><td>پلاک نزدیک</td></tr>
+        <tr><td class="num">۱۶</td><td class="num">~۲۰°</td><td class="num">~۳۲ m</td><td class="num">~۶۴ m</td><td>گیت خودرو</td></tr>
+      </tbody>
+    </table>
+
+    <h3>انتخاب بدنه</h3>
+    <table>
+      <thead><tr><th style="width:18mm">نوع</th><th>مناسب برای / محدودیت</th></tr></thead>
+      <tbody>
+        <tr><td>توربولت</td><td>داخلی و بیرونی؛ بهترین عملکرد شبانه.</td></tr>
+        <tr><td>دام</td><td>سقف داخلی، کم‌جلب‌توجه. بازتاب IR از گنبد در شب.</td></tr>
+        <tr><td>بولت</td><td>دیوار و محوطه، بازدارندگی. در معرض تخریب.</td></tr>
+        <tr><td>PTZ</td><td>محوطه بزرگ. در هر لحظه یک جهت — <b>مکمل دوربین ثابت، نه جایگزین</b>.</td></tr>
+        <tr><td>فیش‌آی</td><td>دید ۳۶۰ از یک نقطه. افت شدید پیکسل در لبه؛ برای شناسایی نامناسب.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</section>
+
+<!-- ══════════ 5. MISTAKES ══════════ -->
+<section>
+<h2>۵. اشتباهات رایج</h2>
+<table>
+  <thead><tr><th style="width:44mm">اشتباه</th><th>چرا مشکل‌ساز است</th></tr></thead>
+  <tbody>
+    <tr><td>لنز ۲٫۸ برای همه‌جا</td><td>زاویه باز صحنه بزرگی نشان می‌دهد اما تراکم پیکسل را چنان پایین می‌آورد که تصویر برای شناسایی بی‌فایده می‌شود.</td></tr>
+    <tr><td>نصب خیلی بلند</td><td>فقط فرق سر ثبت می‌شود. برای چهره حداکثر ۳ متر.</td></tr>
+    <tr><td>دوربین رو به آفتاب یا درِ شیشه‌ای</td><td>سوژه به سایه سیاه تبدیل می‌شود. True WDR الزامی است.</td></tr>
+    <tr><td>نصب پشت شیشه</td><td>بازتاب IR تصویر شبانه را سفید می‌کند. دوربین را بیرون ببرید یا IR را خاموش کنید.</td></tr>
+    <tr><td>اتکا به برد IR کاتالوگ</td><td>برد اعلامی آزمایشگاهی است؛ در محیط باز معمولاً ۵۰ تا ۷۰ درصد آن عدد.</td></tr>
+    <tr><td>NVR در دسترس و دیده</td><td>سارق اول دستگاه ضبط را می‌برد. رک قفل‌دار، مخفی، با پشتیبان خارج از محل.</td></tr>
+    <tr><td>فراموشی درِ پشتی و پنجره</td><td>مسیر واقعی نفوذ معمولاً همین‌هاست، نه درِ اصلی.</td></tr>
+    <tr><td>شاخه درخت یا تابلو در کادر</td><td>منبع دائمی هشدار کاذب و اشغال فضای ذخیره‌سازی.</td></tr>
+    <tr><td>کابل CCA به‌جای مس خالص</td><td>افت ولتاژ PoE و ریست دوره‌ای دوربین‌های دوردست. فقط مس خالص، حداقل Cat5e.</td></tr>
+    <tr><td>نادیده‌گرفتن ارت و برق‌گیر</td><td>عمده تلفات تجهیزات محوطه‌ای از صاعقه و اضافه‌ولتاژ است، نه خرابی دوربین.</td></tr>
+    <tr><td>محاسبه نکردن بودجه PoE</td><td>سوئیچ ۸ پورت با بودجه ۶۵ وات هشت دوربین ۱۲ واتی را پایدار تغذیه نمی‌کند. ۲۰٪ حاشیه بگذارید.</td></tr>
+  </tbody>
+</table>
+</section>
+
+<!-- ══════════ 6. SURVEY + INFRA ══════════ -->
+<section>
+<h2>۶. چک‌لیست بازدید سایت و زیرساخت</h2>
+
+<div class="two-col">
+  <div>
+    <h3>شناخت نیاز</h3>
+    <ul class="checklist">
+      <li>دغدغه اصلی مالک چیست؟ (سرقت / کارکنان / ایمنی / اختلاف)</li>
+      <li>سابقه حادثه‌ای وجود داشته؟ کجا و چگونه؟</li>
+      <li>تصویر برای پیگیری قضایی است یا نظارت داخلی؟</li>
+      <li>چه کسانی به تصاویر دسترسی خواهند داشت؟</li>
+      <li>مدت نگهداری موردنیاز چند روز است؟</li>
+    </ul>
+
+    <h3>هندسه و محیط</h3>
+    <ul class="checklist">
+      <li>ابعاد هر فضا و ارتفاع سقف اندازه‌گیری شد.</li>
+      <li>فاصله هر نقطه نصب تا سوژه ثبت شد.</li>
+      <li>وضعیت نور در روز و شب بررسی شد.</li>
+      <li>نقاط پرکنتراست (در، پنجره، آفتاب) مشخص شد.</li>
+      <li>موانع دائمی و موقت ثبت شد.</li>
+    </ul>
+
+    <h3>الزامات حقوقی</h3>
+    <ul class="checklist">
+      <li>هیچ دوربینی سرویس بهداشتی، رختکن یا اتاق پرو را پوشش نمی‌دهد.</li>
+      <li>ملک همسایه و معبر عمومی خارج از کادر یا دارای Privacy Mask است.</li>
+      <li>تابلوی اطلاع‌رسانی نصب می‌شود.</li>
+      <li>کارکنان کتباً مطلع شده‌اند.</li>
+      <li>سیاست نگهداری و حذف تصاویر مکتوب شده است.</li>
+    </ul>
+  </div>
+
+  <div>
+    <h3>زیرساخت</h3>
+    <ul class="checklist">
+      <li>مسیر کابل‌کشی و طول هر مسیر مشخص شد.</li>
+      <li>هیچ مسیری از ۱۰۰ متر بیشتر نیست، یا جایگزین تعیین شده.</li>
+      <li>محل رک و NVR انتخاب و برق آن بررسی شد.</li>
+      <li>ظرفیت برق و نیاز به UPS ارزیابی شد.</li>
+      <li>ارت و برق‌گیر برای تجهیزات محوطه‌ای بررسی شد.</li>
+      <li>پهنای باند اینترنت برای مشاهده از راه دور کافی است.</li>
+    </ul>
+
+    <h3>ترتیب محاسبه ظرفیت</h3>
+    <ol>
+      <li><b>تعداد و نوع دوربین</b> از فهرست نقاط بالا.</li>
+      <li><b>بیت‌ریت کل</b> — با H.265: ۲MP ≈ ۲۰۰۰، ۴MP ≈ ۴۰۰۰، ۸MP ≈ ۸۰۰۰ Kbps.</li>
+      <li><b>NVR</b> بر اساس پهنای باند ورودی و ظرفیت Decode، نه فقط تعداد کانال. ۲۵٪ ظرفیت خالی بگذارید.</li>
+      <li><b>حجم آرشیو</b> = بیت‌ریت × ۸۶۴۰۰ × روز ÷ ۸، به‌علاوه حاشیه VBR، سربار فایل‌سیستم و رزرو.</li>
+      <li><b>سوئیچ PoE</b> با ۲۰٪ حاشیه روی مجموع توان.</li>
+      <li><b>UPS</b> بر اساس بار واقعی با ضریب ۱٫۲۵. مودم را هم روی UPS بگذارید.</li>
+    </ol>
+
+    <div class="box tip"><b>توصیه نهایی:</b> شمارش دوربین را بر اساس پوشش انجام دهید، نه بودجه. اگر بودجه محدود است تعداد نقاط را کم کنید، اما کیفیت نقاط حیاتی را پایین نیاورید. ده دوربین بی‌کیفیت که هیچ‌کدام چهره‌ای قابل شناسایی ثبت نمی‌کنند، از سه دوربین درست بی‌ارزش‌ترند.</div>
+  </div>
+</div>
+
+<p class="footer-note">
+  مبتنی بر EN 62676-4 (سطوح DORI)، IEC 60529 (IP)، IEC 62262 (IK) و IEEE 802.3af/at/bt (PoE).
+  اعداد لنز برای دوربین ۴ مگاپیکسل با سنسور ۱/۲٫۸ اینچ محاسبه شده و برای سایر پیکربندی‌ها باید بازمحاسبه شوند.
+  الزامات حریم خصوصی را با مقررات جاری محل خود تطبیق دهید.
+</p>
+</section>
+
+</body>
+</html>
