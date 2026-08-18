@@ -7,6 +7,7 @@ import type {
   PlanObstacle,
   Vec2
 } from "@/src/domain/planner/types";
+import { findSectionType, type SectionType } from "@/src/domain/planner/venues";
 import { computeCameraCoverage, ppmAtDistance } from "@/src/lib/planner/coverage";
 import {
   boundsOf,
@@ -18,7 +19,13 @@ import {
   polygonArea
 } from "@/src/lib/planner/geometry";
 
-type SamplePoint = { point: Vec2; kind: "area" | "door"; baseWeight: number };
+type SamplePoint = {
+  point: Vec2;
+  kind: "area" | "door" | "requirement";
+  baseWeight: number;
+  /** Set when the point falls inside a must-cover area, so it can be audited afterwards. */
+  requirementId?: string;
+};
 type Candidate = {
   position: Vec2;
   yawDeg: number;
@@ -33,6 +40,8 @@ type FloorContext = {
   candidates: Candidate[];
   currentPpm: number[];
   initialPpm: number[];
+  /** Outlines of privacy-protected spaces; nothing is sampled or sited inside them. */
+  forbiddenAreas: Vec2[][];
 };
 
 export type SmartPlacementFloorReport = {
@@ -49,6 +58,8 @@ export type SmartPlacementReport = {
   coverageBeforePercent: number;
   coverageAfterPercent: number;
   floorReports: SmartPlacementFloorReport[];
+  /** Must-cover areas the solution failed to satisfy, named so they can be found. */
+  unmetRequirements: string[];
   warnings: string[];
 };
 
@@ -73,6 +84,50 @@ const taskTargetHeightM: Record<SurveillanceTask, number> = {
   anpr: 0.8
 };
 
+/**
+ * How much harder the optimiser works for a space, by its declared priority.
+ *
+ * This is what makes the venue taxonomy change the answer rather than merely label it:
+ * a till in a shop pulls cameras towards itself far more strongly than a stockroom of
+ * the same size, because the section type says it matters more.
+ */
+const priorityWeight: Record<string, number> = {
+  critical: 3,
+  important: 1.8,
+  optional: 1
+};
+
+/** A must-cover area outranks every priority — it is a constraint, not a preference. */
+const REQUIREMENT_WEIGHT = 9;
+
+type RoomZone = { polygon: Vec2[]; weight: number; forbidden: boolean; areaM2: number };
+
+/**
+ * Reads the floor's rooms into weighting zones.
+ *
+ * Sorted smallest-first so a room inside a hall wins the lookup: the inner space is the
+ * more specific statement about that point.
+ */
+function roomZones(floor: FloorPlan, resolve: (id?: string) => SectionType | null): RoomZone[] {
+  return (floor.rooms ?? [])
+    .map((room) => {
+      const section = resolve(room.sectionTypeId);
+      return {
+        polygon: room.polygon,
+        // An unassigned room is not yet a statement about anything, so it stays neutral
+        // rather than being treated as low priority and quietly starved of cameras.
+        weight: section ? priorityWeight[section.priority] ?? 1 : 1,
+        forbidden: Boolean(section?.forbidden),
+        areaM2: Math.abs(polygonArea(room.polygon))
+      };
+    })
+    .sort((a, b) => a.areaM2 - b.areaM2);
+}
+
+function zoneAt(zones: RoomZone[], point: Vec2): RoomZone | null {
+  return zones.find((zone) => pointInPolygon(point, zone.polygon)) ?? null;
+}
+
 function pointInsideObstacle(point: Vec2, obstacle: PlanObstacle, clearanceM = 0.3) {
   const corners = obstacleCorners({
     ...obstacle,
@@ -96,7 +151,7 @@ function doorPoint(floor: FloorPlan, wallId: string, offset: number): Vec2 | nul
   };
 }
 
-function buildSamples(floor: FloorPlan, boundary: Vec2[]): SamplePoint[] {
+function buildSamples(floor: FloorPlan, boundary: Vec2[], zones: RoomZone[]): SamplePoint[] {
   const bounds = boundsOf(boundary);
   if (!bounds) return [];
   const area = Math.max(1, polygonArea(boundary));
@@ -105,7 +160,12 @@ function buildSamples(floor: FloorPlan, boundary: Vec2[]): SamplePoint[] {
   for (let x = bounds.minX + step / 2; x < bounds.maxX; x += step) {
     for (let z = bounds.minZ + step / 2; z < bounds.maxZ; z += step) {
       const point = { x, z };
-      if (usablePoint(point, boundary, floor)) samples.push({ point, kind: "area", baseWeight: 1 });
+      if (!usablePoint(point, boundary, floor)) continue;
+      const zone = zoneAt(zones, point);
+      // A protected space contributes nothing to the score, so covering it can never be
+      // what makes a placement win.
+      if (zone?.forbidden) continue;
+      samples.push({ point, kind: "area", baseWeight: zone?.weight ?? 1 });
     }
   }
 
@@ -125,16 +185,50 @@ function buildSamples(floor: FloorPlan, boundary: Vec2[]): SamplePoint[] {
     }
   }
   // Bound runtime for very large sites while keeping deterministic spatial distribution.
-  if (samples.length <= 260) return samples;
-  const stride = samples.length / 260;
-  return Array.from({ length: 260 }, (_, index) => samples[Math.floor(index * stride)]);
+  // Requirement samples are added after the cap so a hard constraint can never be
+  // thinned out just because the floor is large.
+  const capped = samples.length <= 260
+    ? samples
+    : Array.from({ length: 260 }, (_, index) => samples[Math.floor(index * (samples.length / 260))]);
+
+  return [...capped, ...requirementSamples(floor)];
 }
 
-function buildCandidates(floor: FloorPlan, boundary: Vec2[]): Candidate[] {
+/** A small grid inside each must-cover area, weighted far above ordinary ground. */
+function requirementSamples(floor: FloorPlan): SamplePoint[] {
+  const samples: SamplePoint[] = [];
+  for (const requirement of floor.coverageRequirements ?? []) {
+    const bounds = boundsOf(requirement.polygon);
+    if (!bounds) continue;
+    const steps = 3;
+    for (let ix = 0; ix < steps; ix += 1) {
+      for (let iz = 0; iz < steps; iz += 1) {
+        const point = {
+          x: bounds.minX + ((ix + 0.5) / steps) * (bounds.maxX - bounds.minX),
+          z: bounds.minZ + ((iz + 0.5) / steps) * (bounds.maxZ - bounds.minZ)
+        };
+        if (!pointInPolygon(point, requirement.polygon)) continue;
+        // A requirement may sit outside the traced perimeter — a rack in the yard, say —
+        // so it is checked against solid obstacles but not against the boundary.
+        if (floor.obstacles.some((obstacle) => obstacle.blocksView && pointInsideObstacle(point, obstacle))) continue;
+        samples.push({
+          point,
+          kind: "requirement",
+          baseWeight: REQUIREMENT_WEIGHT,
+          requirementId: requirement.id
+        });
+      }
+    }
+  }
+  return samples;
+}
+
+function buildCandidates(floor: FloorPlan, boundary: Vec2[], forbiddenAreas: Vec2[][]): Candidate[] {
   const candidates: Candidate[] = [];
   const seen = new Set<string>();
   const push = (candidate: Candidate) => {
     if (!usablePoint(candidate.position, boundary, floor)) return;
+    if (forbiddenAreas.some((area) => pointInPolygon(candidate.position, area))) return;
     const key = `${candidate.mounting}:${Math.round(candidate.position.x / 0.2)}:${Math.round(candidate.position.z / 0.2)}:${Math.round(candidate.yawDeg / 10)}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -241,6 +335,9 @@ function cameraFromDefinition(
 }
 
 function sampleWeight(sample: SamplePoint, goal: SurveillanceTask) {
+  // A must-cover area is worth the same to every device type: the user asked for it to
+  // be seen, not for it to be seen by a particular kind of camera.
+  if (sample.kind === "requirement") return sample.baseWeight;
   if (sample.kind === "area") {
     return sample.baseWeight * (goal === "monitor" ? 1 : goal === "face-capture" ? 0.65 : 0.35);
   }
@@ -279,11 +376,16 @@ function weightedCoveredPercent(contexts: FloorContext[], useInitial: boolean) {
   return totalWeight ? (coveredWeight / totalWeight) * 100 : 0;
 }
 
-function contextForFloor(floor: FloorPlan): FloorContext | null {
+function contextForFloor(
+  floor: FloorPlan,
+  resolve: (id?: string) => SectionType | null
+): FloorContext | null {
   const boundary = largestClosedWallLoop(floor.walls);
   if (!boundary) return null;
-  const samples = buildSamples(floor, boundary);
-  const candidates = buildCandidates(floor, boundary);
+  const zones = roomZones(floor, resolve);
+  const forbiddenAreas = zones.filter((zone) => zone.forbidden).map((zone) => zone.polygon);
+  const samples = buildSamples(floor, boundary, zones);
+  const candidates = buildCandidates(floor, boundary, forbiddenAreas);
   if (!samples.length || !candidates.length) return null;
   const occluders = collectOccluders(floor.walls, floor.obstacles, floor.doors);
   const existingCoverages = floor.cameras.map((camera) => ({
@@ -297,7 +399,24 @@ function contextForFloor(floor: FloorPlan): FloorContext | null {
     }
     return best;
   });
-  return { floor, boundary, samples, candidates, currentPpm, initialPpm: [...currentPpm] };
+  return { floor, boundary, samples, candidates, currentPpm, initialPpm: [...currentPpm], forbiddenAreas };
+}
+
+/**
+ * Which must-cover areas the finished layout actually satisfies.
+ *
+ * An area counts as covered only when every sampled point inside it clears the detection
+ * threshold — partial coverage of a constraint is not coverage, and reporting it as such
+ * is exactly the failure the constraint exists to prevent.
+ */
+function auditRequirements(context: FloorContext): Map<string, boolean> {
+  const results = new Map<string, boolean>();
+  context.samples.forEach((sample, index) => {
+    if (!sample.requirementId) return;
+    const covered = context.currentPpm[index] >= 25;
+    results.set(sample.requirementId, (results.get(sample.requirementId) ?? true) && covered);
+  });
+  return results;
 }
 
 /**
@@ -319,7 +438,13 @@ export function optimiseCameraPlacement(
   const unplaced = definitions
     .filter((definition) => !placedIds.has(definition.id))
     .sort((first, second) => taskPpm[second.goal] - taskPpm[first.goal]);
-  const contexts = plan.floors.map(contextForFloor).filter((context): context is FloorContext => Boolean(context));
+  // Custom section types live on the project, so the resolver has to be built here
+  // rather than imported: a user-defined "no camera" space must be honoured too.
+  const custom = (plan.customSectionTypes ?? []) as unknown as SectionType[];
+  const resolve = (id?: string) => findSectionType(id, custom);
+  const contexts = plan.floors
+    .map((floor) => contextForFloor(floor, resolve))
+    .filter((context): context is FloorContext => Boolean(context));
   const before = weightedCoveredPercent(contexts, true);
   const additions = new Map<string, PlanCamera[]>();
   const warnings: string[] = [];
@@ -390,9 +515,22 @@ export function optimiseCameraPlacement(
     selected.context.currentPpm = selected.context.currentPpm.map((value, index) => Math.max(value, selected.ppm[index]));
   }
 
+  // Audit the hard constraints before reporting, and write the verdict back onto the
+  // areas so the plan itself carries whether each one ended up satisfied.
+  const requirementVerdicts = new Map<string, boolean>();
+  for (const context of contexts) {
+    for (const [id, satisfied] of auditRequirements(context)) requirementVerdicts.set(id, satisfied);
+  }
+  const unmetRequirements: string[] = [];
+
   const nextFloors = plan.floors.map((floor) => ({
     ...floor,
-    cameras: [...floor.cameras, ...(additions.get(floor.id) ?? [])]
+    cameras: [...floor.cameras, ...(additions.get(floor.id) ?? [])],
+    coverageRequirements: (floor.coverageRequirements ?? []).map((requirement) => {
+      const satisfied = requirementVerdicts.get(requirement.id);
+      if (satisfied === false) unmetRequirements.push(requirement.label);
+      return satisfied === undefined ? requirement : { ...requirement, satisfied };
+    })
   }));
   const after = weightedCoveredPercent(contexts, false);
   const floorReports = contexts.map((context) => {
@@ -421,6 +559,11 @@ export function optimiseCameraPlacement(
   if (hasSpecialistCamera && !hasAnnotatedDoor) {
     warnings.push("برای دقت بیشتر دوربین‌های چهره یا پلاک، ابتدا ورودی‌ها و دروازه‌ها را روی نقشه تعریف کنید.");
   }
+  if (unmetRequirements.length) {
+    warnings.push(
+      `این نواحی اجباری پوشش داده نشدند: ${unmetRequirements.join("، ")}. دوربین بیشتری اضافه کنید یا محل ناحیه را بازبینی کنید.`
+    );
+  }
   if (placed > 0 && after < 70) {
     warnings.push(`پوشش برآوردی ${Math.round(after)}٪ است؛ نقاط کور باقی‌مانده را در لایه DORI بازبینی کنید.`);
   }
@@ -435,6 +578,7 @@ export function optimiseCameraPlacement(
       coverageBeforePercent: before,
       coverageAfterPercent: after,
       floorReports,
+      unmetRequirements,
       warnings
     }
   };

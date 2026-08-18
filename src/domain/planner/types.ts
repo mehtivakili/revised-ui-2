@@ -261,6 +261,88 @@ export type PlanBackdrop = {
   calibrated: boolean;
 };
 
+/**
+ * How a room's outline was arrived at, which is what the canvas needs in order to draw
+ * an implied edge differently from a real wall.
+ *
+ * `detected` — every edge is a real wall forming a closed cycle.
+ * `inferred` — three walls formed three sides of a rectangle and the fourth was closed
+ *   for the user; that edge is drawn dashed because nothing is built there.
+ * `enclosing` — the space is genuinely open (a yard, a forecourt) and the outline is the
+ *   larger region the open walls sit inside.
+ * `drawn` — the user drew the polygon by hand.
+ */
+export type RoomBoundarySource = "detected" | "inferred" | "enclosing" | "drawn";
+
+/**
+ * Manual parameters for a space the geometry cannot answer for.
+ *
+ * Filled in when a room stays red because detection could not close it, or when the user
+ * picks the plain-room fallback. Every field is also editable afterwards from the same
+ * panel, so accepting a default is never a one-way door.
+ */
+export type RoomManualParams = {
+  /** Clear internal width and depth in metres, when the outline is only approximate. */
+  widthM?: number;
+  depthM?: number;
+  /** True when the space has no ceiling, which rules out ceiling mounts. */
+  openAbove?: boolean;
+  /** Set when the user wants this space watched even though its type says otherwise. */
+  mustCover?: boolean;
+};
+
+export type PlanRoom = {
+  id: string;
+  /** Outline in plan space, wound in either direction. */
+  polygon: Vec2[];
+  /** Section type id from the venue taxonomy. Absent means the outline renders red. */
+  sectionTypeId?: string;
+  /** Optional human label; the section type already supplies a default name. */
+  name?: string;
+  /** Falls back to the floor's storey height when unset. */
+  ceilingHeightM?: number;
+  boundarySource: RoomBoundarySource;
+  /** Wall ids that produced the outline, used to re-match the room after wall edits. */
+  wallIds?: string[];
+  /** Indices into `polygon` whose outgoing edge is implied rather than built. */
+  impliedEdgeIndices?: number[];
+  manual?: RoomManualParams;
+  /**
+   * Deliberate departures from what the rule engine derived.
+   *
+   * Accepting a suggested configuration must never be a one-way door, so anything the
+   * engine decides can be overridden here and the override is what the designer uses.
+   * Fields left unset keep following the rules as the room's geometry changes.
+   */
+  overrides?: RoomPlacementOverrides;
+};
+
+export type RoomPlacementOverrides = {
+  housing?: CameraHousing;
+  mountKind?: "corner" | "wall-edge" | "ceiling" | "pole";
+  mountHeightM?: number;
+  focalMm?: number;
+  goal?: SurveillanceTask;
+  cameraCount?: number;
+};
+
+/**
+ * An area the user has demanded be covered.
+ *
+ * Distinct from a room's priority: a priority orders the suggestions and can be skipped,
+ * while a requirement is a hard constraint the optimiser must satisfy or report as
+ * unmet. `equipment` requirements are created automatically around a placed rack so the
+ * recorder itself ends up on camera.
+ */
+export type CoverageRequirement = {
+  id: string;
+  polygon: Vec2[];
+  label: string;
+  origin: "user" | "equipment";
+  /** Set once a solution covers it, so the checklist can tick without recomputing. */
+  satisfied?: boolean;
+};
+
 export type FloorPlan = {
   id: string;
   name: string;
@@ -270,6 +352,8 @@ export type FloorPlan = {
   doors: PlanDoor[];
   obstacles: PlanObstacle[];
   cameras: PlanCamera[];
+  rooms?: PlanRoom[];
+  coverageRequirements?: CoverageRequirement[];
   backdrop?: PlanBackdrop;
 };
 
@@ -279,6 +363,32 @@ export type BuildingPlan = {
   gridSizeM: number;
   snapM: number;
   defaults: PlanDefaults;
+  /** Venue chosen in the first step; drives which section types are offered. */
+  venueTypeId?: string;
+  /** Section types the user invented, kept so later projects can offer them again. */
+  customSectionTypes?: CustomSectionRecord[];
+  /** Sections the user has explicitly declared absent, so the checklist stops nagging. */
+  dismissedSectionIds?: string[];
+};
+
+/**
+ * A user-defined section type as stored on the project.
+ *
+ * Structurally identical to the catalog entries in `venues.ts` but declared here to keep
+ * the plan model free of an import cycle; `findSectionType` accepts either.
+ */
+export type CustomSectionRecord = {
+  id: string;
+  venueIds: string[];
+  label: string;
+  aliases: string[];
+  environment: string;
+  priority: string;
+  goal: SurveillanceTask;
+  requiredFeatures: string[];
+  forbidden?: boolean;
+  note?: string;
+  isCustom?: boolean;
 };
 
 export type PlanDefaults = {
@@ -288,7 +398,16 @@ export type PlanDefaults = {
   cameraMountHeightM: number;
 };
 
-export type PlanTool = "select" | "wall" | "door" | "window" | "obstacle" | "camera" | "measure";
+export type PlanTool =
+  | "select"
+  | "wall"
+  | "door"
+  | "window"
+  | "obstacle"
+  | "camera"
+  | "measure"
+  | "room"
+  | "coverage";
 export type PlanViewMode = "top" | "orbit" | "building";
 /**
  * How the wall tool draws.
@@ -299,7 +418,7 @@ export type PlanViewMode = "top" | "orbit" | "building";
  */
 export type WallDrawMode = "line" | "rectangle" | "glass";
 
-export type PlanElementKind = "wall" | "door" | "obstacle" | "camera";
+export type PlanElementKind = "wall" | "door" | "obstacle" | "camera" | "room" | "requirement";
 
 export type PlanSelectionRef = { kind: PlanElementKind; id: string };
 
@@ -357,7 +476,9 @@ export function createFloor(name: string, index: number, storeyHeightM = 3.2): F
     walls: [],
     doors: [],
     obstacles: [],
-    cameras: []
+    cameras: [],
+    rooms: [],
+    coverageRequirements: []
   };
 }
 
@@ -389,6 +510,29 @@ export function duplicateFloor(source: FloorPlan, name: string, index: number): 
       optics: { ...camera.optics },
       features: camera.features ? { ...camera.features } : undefined,
       stream: camera.stream ? { ...camera.stream } : undefined
+    })),
+    // Rooms keep their assigned section type: duplicating a floor duplicates its
+    // programme, not just its geometry, which is the whole point of the button on a
+    // building whose storeys repeat.
+    rooms: (source.rooms ?? []).map((room, order) => ({
+      ...room,
+      id: `room-${stamp}-${order}`,
+      polygon: room.polygon.map((point) => ({ ...point })),
+      wallIds: room.wallIds
+        ?.map((wallId) => {
+          const index = source.walls.findIndex((wall) => wall.id === wallId);
+          return index >= 0 ? `wall-${stamp}-${index}` : null;
+        })
+        .filter((wallId): wallId is string => wallId !== null),
+      impliedEdgeIndices: room.impliedEdgeIndices ? [...room.impliedEdgeIndices] : undefined,
+      manual: room.manual ? { ...room.manual } : undefined,
+      overrides: room.overrides ? { ...room.overrides } : undefined
+    })),
+    coverageRequirements: (source.coverageRequirements ?? []).map((requirement, order) => ({
+      ...requirement,
+      id: `cover-${stamp}-${order}`,
+      polygon: requirement.polygon.map((point) => ({ ...point })),
+      satisfied: undefined
     })),
     backdrop: source.backdrop ? { ...source.backdrop, originM: { ...source.backdrop.originM } } : undefined
   };

@@ -63,6 +63,8 @@ export function deleteSelection(floor: FloorPlan, selection: PlanSelection): Flo
   const doorIds = new Set(selection.filter((item) => item.kind === "door").map((item) => item.id));
   const obstacleIds = new Set(selection.filter((item) => item.kind === "obstacle").map((item) => item.id));
   const cameraIds = new Set(selection.filter((item) => item.kind === "camera").map((item) => item.id));
+  const roomIds = new Set(selection.filter((item) => item.kind === "room").map((item) => item.id));
+  const requirementIds = new Set(selection.filter((item) => item.kind === "requirement").map((item) => item.id));
 
   return {
     ...floor,
@@ -71,7 +73,15 @@ export function deleteSelection(floor: FloorPlan, selection: PlanSelection): Flo
     // with it even when they were not part of the selection.
     doors: (floor.doors ?? []).filter((door) => !doorIds.has(door.id) && !wallIds.has(door.wallId)),
     obstacles: floor.obstacles.filter((obstacle) => !obstacleIds.has(obstacle.id)),
-    cameras: floor.cameras.filter((camera) => !cameraIds.has(camera.id))
+    cameras: floor.cameras.filter((camera) => !cameraIds.has(camera.id)),
+    // Deleting a wall leaves any room it bounded without an outline. The room is dropped
+    // rather than silently reshaped, so detection can rebuild it from whatever remains.
+    rooms: (floor.rooms ?? []).filter(
+      (room) => !roomIds.has(room.id) && !(room.wallIds ?? []).some((wallId) => wallIds.has(wallId))
+    ),
+    coverageRequirements: (floor.coverageRequirements ?? []).filter(
+      (requirement) => !requirementIds.has(requirement.id)
+    )
   };
 }
 
@@ -81,11 +91,13 @@ const kindLabels: Record<PlanSelectionRef["kind"], string> = {
   wall: "دیوار",
   door: "در و پنجره",
   obstacle: "مانع و عناصر محوطه",
-  camera: "دوربین"
+  camera: "دوربین",
+  room: "فضا",
+  requirement: "ناحیه پوشش اجباری"
 };
 
 export function summariseSelection(selection: PlanSelection): SelectionSummary[] {
-  const order: PlanSelectionRef["kind"][] = ["camera", "wall", "door", "obstacle"];
+  const order: PlanSelectionRef["kind"][] = ["camera", "room", "requirement", "wall", "door", "obstacle"];
   return order
     .map((kind) => ({ kind, label: kindLabels[kind], count: selection.filter((item) => item.kind === kind).length }))
     .filter((entry) => entry.count > 0);
@@ -98,6 +110,13 @@ export function describeElement(floor: FloorPlan, ref: PlanSelectionRef): string
   }
   if (ref.kind === "obstacle") {
     return floor.obstacles.find((item) => item.id === ref.id)?.label ?? "مانع";
+  }
+  if (ref.kind === "room") {
+    const room = (floor.rooms ?? []).find((item) => item.id === ref.id);
+    return room?.name?.trim() || "فضای بدون نوع";
+  }
+  if (ref.kind === "requirement") {
+    return (floor.coverageRequirements ?? []).find((item) => item.id === ref.id)?.label ?? "ناحیه اجباری";
   }
   if (ref.kind === "door") {
     const door = (floor.doors ?? []).find((item) => item.id === ref.id);

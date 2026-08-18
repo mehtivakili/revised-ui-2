@@ -1,6 +1,16 @@
 import type * as THREE_NS from "three";
 import type { CameraHousing } from "@/src/domain/catalog/types";
-import type { FloorPlan, ObstacleVariant, PlanBackdrop, PlanDoor, PlanObstacle, PlanWall, Vec2 } from "@/src/domain/planner/types";
+import type {
+  CoverageRequirement,
+  FloorPlan,
+  ObstacleVariant,
+  PlanBackdrop,
+  PlanDoor,
+  PlanObstacle,
+  PlanRoom,
+  PlanWall,
+  Vec2
+} from "@/src/domain/planner/types";
 import type { CameraCoverage } from "@/src/lib/planner/coverage";
 import { largestClosedWallLoop, type RightAngleCorner } from "@/src/lib/planner/geometry";
 import { isCardinalAngle } from "@/src/lib/planner/rotation";
@@ -1911,4 +1921,201 @@ export function collectDimensionLabels(floor: FloorPlan, selectedWallId?: string
     });
   }
   return labels;
+}
+
+/* ── Rooms and coverage areas ──────────────────────────────────────── */
+
+export const roomPalette = {
+  /** A space with no section type yet. Red is the whole point: it blocks completion. */
+  unassigned: 0xdc2626,
+  assigned: 0x1976b7,
+  selected: 0xf59e0b,
+  /** Privacy-protected spaces, where a camera is not an option. */
+  forbidden: 0x94a3b8,
+  requirement: 0x16a34a
+};
+
+/**
+ * Builds a dashed line as a run of short segments.
+ *
+ * three.js has LineDashedMaterial, but it needs computed line distances and still
+ * renders solid under some drivers when depthTest is off. Explicit segments always look
+ * the same, which matters here: dashed is what tells the user a wall is implied rather
+ * than built.
+ */
+function dashedEdge(
+  THREE: ThreeModule,
+  from: Vec2,
+  to: Vec2,
+  y: number,
+  material: THREE_NS.Material,
+  dashM = 0.45,
+  gapM = 0.3
+): THREE_NS.Object3D {
+  const group = new THREE.Group();
+  const spanM = Math.hypot(to.x - from.x, to.z - from.z);
+  if (spanM < 1e-6) return group;
+  const stride = dashM + gapM;
+  const points: THREE_NS.Vector3[] = [];
+  for (let travelled = 0; travelled < spanM; travelled += stride) {
+    const startRatio = travelled / spanM;
+    const endRatio = Math.min(1, (travelled + dashM) / spanM);
+    points.push(
+      new THREE.Vector3(
+        from.x + (to.x - from.x) * startRatio,
+        y,
+        from.z + (to.z - from.z) * startRatio
+      ),
+      new THREE.Vector3(
+        from.x + (to.x - from.x) * endRatio,
+        y,
+        from.z + (to.z - from.z) * endRatio
+      )
+    );
+  }
+  const segments = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), material);
+  segments.renderOrder = 34;
+  group.add(segments);
+  return group;
+}
+
+function polygonFill(
+  THREE: ThreeModule,
+  polygon: Vec2[],
+  color: number,
+  opacity: number,
+  y: number
+): THREE_NS.Mesh | null {
+  if (polygon.length < 3) return null;
+  const shape = new THREE.Shape(polygon.map((point) => new THREE.Vector2(point.x, point.z)));
+  const mesh = new THREE.Mesh(
+    new THREE.ShapeGeometry(shape),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      depthWrite: false
+    })
+  );
+  // ShapeGeometry builds in XY; lying it down maps the shape's y onto plan z.
+  mesh.rotation.x = Math.PI / 2;
+  mesh.position.y = y;
+  return mesh;
+}
+
+/**
+ * One room outline.
+ *
+ * The visual state carries the rule the user asked for: a space with no section type
+ * gets a thick red border and a stronger wash, and stays that way until it is assigned.
+ * Implied edges — the fourth side inferred from three walls, or the whole boundary of an
+ * enclosing region — are dashed, so it is always obvious which lines are real.
+ */
+export function buildRoomOutline(
+  THREE: ThreeModule,
+  room: PlanRoom,
+  options: { selected: boolean; assigned: boolean; forbidden: boolean }
+): THREE_NS.Object3D {
+  const group = new THREE.Group();
+  if (room.polygon.length < 3) return group;
+
+  const color = options.selected
+    ? roomPalette.selected
+    : options.forbidden
+      ? roomPalette.forbidden
+      : options.assigned
+        ? roomPalette.assigned
+        : roomPalette.unassigned;
+
+  const fillOpacity = options.selected ? 0.2 : options.assigned ? 0.075 : 0.16;
+  const fill = polygonFill(THREE, room.polygon, color, fillOpacity, 0.055);
+  if (fill) {
+    fill.renderOrder = 26;
+    fill.userData = { kind: "room", id: room.id };
+    group.add(fill);
+  }
+
+  const implied = new Set(room.impliedEdgeIndices ?? []);
+  const lineMaterial = new THREE.LineBasicMaterial({
+    color,
+    depthTest: false,
+    transparent: true,
+    opacity: options.assigned && !options.selected ? 0.85 : 1
+  });
+
+  for (let index = 0; index < room.polygon.length; index += 1) {
+    const from = room.polygon[index];
+    const to = room.polygon[(index + 1) % room.polygon.length];
+    if (implied.has(index)) {
+      group.add(dashedEdge(THREE, from, to, 0.16, lineMaterial));
+      continue;
+    }
+    // Unassigned outlines get a solid tube rather than a hairline, because a one-pixel
+    // red line at zoomed-out scale is exactly what a user misses.
+    if (!options.assigned) {
+      const segment = branchBetween(
+        THREE,
+        new THREE.Vector3(from.x, 0.16, from.z),
+        new THREE.Vector3(to.x, 0.16, to.z),
+        0.055,
+        new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.95 })
+      );
+      segment.renderOrder = 36;
+      group.add(segment);
+      continue;
+    }
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(from.x, 0.16, from.z),
+        new THREE.Vector3(to.x, 0.16, to.z)
+      ]),
+      lineMaterial
+    );
+    line.renderOrder = 35;
+    group.add(line);
+  }
+
+  group.userData = { kind: "room", id: room.id };
+  return group;
+}
+
+/**
+ * A must-cover area.
+ *
+ * Drawn in green and always dashed: it is not a physical boundary, it is a demand on the
+ * design, and it should never be mistaken for a wall.
+ */
+export function buildCoverageArea(
+  THREE: ThreeModule,
+  requirement: CoverageRequirement,
+  selected: boolean
+): THREE_NS.Object3D {
+  const group = new THREE.Group();
+  if (requirement.polygon.length < 3) return group;
+
+  const color = selected ? roomPalette.selected : roomPalette.requirement;
+  const fill = polygonFill(THREE, requirement.polygon, color, selected ? 0.24 : 0.15, 0.075);
+  if (fill) {
+    fill.renderOrder = 27;
+    fill.userData = { kind: "requirement", id: requirement.id };
+    group.add(fill);
+  }
+
+  const material = new THREE.LineBasicMaterial({ color, depthTest: false });
+  for (let index = 0; index < requirement.polygon.length; index += 1) {
+    group.add(dashedEdge(
+      THREE,
+      requirement.polygon[index],
+      requirement.polygon[(index + 1) % requirement.polygon.length],
+      0.17,
+      material,
+      0.35,
+      0.22
+    ));
+  }
+
+  group.userData = { kind: "requirement", id: requirement.id };
+  return group;
 }

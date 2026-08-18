@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>طرح پیاده‌سازی جانمایی هوشمند مبتنی بر کاربری</title>
+<style>
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("../public/fonts/Vazirmatn-VariableFont_wght.ttf") format("truetype");
+  font-weight: 100 900; font-display: block;
+}
+@page { size: A4; margin: 8mm 8mm 8mm; }
+:root {
+  --ink:#16222c; --muted:#55697a; --faint:#8ba0af; --line:#d6e3ec;
+  --accent:#0f5f99; --accent-soft:#eaf4fb;
+  --amber:#9a6407; --amber-soft:#fdf6e6;
+  --danger:#a32b20; --danger-soft:#fdf0ee;
+  --green:#146b47; --green-soft:#e8f6f0;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Vazirmatn,Tahoma,sans-serif;font-size:8.6pt;line-height:1.6;color:var(--ink)}
+
+.masthead{display:flex;align-items:flex-end;justify-content:space-between;gap:5mm;
+  padding-bottom:1.8mm;margin-bottom:2.5mm;border-bottom:2.2px solid var(--accent)}
+.masthead h1{margin:0;font-size:13pt;font-weight:900;line-height:1.2}
+.masthead .eyebrow{color:var(--accent);font-size:7.4pt;font-weight:800;margin-bottom:.5mm}
+.masthead .sub{color:var(--muted);font-size:7.4pt;max-width:112mm;margin:.8mm 0 0}
+.masthead .stats{text-align:left;color:var(--faint);font-size:6.6pt;white-space:nowrap;line-height:1.6}
+
+h2{margin:4mm 0 1.8mm;padding-bottom:.9mm;font-size:11.8pt;font-weight:900;color:var(--accent);
+  border-bottom:1.3px solid var(--accent);break-after:avoid}
+h3{margin:3mm 0 1.1mm;font-size:9.4pt;font-weight:800;break-after:avoid}
+h4{margin:2.4mm 0 1mm;font-size:8.7pt;font-weight:800;color:var(--muted);break-after:avoid}
+p{margin:0 0 1.1mm}
+ul,ol{margin:0 0 1.4mm;padding-inline-start:4mm}
+li{margin-bottom:.3mm}
+strong{font-weight:800}
+.lead{color:var(--muted);font-size:8pt;margin-bottom:.9mm}
+
+table{width:100%;border-collapse:collapse;margin:1mm 0 1.8mm;font-size:7.8pt;break-inside:avoid}
+thead{background:var(--accent);color:#fff}
+th{padding:1.1mm 1.5mm;text-align:right;font-weight:700;font-size:7.7pt}
+td{padding:1mm 1.5mm;border-bottom:.5px solid var(--line);vertical-align:top;line-height:1.45}
+tbody tr:nth-child(even){background:#f7fafd}
+td.num,th.num{direction:ltr;text-align:center;white-space:nowrap;font-weight:700}
+.term{background:#eef4f8;color:var(--accent);padding:.1mm .9mm;border-radius:.8mm;font-weight:800;white-space:nowrap}
+
+.box{padding:1.3mm 1.9mm;border-radius:1.2mm;margin:1mm 0 1.6mm;break-inside:avoid;
+  border-right:2.2px solid;font-size:7.9pt;line-height:1.55}
+.box p:last-child{margin-bottom:0}
+.box b{font-weight:800}
+.tip{background:var(--accent-soft);border-color:var(--accent)} .tip b{color:var(--accent)}
+.warn{background:var(--amber-soft);border-color:var(--amber)} .warn b{color:var(--amber)}
+.crit{background:var(--danger-soft);border-color:var(--danger)} .crit b{color:var(--danger)}
+.ok{background:var(--green-soft);border-color:var(--green)} .ok b{color:var(--green)}
+
+.p1,.p2,.p3{padding:.1mm 1.2mm;border-radius:8px;font-size:6.9pt;font-weight:800;white-space:nowrap}
+.p1{background:#fde8e5;color:var(--danger)}
+.p2{background:#fdf1dc;color:var(--amber)}
+.p3{background:#e7f1f8;color:var(--accent)}
+.no{color:var(--danger);font-weight:800;font-size:6.9pt}
+
+.two-col{display:flex;gap:5mm;align-items:flex-start}
+.two-col>div{flex:1 1 0;min-width:0}
+.venues{display:flex;gap:4.5mm;align-items:flex-start}
+.vcol{flex:1 1 0;min-width:0}
+.venue{break-inside:avoid;margin-bottom:2mm}
+.venue h3{margin:0 0 .9mm;font-size:8.4pt}
+.venue table{font-size:7pt;margin:0}
+.venue th,.venue td{padding:.7mm 1.1mm}
+
+.phases{display:flex;flex-wrap:wrap;gap:1.5mm;align-items:flex-start}
+.phase{flex:1 1 30%;min-width:0;border:.8px solid var(--line);border-radius:1.5mm;padding:1.5mm 2mm;break-inside:avoid}
+.phase h4{margin:0 0 .8mm;color:var(--accent);font-size:8.4pt}
+.phase .meta{color:var(--faint);font-size:6.9pt;float:left}
+
+.q{border-right:2.2px solid var(--amber);background:var(--amber-soft);padding:1.3mm 1.9mm;
+  margin-bottom:1.3mm;border-radius:1.2mm;break-inside:avoid;font-size:7.9pt;line-height:1.55}
+.q b{color:var(--amber);display:block;margin-bottom:.3mm}
+
+.footer-note{margin-top:2.5mm;padding-top:1.2mm;border-top:.5px solid var(--line);
+  color:var(--faint);font-size:6.9pt;line-height:1.55}
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div>
+    <div class="eyebrow">همیار دوربین · طرح فنی برای تأیید</div>
+    <h1>جانمایی هوشمند مبتنی بر کاربری و بخش‌بندی</h1>
+    <p class="sub">تبدیل «راهنمای جانمایی» به یک موتور قابل اجرا: انتخاب کاربری، تعریف اجباری بخش‌ها، قواعد خودکار انتخاب دوربین و چک‌لیست پوشش</p>
+  </div>
+  <div class="stats">نسخه ۱٫۰ — پیشنهاد<br />۵ فاز اجرایی<br />نیازمند تأیید شما</div>
+</div>
+
+<!-- ═══ 1 ═══ -->
+<section>
+<h2>۱. خلاصه و هدف</h2>
+<div class="two-col">
+<div>
+<p>
+امروز طراح نقشه فقط <strong>هندسه</strong> می‌شناسد: دیوار، در، مانع و دوربین. هیچ‌جا نمی‌داند
+که این چهاردیواری «صندوق فروشگاه» است یا «اتاق خواب». به همین دلیل بهینه‌ساز فعلی
+فقط بر اساس پوشش هندسی کار می‌کند و نمی‌تواند بگوید کدام نقطه اصلاً باید دوربین داشته باشد.
+</p>
+<p>
+این طرح یک <strong>لایه معنایی</strong> اضافه می‌کند: پروژه یک کاربری دارد، هر فضا یک نوع بخش دارد،
+و از روی این دو، نوع دوربین، ارتفاع نصب، لنز و هدف نظارتی <em>استنتاج</em> می‌شود نه حدس.
+</p>
+<h4>سه تغییر بنیادی</h4>
+<ol>
+  <li><strong>کاربری پروژه</strong> در همان گام اول انتخاب می‌شود و کل رفتار بعدی سامانه را تعیین می‌کند.</li>
+  <li><strong>هر فضا باید نوع بگیرد.</strong> فضای بدون نوع با مرز قرمز نمایش داده می‌شود و پروژه تا رفع آن ناقص است.</li>
+  <li><strong>موتور قواعد</strong> جایگزین حدس می‌شود: از نوع بخش به پیکربندی دوربین.</li>
+</ol>
+</div>
+<div>
+<h4>وضعیت فعلی در برابر هدف</h4>
+<table>
+  <thead><tr><th style="width:26mm">موضوع</th><th>اکنون</th><th>هدف</th></tr></thead>
+  <tbody>
+    <tr><td>کاربری پروژه</td><td>فقط برچسب متنی در ویزارد</td><td>مبنای تاکسونومی و قواعد</td></tr>
+    <tr><td>فضا / اتاق</td><td><b>وجود ندارد</b></td><td>موجودیت مستقل با نوع اجباری</td></tr>
+    <tr><td>انتخاب دوربین</td><td>کاربر دستی</td><td>پیشنهاد خودکار از نوع بخش</td></tr>
+    <tr><td>ارتفاع نصب</td><td>عدد پیش‌فرض ثابت</td><td>تابع ارتفاع سقف و هدف</td></tr>
+    <tr><td>اولویت‌ها</td><td>—</td><td>چک‌لیست زنده با تیک خودکار</td></tr>
+    <tr><td>پوشش اجباری</td><td>—</td><td>قید سخت در بهینه‌ساز</td></tr>
+  </tbody>
+</table>
+<div class="box crit"><b>ریسک اصلی طرح:</b> تشخیص «فضا» از روی دیوارها. اگر محیط بسته نباشد فضایی تشخیص داده نمی‌شود. راهکار پیشنهادی در بخش ۴ آمده است.</div>
+</div>
+</div>
+</section>
+
+<!-- ═══ 2 ═══ -->
+<section>
+<h2>۲. تاکسونومی کاربری و بخش‌های داخلی</h2>
+<p class="lead">
+۱۴ کاربری از سند راهنما، هرکدام با فهرست بخش‌های داخلی خود. کاربر در گام اول یکی را انتخاب می‌کند؛
+از آن پس فهرست بخش‌ها فقط موارد همان کاربری را پیشنهاد می‌دهد.
+<span class="p1">حیاتی</span> <span class="p2">مهم</span> <span class="p3">تکمیلی</span> <span class="no">ممنوع</span>
+</p>
+
+<div class="venues">
+<div class="vcol">
+<div class="venue"><h3>۱. منزل، ویلا، خانه‌باغ</h3>
+<table><tbody>
+<tr><td>ورودی حیاط / پارکینگ</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>ورودی ساختمان</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>حیاط و محوطه</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>دیوار پشتی / نقطه کور</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>نشیمن</td><td><span class="p3">تکمیلی</span></td></tr>
+<tr><td>آشپزخانه</td><td><span class="p3">تکمیلی</span></td></tr>
+<tr><td>اتاق خواب</td><td><span class="p3">تکمیلی</span></td></tr>
+<tr><td>راه‌پله / راهرو</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>پارکینگ خودرو</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>استخر / فضای بازی</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>انباری، موتورخانه</td><td><span class="p3">تکمیلی</span></td></tr>
+<tr><td>پشت‌بام، روف‌گاردن</td><td><span class="p3">تکمیلی</span></td></tr>
+</tbody></table></div>
+<div class="venue"><h3>۲. مغازه و فروشگاه کوچک</h3>
+<table><tbody>
+<tr><td>صندوق فروش</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>درِ ورودی</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>ویترین / قفسه گران</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>انبار و درِ پشتی</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>سالن فروش</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>نمای بیرونی / سردر</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>محل تحویل بار</td><td><span class="p3">تکمیلی</span></td></tr>
+<tr><td>اتاق پرو</td><td class="no">ممنوع</td></tr>
+</tbody></table></div>
+<div class="venue"><h3>۳. سوپرمارکت و هایپرمارکت</h3>
+<table><tbody>
+<tr><td>خط صندوق</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>ورودی / خروجی مشتری</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>قفسه اقلام گران</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>انبار و سردخانه</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>بارانداز</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>اتاق پول</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>راهروی قفسه</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>پارکینگ مشتری</td><td><span class="p2">مهم</span></td></tr>
+</tbody></table></div>
+<div class="venue"><h3>۴. طلافروشی، صرافی، بانک</h3>
+<table><tbody>
+<tr><td>درِ ورودی</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>پیشخوان معامله</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>گاوصندوق / اتاق امن</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>ویترین</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>نمای بیرونی / پیاده‌رو</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>اتاق NVR</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>مسیر خروج اضطراری</td><td><span class="p2">مهم</span></td></tr>
+</tbody></table></div>
+</div>
+<div class="vcol">
+<div class="venue"><h3>۵. دفتر و ساختمان اداری</h3>
+<table><tbody>
+<tr><td>لابی و پذیرش</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>اتاق سرور / رک</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>ورودی طبقه</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>بایگانی و اسناد</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>راهرو</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>آسانسور</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>انبار تجهیزات</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>پارکینگ کارکنان</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>فضای کار باز</td><td><span class="p3">تکمیلی</span></td></tr>
+<tr><td>اتاق جلسات</td><td class="no">پرهیز</td></tr>
+</tbody></table></div>
+<div class="venue"><h3>۶. کارخانه، انبار، سوله</h3>
+<table><tbody>
+<tr><td>گیت خودرو</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>بارانداز</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>ورود پرسنل</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>انبار مواد / محصول</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>پیرامون و حصار</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>خط تولید</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>مخازن و مواد خطرناک</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>اتاق برق</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>محل جرثقیل / لیفتراک</td><td><span class="p3">تکمیلی</span></td></tr>
+</tbody></table></div>
+<div class="venue"><h3>۷. پارکینگ عمومی</h3>
+<table><tbody>
+<tr><td>رمپ ورود</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>رمپ خروج</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>مسیر عابر / درِ ارتباطی</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>راهروی پارک</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>آسانسور و راه‌پله</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>اتاق کنترل / صندوق</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>محل شارژ خودرو برقی</td><td><span class="p3">تکمیلی</span></td></tr>
+</tbody></table></div>
+<div class="venue"><h3>۸. رستوران، کافه، فست‌فود</h3>
+<table><tbody>
+<tr><td>صندوق و پرداخت</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>ورودی مشتری</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>آشپزخانه</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>انبار مواد غذایی</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>سالن پذیرایی</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>درِ پشتی / زباله</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>محل بیرون‌بر</td><td><span class="p3">تکمیلی</span></td></tr>
+</tbody></table></div>
+</div>
+<div class="vcol">
+<div class="venue"><h3>۹. مدرسه و مهدکودک</h3>
+<table><tbody>
+<tr><td>درِ ورودی اصلی</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>محل تحویل دانش‌آموز</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>حیاط و زمین بازی</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>راهرو و راه‌پله</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>محوطه پیرامونی</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>کلاس درس</td><td><span class="p3">تکمیلی</span></td></tr>
+<tr><td>آزمایشگاه / کارگاه</td><td><span class="p3">تکمیلی</span></td></tr>
+<tr><td>سرویس، رختکن</td><td class="no">ممنوع</td></tr>
+</tbody></table></div>
+<div class="venue"><h3>۱۰. بیمارستان و داروخانه</h3>
+<table><tbody>
+<tr><td>اورژانس و ورودی</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>پذیرش و صندوق</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>انبار دارو و مخدر</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>راهرو</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>پارکینگ آمبولانس</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>اتاق بیمار / معاینه</td><td class="no">ممنوع</td></tr>
+</tbody></table></div>
+<div class="venue"><h3>۱۱. هتل و اقامتگاه</h3>
+<table><tbody>
+<tr><td>لابی و پذیرش</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>راهروی طبقات</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>صندوق امانات</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>آسانسور</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>پارکینگ میهمان</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>رستوران و سالن</td><td><span class="p3">تکمیلی</span></td></tr>
+<tr><td>داخل اتاق</td><td class="no">ممنوع</td></tr>
+</tbody></table></div>
+<div class="venue"><h3>۱۲. پمپ بنزین</h3>
+<table><tbody>
+<tr><td>جایگاه سوخت‌گیری</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>ورودی / خروجی جایگاه</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>صندوق و فروشگاه</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>مخازن و تخلیه</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>محوطه و پیرامون</td><td><span class="p2">مهم</span></td></tr>
+</tbody></table></div>
+<div class="venue"><h3>۱۳. مجتمع مسکونی و برج</h3>
+<table><tbody>
+<tr><td>لابی و درِ ورودی</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>درِ پارکینگ</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>پارکینگ و راهروی آن</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>آسانسور</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>راه‌پله و خروج اضطراری</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>انباری</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>مشاعات و بام</td><td><span class="p3">تکمیلی</span></td></tr>
+<tr><td>موتورخانه</td><td><span class="p3">تکمیلی</span></td></tr>
+</tbody></table></div>
+<div class="venue"><h3>۱۴. باغ، مزرعه، دامداری</h3>
+<table><tbody>
+<tr><td>ورودی و مسیر دسترسی</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>محیط پیرامونی</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>انبار محصول و ادوات</td><td><span class="p1">حیاتی</span></td></tr>
+<tr><td>جایگاه دام</td><td><span class="p2">مهم</span></td></tr>
+<tr><td>چاه، پمپ، تابلو برق</td><td><span class="p2">مهم</span></td></tr>
+</tbody></table></div>
+</div>
+</div>
+
+<div class="box tip"><b>بخش سفارشی:</b> در همه کاربری‌ها گزینه «هیچ‌کدام / تعریف جدید» وجود دارد. کاربر نام و ویژگی‌های خود را وارد می‌کند و آن بخش در کتابخانه شخصی ذخیره می‌شود تا در پروژه‌های بعدی هم پیشنهاد شود.</div>
+</section>
+
+<!-- ═══ 3 ═══ -->
+<section>
+<h2>۳. مفاهیم جدیدی که باید ساخته شود</h2>
+<p class="lead">امروز سامانه فقط دیوار، در، مانع و دوربین می‌شناسد. این طرح چهار مفهوم تازه اضافه می‌کند.</p>
+
+<table>
+  <thead><tr><th style="width:26mm">مفهوم</th><th style="width:20mm">تعداد</th><th>تعریف</th></tr></thead>
+  <tbody>
+    <tr><td><span class="term">کاربری پروژه</span></td><td>یکی برای کل پروژه</td><td>یکی از ۱۴ گزینه جدول بخش ۲. تعیین می‌کند کدام بخش‌ها پیشنهاد شوند و کدام چک‌لیست اولویت نمایش یابد.</td></tr>
+    <tr><td><span class="term">نوع بخش</span></td><td>کاتالوگ ثابت + سفارشی کاربر</td><td>ماهیت یک فضا؛ مثلاً «صندوق فروش» یا «اتاق سرور». حامل همه دانش نظارتی آن فضاست.</td></tr>
+    <tr><td><span class="term">فضا</span></td><td>هر تعداد در هر طبقه</td><td>یک ناحیه بسته روی نقشه که باید نوع بخش بگیرد. <b>مهم‌ترین افزوده این طرح.</b></td></tr>
+    <tr><td><span class="term">ناحیه پوشش اجباری</span></td><td>اختیاری، هر تعداد</td><td>ناحیه‌ای که کاربر صراحتاً خواسته حتماً دیده شود. قید سخت بهینه‌ساز.</td></tr>
+  </tbody>
+</table>
+
+<div class="two-col">
+<div>
+<h4>۳٫۱ ویژگی‌های «نوع بخش»</h4>
+<table>
+  <thead><tr><th style="width:24mm">ویژگی</th><th>کاربرد</th></tr></thead>
+  <tbody>
+    <tr><td>نام و مترادف‌ها</td><td>پایه تکمیل خودکار؛ «سوپر» و «هایپر» هر دو به سوپرمارکت می‌رسند.</td></tr>
+    <tr><td>کاربری‌های مرتبط</td><td>فهرست بخش‌ها را به کاربری انتخاب‌شده محدود می‌کند.</td></tr>
+    <tr><td>محیط</td><td>اتاق داخلی، راهروی داخلی، بیرونی، پارکینگ، پیرامون. مبنای انتخاب بدنه و ارتفاع.</td></tr>
+    <tr><td>اولویت</td><td>حیاتی، مهم، تکمیلی. ترتیب پیشنهاد و جایگاه در چک‌لیست.</td></tr>
+    <tr><td>هدف کیفی</td><td>سطح DORI لازم برای این فضا.</td></tr>
+    <tr><td>قابلیت لازم</td><td>ویژگی پردازشی مورد نیاز روی دوربین — بخش ۳٫۳.</td></tr>
+    <tr><td>نشان ممنوعیت</td><td>سرویس بهداشتی، رختکن، اتاق بیمار. هیچ دوربینی پیشنهاد نمی‌شود.</td></tr>
+    <tr><td>سفارشی بودن</td><td>ساخته کاربر یا کاتالوگ پایه.</td></tr>
+  </tbody>
+</table>
+
+<h4>۳٫۲ ویژگی‌های «فضا»</h4>
+<table>
+  <thead><tr><th style="width:24mm">ویژگی</th><th>وضعیت</th></tr></thead>
+  <tbody>
+    <tr><td>محدوده روی نقشه</td><td>خودکار از دیوارها یا ترسیم دستی</td></tr>
+    <tr><td>نوع بخش</td><td><b style="color:var(--danger)">اجباری</b> — تا تخصیص، مرز قرمز می‌ماند</td></tr>
+    <tr><td>نام</td><td>اختیاری، مثلاً «اتاق خواب شمالی»</td></tr>
+    <tr><td>ارتفاع سقف</td><td>اختیاری؛ پیش‌فرض از طبقه، مبنای قاعده ارتفاع نصب</td></tr>
+    <tr><td>منشأ</td><td>تشخیص خودکار یا ترسیم کاربر</td></tr>
+  </tbody>
+</table>
+</div>
+<div>
+<h4>۳٫۳ جدایی «کیفیت» از «قابلیت»</h4>
+<p>
+شما به‌درستی گفتید در ورودی و پارکینگ قابلیت شناسایی لازم نیست ولی کیفیت باید چهره را نشان دهد.
+اینها دو چیز متفاوت‌اند و در طرح هم جدا نگه داشته می‌شوند:
+</p>
+<table>
+  <thead><tr><th style="width:24mm">ویژگی</th><th>معنی</th></tr></thead>
+  <tbody>
+    <tr><td>هدف کیفی</td><td>تراکم پیکسل لازم بر متر (سطح DORI). تعیین‌کننده لنز و فاصله مؤثر. برای درِ ورودی: چهره باید قابل تشخیص باشد.</td></tr>
+    <tr><td>قابلیت لازم</td><td>پردازش تخصصی روی خود دوربین. برای درِ ورودی معمولاً <b>هیچ</b>؛ برای گیت خودرو: پلاک‌خوانی.</td></tr>
+  </tbody>
+</table>
+<div class="box tip"><b>چرا این تفکیک مهم است:</b> بدون آن، سامانه برای هر ورودی یک دوربین گران با قابلیت تشخیص چهره پیشنهاد می‌دهد؛ در حالی که خواسته واقعی فقط کیفیت کافی برای دیدن چهره است. این تفکیک مستقیماً روی هزینه پروژه اثر می‌گذارد.</div>
+
+<h4>۳٫۴ اثر بر ساختارهای موجود</h4>
+<table>
+  <thead><tr><th style="width:26mm">جای تغییر</th><th>افزوده</th></tr></thead>
+  <tbody>
+    <tr><td>پروژه (ساختمان)</td><td>کاربری انتخاب‌شده، کتابخانه بخش‌های سفارشی</td></tr>
+    <tr><td>هر طبقه</td><td>فهرست فضاها، فهرست نواحی پوشش اجباری</td></tr>
+    <tr><td>هر دوربین</td><td>فضای متناظر، نوع بخش، شیوه نصب (گوشه / میانه دیوار / سقف / پایه)</td></tr>
+    <tr><td>ابزارهای بوم</td><td>ابزار «فضا» و ابزار «ناحیه اجباری»</td></tr>
+    <tr><td>انتخاب چندتایی</td><td>فضا و ناحیه هم قابل انتخاب و حذف گروهی</td></tr>
+  </tbody>
+</table>
+<div class="box ok"><b>سازگاری با گذشته:</b> همه افزوده‌ها اختیاری‌اند. پروژه‌های ذخیره‌شده فعلی بدون هیچ مهاجرتی باز می‌شوند؛ فقط «فضای بدون نوع» خواهند داشت و اعتبارسنجی به کاربر اطلاع می‌دهد.</div>
+</div>
+</div>
+</section>
+
+<!-- ═══ 4 ═══ -->
+<section>
+<h2>۴. تشخیص فضا و اعتبارسنجی</h2>
+<div class="two-col">
+<div>
+<p>سخت‌ترین بخش طرح. سه گزینه بررسی شد:</p>
+<table>
+  <thead><tr><th style="width:24mm">روش</th><th>مزیت / عیب</th></tr></thead>
+  <tbody>
+    <tr><td>تشخیص خودکار از گراف دیوار</td><td>بدون کار اضافه برای کاربر / پیچیده و در محیط باز شکننده</td></tr>
+    <tr><td>ترسیم دستی فضا</td><td>ساده و قطعی / کار دوباره روی همان دیوارها</td></tr>
+    <tr><td><b>ترکیبی (پیشنهادی)</b></td><td>بهترین هر دو</td></tr>
+  </tbody>
+</table>
+<h4>روش پیشنهادی</h4>
+<ol>
+  <li>پس از هر تغییر دیوار، حلقه‌های بسته گراف دیوار محاسبه می‌شود (تشخیص وجه صفحه‌ای).</li>
+  <li>هر حلقه بسته یک <span class="term">فضا</span> با منشأ «تشخیص خودکار» می‌سازد.</li>
+  <li>اگر تشخیص ممکن نبود — مثلاً محوطه باز — کاربر با ابزار «فضا» چندضلعی را دستی می‌کشد.</li>
+  <li>فضاهای تشخیص‌داده‌شده با تغییر دیوار به‌روزرسانی می‌شوند؛ نوع تخصیص‌داده‌شده تا حد امکان حفظ می‌شود.</li>
+</ol>
+<div class="box warn"><b>نکته پایداری:</b> اگر کاربر دیواری را جابه‌جا کند، فضا نباید نوع خود را از دست بدهد. تطبیق بر اساس بیشترین هم‌پوشانی مساحت با فضای قبلی انجام می‌شود، نه بر اساس شناسه هندسی.</div>
+</div>
+<div>
+<h4>حالت‌های نمایش مرز فضا</h4>
+<table>
+  <thead><tr><th style="width:26mm">وضعیت</th><th>نمایش</th><th>اثر</th></tr></thead>
+  <tbody>
+    <tr><td>بدون نوع</td><td><b style="color:var(--danger)">مرز قرمز ضخیم + هاشور</b></td><td>پروژه ناقص؛ ادامه ویزارد مسدود</td></tr>
+    <tr><td>نوع‌دار</td><td>مرز آبی نازک + برچسب نام</td><td>واجد شرایط جانمایی خودکار</td></tr>
+    <tr><td>ممنوع</td><td>مرز خاکستری + آیکون منع</td><td>هیچ دوربینی پیشنهاد نمی‌شود</td></tr>
+    <tr><td>پوشش اجباری</td><td>هاشور سبز</td><td>قید سخت بهینه‌ساز</td></tr>
+  </tbody>
+</table>
+<h4>قواعد اعتبارسنجی پیش از ادامه</h4>
+<ul>
+  <li>هر فضای تشخیص‌داده‌شده باید نوع داشته باشد.</li>
+  <li>هر بخش <span class="p1">حیاتی</span> کاربری انتخاب‌شده باید حداقل یک فضای متناظر داشته باشد، یا کاربر صراحتاً آن را «در این پروژه ندارم» علامت بزند.</li>
+  <li>فضای ممنوع نباید دوربین داشته باشد.</li>
+</ul>
+<div class="box tip"><b>چرا مسدودکننده و نه هشدار؟</b> شما خواستید مرز قرمز بماند تا نوع تخصیص یابد. مسدودکردن ادامه، همان الزام را در سطح جریان کار اعمال می‌کند — اما با دکمه «فعلاً رد شو» برای کاربر حرفه‌ای، تا سامانه سد راه نشود.</div>
+</div>
+</div>
+</section>
+
+<!-- ═══ 5 ═══ -->
+<section>
+<h2>۵. موتور قواعد جانمایی</h2>
+<p class="lead">از نوع بخش و هندسه فضا به پیکربندی دوربین. همه قواعد زیر از سند راهنما و نکات شما استخراج شده‌اند.</p>
+
+<div class="two-col">
+<div>
+<h4>۵٫۱ انتخاب بدنه</h4>
+<table>
+  <thead><tr><th style="width:28mm">محیط</th><th>بدنه</th><th class="num">سهم</th></tr></thead>
+  <tbody>
+    <tr><td>اتاق داخلی</td><td>تورت (اول) / دام</td><td class="num">~۸۰٪</td></tr>
+    <tr><td>راهروی داخلی</td><td>تورت در راستای طول</td><td class="num">—</td></tr>
+    <tr><td>بیرونی، دیوار</td><td>بولت</td><td class="num">غالب</td></tr>
+    <tr><td>محوطه بزرگ / گشت</td><td>اسپیددام (PTZ)</td><td class="num">مکمل</td></tr>
+    <tr><td>گیت و پلاک</td><td>بولت با لنز بلند</td><td class="num">—</td></tr>
+  </tbody>
+</table>
+
+<h4>۵٫۲ ارتفاع نصب</h4>
+<table>
+  <thead><tr><th style="width:30mm">شرایط</th><th class="num">ارتفاع نصب</th></tr></thead>
+  <tbody>
+    <tr><td>اتاق داخلی با سقف تا ۳ متر</td><td class="num">۲۰ سانت زیر سقف</td></tr>
+    <tr><td>اتاق داخلی با سقف بلندتر از ۳ متر</td><td class="num">دقیقاً ۳ متر</td></tr>
+    <tr><td>هر فضایی که هدفش چهره است</td><td class="num">حداکثر ۲٫۸ متر</td></tr>
+    <tr><td>بیرونی روی دیوار</td><td class="num">۳ تا ۴ متر</td></tr>
+    <tr><td>اسپیددام / PTZ</td><td class="num">۴ تا ۶ متر</td></tr>
+    <tr><td>محل با خطر تخریب</td><td class="num">دست‌کم ۴ متر</td></tr>
+  </tbody>
+</table>
+<p class="lead">
+قاعده سقف بلند از خواسته شما آمده: در سقف‌های بلند نباید دوربین را تا سقف بالا برد، چون زاویه دید
+بیش از حد رو به پایین می‌شود و چهره دیده نمی‌شود. سطر سوم بر بقیه اولویت دارد — یعنی حتی در سقف
+۳ متری، اگر هدف فضا دیدن چهره باشد، ارتفاع به ۲٫۸ کاهش می‌یابد.
+</p>
+
+<h4>۵٫۳ محل نصب</h4>
+<table>
+  <thead><tr><th style="width:22mm">محیط</th><th>ترتیب تلاش</th></tr></thead>
+  <tbody>
+    <tr><td>اتاق داخلی</td><td>گوشه (اولویت ~۶۰٪) ← میانه دیوار ← سقف</td></tr>
+    <tr><td>راهرو</td><td>انتهای راهرو، در راستای محور</td></tr>
+    <tr><td>بیرونی</td><td>دیوار ← پایه/دکل</td></tr>
+  </tbody>
+</table>
+<p class="lead">گوشه پیش‌فرض است چون با یک دوربین بیشترین مساحت اتاق پوشش داده می‌شود. اگر پوشش لازم تأمین نشد، موتور به میانه دیوار و سپس سقف عقب می‌نشیند.</p>
+</div>
+
+<div>
+<h4>۵٫۴ انتخاب لنز</h4>
+<table>
+  <thead><tr><th style="width:26mm">شرایط</th><th class="num">لنز</th><th>یادداشت</th></tr></thead>
+  <tbody>
+    <tr><td>اتاق داخلی، عمق ≤ ۸ m</td><td class="num">۲٫۸ mm</td><td>انتخاب پیش‌فرض</td></tr>
+    <tr><td>اتاق داخلی، عمق ۸–۱۶ m</td><td class="num">۴ mm</td><td></td></tr>
+    <tr><td>راهروی بلند</td><td class="num">۴–۶ mm</td><td>در راستای محور</td></tr>
+    <tr><td>محوطه بیرونی</td><td class="num">۴–۸ mm</td><td>تابع عمق</td></tr>
+    <tr><td>پلاک‌خوانی</td><td class="num">۱۲–۱۶ mm</td><td>زاویه زیر ۳۰°</td></tr>
+    <tr><td>پیرامون وسیع</td><td class="num">۶–۱۲ mm</td><td>یا حرارتی</td></tr>
+  </tbody>
+</table>
+<div class="box tip"><b>قاعده ۹۵٪:</b> در فضای داخلی، لنز باید ۲٫۸ یا ۴ باشد و ۲٫۸ بر ۴ ترجیح دارد. موتور فقط وقتی از این دو خارج می‌شود که تراکم پیکسل لازم در آن عمق تأمین نشود، و در آن صورت دلیل را در خروجی می‌نویسد.</div>
+
+<h4>۵٫۵ هدف و قابلیت به تفکیک بخش (نمونه)</h4>
+<table>
+  <thead><tr><th style="width:26mm">بخش</th><th>هدف (کیفیت)</th><th>قابلیت لازم</th></tr></thead>
+  <tbody>
+    <tr><td>درِ ورودی</td><td>چهره قابل تشخیص</td><td class="num">—</td></tr>
+    <tr><td>پارکینگ (راهرو)</td><td>بازشناسی</td><td class="num">—</td></tr>
+    <tr><td>گیت / رمپ خودرو</td><td>پلاک قابل خواندن</td><td>پلاک‌خوانی</td></tr>
+    <tr><td>صندوق فروش</td><td>شناسایی</td><td class="num">—</td></tr>
+    <tr><td>گاوصندوق</td><td>شناسایی</td><td>ضبط دائم</td></tr>
+    <tr><td>پیرامون محوطه</td><td>کشف</td><td>تفکیک انسان و خودرو</td></tr>
+    <tr><td>اتاق خواب / نشیمن</td><td>مشاهده</td><td class="num">—</td></tr>
+  </tbody>
+</table>
+
+<h4>۵٫۶ قواعد ویژه</h4>
+<ul>
+  <li><strong>رک و NVR:</strong> با قرارگرفتن رک تجهیزات، یک ناحیه پوشش اجباری خودکار حول آن ساخته می‌شود.</li>
+  <li><strong>ورودی دو دوربین:</strong> برای بخش‌های ورودی، موتور یک جفت پیشنهاد می‌دهد — چهره و دید کلی.</li>
+  <li><strong>رمپ خودرو:</strong> جفت پلاک‌خوان و دید کلی، طبق هشدار سند راهنما.</li>
+  <li><strong>فضای ممنوع:</strong> هیچ دوربینی پیشنهاد نمی‌شود؛ در صورت قراردادن دستی، اخطار نمایش داده می‌شود.</li>
+</ul>
+</div>
+</div>
+</section>
+
+<!-- ═══ 6 ═══ -->
+<section>
+<h2>۶. جریان کاربری</h2>
+<div class="two-col">
+<div>
+<h4>گام ۱ — کاربری پروژه</h4>
+<p>
+یک فیلد با <strong>تکمیل خودکار</strong>: کاربر شروع به تایپ می‌کند و از <strong>حرف سوم</strong> فهرست
+پیشنهادها ظاهر می‌شود. جست‌وجو روی نام کاربری و مترادف‌های آن انجام می‌شود
+(«سوپر»، «هایپر»، «فروشگاه بزرگ» ← سوپرمارکت). انتخاب با کلیک یا کلید ورود.
+</p>
+<div class="box tip"><b>چرا از حرف سوم:</b> با یک یا دو حرف فارسی تعداد تطابق‌ها آن‌قدر زیاد است که فهرست بی‌فایده می‌شود. از سه حرف، فهرست معمولاً به کمتر از پنج مورد می‌رسد.</div>
+
+<h4>گام ۲ — ترسیم محیط و تخصیص نوع</h4>
+<ul>
+  <li>کاربر مثل امروز دیوار و در می‌کشد.</li>
+  <li>با بسته‌شدن هر محیط، فضا خودکار تشخیص داده می‌شود و <b style="color:var(--danger)">قرمز</b> می‌ماند.</li>
+  <li>با کلیک روی فضا، پنل سمت راست باز می‌شود: انتخاب نوع (با تکمیل خودکار، محدود به کاربری انتخاب‌شده)، نام اختیاری، ارتفاع سقف.</li>
+  <li>پس از تخصیص، مرز آبی و برچسب‌دار می‌شود.</li>
+</ul>
+
+<h4>گام ۳ — جانمایی</h4>
+<ul>
+  <li>دکمه «جانمایی خودکار» با موتور قواعد بخش ۵ عمل می‌کند.</li>
+  <li>هر دوربین پیشنهادی <strong>دلیل</strong> خود را نگه می‌دارد («صندوق فروش ← شناسایی ← تورت ۲٫۸ در گوشه، ارتفاع ۲٫۸»).</li>
+  <li>کاربر می‌تواند هر پیشنهاد را جابه‌جا، تغییر یا حذف کند.</li>
+</ul>
+</div>
+<div>
+<h4>پنل چک‌لیست اولویت (سمت چپ)</h4>
+<p>
+با انتخاب کاربری، فهرست نقاط همان کاربری در ستون چپ ظاهر می‌شود، گروه‌بندی‌شده بر اساس
+<span class="p1">حیاتی</span> <span class="p2">مهم</span> <span class="p3">تکمیلی</span>.
+</p>
+<table>
+  <thead><tr><th style="width:22mm">وضعیت آیتم</th><th>معنی</th></tr></thead>
+  <tbody>
+    <tr><td>خالی</td><td>فضایی از این نوع تعریف نشده</td></tr>
+    <tr><td>نیمه</td><td>فضا هست، دوربین ندارد</td></tr>
+    <tr><td><b style="color:var(--green)">تیک</b></td><td>فضا دارد و پوشش لازم تأمین شده</td></tr>
+    <tr><td>خط‌خورده</td><td>کاربر گفته «در این پروژه ندارم»</td></tr>
+  </tbody>
+</table>
+<p class="lead">کلیک روی هر آیتم، فضای متناظر را روی نقشه هایلایت می‌کند. این پنل عملاً «درصد کامل‌بودن طرح» را نشان می‌دهد.</p>
+
+<h4>ابزار پوشش اجباری</h4>
+<p>
+ابزار جدید «ناحیه اجباری»: کاربر یک چندضلعی روی هر نقطه می‌کشد و آن ناحیه به قید سخت تبدیل می‌شود.
+بهینه‌ساز راه‌حلی را که آن ناحیه را پوشش ندهد رد می‌کند و اگر نتواند، صریح اعلام می‌کند
+که با تجهیزات فعلی امکان‌پذیر نیست.
+</p>
+<div class="box crit"><b>تفاوت با اولویت:</b> اولویت‌ها ترتیب پیشنهاد را تعیین می‌کنند و قابل صرف‌نظرند. ناحیه اجباری قید است — یا برآورده می‌شود یا طرح شکست‌خورده اعلام می‌شود. این تمایز باید در خروجی هم دیده شود.</div>
+</div>
+</div>
+</section>
+
+<!-- ═══ 7 ═══ -->
+<section>
+<h2>۷. فازبندی اجرا</h2>
+<div class="phases">
+<div class="phase"><h4>فاز ۱ — تاکسونومی و گام کاربری <span class="meta">پایه</span></h4>
+<p>کاتالوگ ۱۴ کاربری و بخش‌هایشان به‌صورت داده ساختاریافته، فیلد انتخاب کاربری با تکمیل خودکار، ذخیره روی پروژه. بدون تغییر در بوم.</p>
+<p class="lead">خروجی قابل آزمون: انتخاب کاربری و فیلتر شدن فهرست بخش‌ها.</p></div>
+
+<div class="phase"><h4>فاز ۲ — فضا و اعتبارسنجی <span class="meta">هسته</span></h4>
+<p>تشخیص حلقه بسته، موجودیت «فضا»، ابزار ترسیم دستی فضا، پنل تخصیص نوع، مرز قرمز، قواعد اعتبارسنجی و تطبیق فضا پس از تغییر دیوار.</p>
+<p class="lead">پرریسک‌ترین فاز. آزمون واحد برای تشخیص حلقه و تطبیق مساحت لازم است.</p></div>
+
+<div class="phase"><h4>فاز ۳ — موتور قواعد <span class="meta">ارزش اصلی</span></h4>
+<p>جدول قواعد بخش ۵ به‌صورت داده، تابع استنتاج پیکربندی، ادغام با بهینه‌ساز موجود، ثبت «دلیل» هر پیشنهاد.</p>
+<p class="lead">در این نقطه «جانمایی خودکار» واقعاً هوشمند می‌شود.</p></div>
+<div class="phase"><h4>فاز ۴ — چک‌لیست اولویت <span class="meta">تجربه کاربری</span></h4>
+<p>پنل سمت چپ، محاسبه وضعیت هر آیتم، هایلایت متقابل با نقشه، درصد کامل‌بودن.</p></div>
+
+<div class="phase"><h4>فاز ۵ — قیود پوشش اجباری <span class="meta">تکمیلی</span></h4>
+<p>ابزار ترسیم ناحیه، قید سخت در بهینه‌ساز، قید خودکار برای رک تجهیزات، گزارش شکست قابل فهم.</p></div>
+</div>
+<div class="box ok"><b>ترتیب پیشنهادی:</b> فاز ۱ و ۲ با هم ارزش کامل ندارند اما پیش‌نیاز بقیه‌اند. اگر می‌خواهید زودتر نتیجه ببینید، می‌توان فاز ۳ را با فضاهای <em>دستی</em> جلو انداخت و تشخیص خودکار را بعداً افزود.</div>
+</section>
+
+<!-- ═══ 8 ═══ -->
+<section>
+<h2>۸. تصمیم‌هایی که باید بگیرید</h2>
+<div class="two-col">
+<div>
+<div class="q"><b>۱. تشخیص خودکار فضا یا ترسیم دستی؟</b>
+پیشنهاد من ترکیبی است، ولی تشخیص خودکار پرهزینه‌ترین بخش کار است. اگر بخواهید سریع‌تر به نتیجه برسید، فقط ترسیم دستی هم کافی است.</div>
+
+<div class="q"><b>۲. مسدودکردن ادامه یا فقط هشدار؟</b>
+شما گفتید مرز قرمز بماند تا نوع تخصیص یابد. آیا ادامه ویزارد هم واقعاً مسدود شود، یا هشدار کافی است؟</div>
+
+<div class="q"><b>۳. فضاهای بیرونی چطور تعریف شوند؟</b>
+حیاط و محوطه معمولاً دیوار بسته ندارند. پیشنهاد: ابزار «ناحیه بیرونی» جدا از فضای بسته. موافقید؟</div>
+
+</div>
+<div>
+<div class="q"><b>۴. کتابخانه بخش سفارشی کجا ذخیره شود؟</b>
+حافظه مرورگر (ساده، مختص همان دستگاه) یا PostgreSQL (مشترک بین کاربران و پروژه‌ها)؟</div>
+
+<div class="q"><b>۵. آیا نسبت‌های آماری قابل تنظیم باشند؟</b>
+«۸۰٪ تورت»، «۶۰٪ گوشه»، «ترجیح ۲٫۸ بر ۴» — این‌ها را ثابت کنم یا در تنظیمات پیشرفته قابل تغییر باشند؟</div>
+
+<div class="q"><b>۶. چند دوربین در یک فضای بزرگ؟</b>
+اگر یک اتاق با یک دوربین پوشش داده نشود، موتور خودکار دوربین دوم اضافه کند یا فقط هشدار بدهد؟</div>
+</div>
+</div>
+</section>
+
+<p class="footer-note">
+این سند یک <strong>پیشنهاد</strong> است و پیش از هر تغییری در کد نیاز به تأیید شما دارد.
+تاکسونومی و قواعد از «راهنمای جانمایی دوربین مداربسته» (همین مجموعه) و نکات تکمیلی شما استخراج شده‌اند.
+پس از تأیید، اجرا فاز به فاز انجام و هر فاز جداگانه قابل بازبینی خواهد بود.
+</p>
+
+</body>
+</html>

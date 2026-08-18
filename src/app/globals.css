@@ -25,7 +25,7 @@
   --shadow: 0 12px 34px rgba(31, 42, 55, 0.08);
   --shadow-soft: 0 18px 44px rgba(39, 65, 82, 0.10);
   --radius: 8px;
-  --page-max: 1220px;
+  --page-max: 1586px;
   --page-gutter: 20px;
 }
 
@@ -4710,7 +4710,7 @@ h3 {
 
 /* ============ Contacts Page Styling ============ */
 .contacts-page {
-  max-width: 1200px;
+  max-width: var(--page-max);
   margin: 0 auto;
   padding: 28px 20px;
 }
@@ -10168,3 +10168,443 @@ body.chat-assistant-maximized { overflow: hidden; }
   .chat-toolbar button span { display: none; }
   .assistant-page .page-intro h1 { align-items: flex-start; }
 }
+
+/* ============ Smart design: venue rail, rooms and coverage areas ============ */
+
+/*
+ * The environment step now carries a left rail as well as the right inspector. The
+ * middle column is the only flexible one, so the canvas absorbs the extra width the
+ * wider page gives it rather than the panels growing to fill it.
+ */
+.plan-workspace-venue {
+  grid-template-columns: 268px minmax(0, 1fr) 300px;
+}
+
+.plan-workspace-venue > .plan-venue-rail { grid-column: 1; grid-row: 1; min-width: 0; }
+.plan-workspace-venue > .plan-canvas-wrap { grid-column: 2; }
+.plan-workspace-venue > .plan-workspace-sidebar { grid-column: 3; }
+
+.plan-venue-panel {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.plan-venue-card {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-soft);
+}
+
+.plan-venue-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 9px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #16222c;
+}
+
+.plan-venue-card h3 svg { color: #0f5f99; }
+
+.plan-venue-blurb,
+.plan-venue-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+/* Autocomplete, shared by the venue and section fields */
+
+.plan-autocomplete { position: relative; }
+
+.plan-autocomplete-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  background: #f8fbfd;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.plan-autocomplete-input svg { color: #8ba0af; flex: none; }
+
+.plan-autocomplete-input input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  outline: none;
+}
+
+.plan-autocomplete-list {
+  position: absolute;
+  z-index: 40;
+  inset-inline: 0;
+  top: calc(100% + 4px);
+  max-height: 268px;
+  overflow-y: auto;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 14px 34px rgba(20, 44, 62, .16);
+}
+
+.plan-autocomplete-list > button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+  text-align: start;
+  color: inherit;
+  cursor: pointer;
+}
+
+.plan-autocomplete-list > button:hover { background: #eef7fd; }
+.plan-autocomplete-list > button.active { background: #e2f1fb; font-weight: 700; }
+.plan-autocomplete-label { flex: 1; min-width: 0; }
+
+.plan-autocomplete-hint {
+  margin: 0;
+  padding: 8px;
+  color: #8ba0af;
+  font-size: 11px;
+}
+
+.plan-autocomplete-create {
+  margin-top: 3px;
+  border-top: 1px solid var(--border) !important;
+  border-radius: 0 0 7px 7px !important;
+  color: #0f5f99 !important;
+  font-weight: 700;
+}
+
+/* Open boundaries */
+
+.plan-open-regions { border-color: #f5c78f; background: #fffaf2; }
+
+.plan-open-region {
+  padding: 8px 0;
+  border-top: 1px dashed #e7d2b4;
+}
+
+.plan-open-region:first-of-type { border-top: 0; }
+
+.plan-open-region-title {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.plan-open-region-title em { color: #9a6407; font-style: normal; font-weight: 800; }
+
+.plan-open-region-actions { display: grid; gap: 5px; }
+
+.plan-open-region-actions button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border: 1px solid #e3cfae;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: #7a5209;
+  cursor: pointer;
+}
+
+.plan-open-region-actions button:hover { border-color: #cf9b3d; background: #fff6e6; }
+.plan-open-region-actions button small { margin-inline-start: auto; font-weight: 600; opacity: .75; }
+
+/* Priority checklist */
+
+.plan-priority-card { max-height: 460px; overflow-y: auto; }
+
+.plan-priority-progress {
+  margin-inline-start: auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #e7f6ef;
+  color: #146b47;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.plan-priority-group { margin-top: 8px; }
+
+.plan-priority-group h4 {
+  margin: 0 0 4px;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.plan-priority-group h4.priority-critical { color: #a32b20; }
+.plan-priority-group h4.priority-important { color: #9a6407; }
+.plan-priority-group h4.priority-optional { color: #0f5f99; }
+
+.plan-priority-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 5px;
+  border-radius: 7px;
+}
+
+.plan-priority-item:hover { background: #f4fafe; }
+
+.plan-priority-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+  text-align: start;
+  color: inherit;
+  cursor: pointer;
+}
+
+.plan-priority-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid #c7d8e4;
+  border-radius: 4px;
+  color: #fff;
+}
+
+.plan-priority-item.status-covered .plan-priority-mark { border-color: #146b47; background: #16a34a; }
+.plan-priority-item.status-unassigned .plan-priority-mark { border-color: #c98a12; background: #fdf1dc; }
+.plan-priority-item.status-dismissed { opacity: .5; }
+.plan-priority-item.status-dismissed .plan-priority-label > span:last-child { text-decoration: line-through; }
+
+.plan-priority-status {
+  grid-column: 1 / -1;
+  padding-inline-start: 21px;
+  color: #8ba0af;
+  font-size: 10px;
+}
+
+.plan-priority-item.status-covered .plan-priority-status { color: #146b47; }
+
+.plan-priority-dismiss {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #8ba0af;
+  cursor: pointer;
+}
+
+.plan-priority-dismiss:hover { background: #e8eef3; color: #55697a; }
+
+/* Room inspector */
+
+.plan-room-inspector .plan-required {
+  margin-inline-start: 4px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #fde8e5;
+  color: #a32b20;
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.plan-room-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 9px 10px;
+  border-inline-start: 3px solid #dc2626;
+  border-radius: 8px;
+  background: #fdf0ee;
+  color: #8f2a20;
+  font-size: 11px;
+  line-height: 1.75;
+}
+
+.plan-room-alert.forbidden {
+  border-color: #64748b;
+  background: #f1f5f9;
+  color: #44546a;
+}
+
+.plan-room-alert svg { flex: none; margin-top: 2px; }
+
+.plan-room-facts { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.plan-room-chip {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #eef4f8;
+  color: #44607a;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.plan-room-chip.priority-critical { background: #fde8e5; color: #a32b20; }
+.plan-room-chip.priority-important { background: #fdf1dc; color: #8a5a06; }
+.plan-room-chip.priority-optional { background: #e7f1f8; color: #0f5f99; }
+.plan-room-chip.forbidden { background: #e2e8f0; color: #475569; }
+
+.plan-room-manual {
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #f8fbfd;
+}
+
+.plan-room-manual > summary {
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.plan-room-manual > summary em { color: #9a6407; font-style: normal; font-weight: 700; }
+
+.plan-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.plan-check input { width: 14px; height: 14px; accent-color: #0f5f99; }
+
+.plan-room-recipe {
+  padding: 10px;
+  border: 1px solid #cfe6f6;
+  border-radius: 10px;
+  background: #f4fbff;
+}
+
+.plan-room-recipe h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f5f99;
+}
+
+.plan-room-recipe-note {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.8;
+}
+
+.plan-field-changed > span { color: #9a6407; }
+
+.plan-overridden {
+  margin-inline-start: 4px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #fdf1dc;
+  color: #8a5a06;
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.plan-room-features {
+  display: grid;
+  gap: 2px;
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 11px;
+}
+
+.plan-room-features span { color: var(--muted); font-size: 10.5px; }
+
+.plan-room-reasons { margin-top: 8px; }
+.plan-room-reasons > summary { font-size: 11px; font-weight: 700; color: #0f5f99; cursor: pointer; }
+.plan-room-reasons ul { margin: 6px 0 0; padding-inline-start: 15px; }
+.plan-room-reasons li { margin-bottom: 4px; color: var(--muted); font-size: 10.5px; line-height: 1.75; }
+
+.plan-room-reset {
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px;
+  border: 1px dashed #9fc6e2;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f5f99;
+  cursor: pointer;
+}
+
+.plan-room-reset:hover { background: #e7f3fb; }
+
+.plan-room-warning { border-color: #f0b7b0; background: #fdf0ee; }
+
+@media (max-width: 1280px) {
+  .plan-workspace-venue { grid-template-columns: 240px minmax(0, 1fr) 268px; }
+}
+
+@media (max-width: 1080px) {
+  .plan-workspace-venue { grid-template-columns: minmax(0, 1fr); }
+  .plan-workspace-venue > .plan-venue-rail,
+  .plan-workspace-venue > .plan-canvas-wrap,
+  .plan-workspace-venue > .plan-workspace-sidebar { grid-column: 1; grid-row: auto; }
+  .plan-priority-card { max-height: none; }
+}
+
+.plan-room-generic {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 3px 7px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px dashed #9fc6e2;
+  border-radius: 9px;
+  background: #f4fbff;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-align: start;
+  color: #0f5f99;
+  cursor: pointer;
+}
+
+.plan-room-generic:hover { border-color: #0f5f99; background: #e7f3fb; }
+.plan-room-generic small { grid-column: 2; font-weight: 600; color: var(--muted); }

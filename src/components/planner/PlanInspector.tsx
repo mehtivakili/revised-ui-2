@@ -1,6 +1,6 @@
 "use client";
 
-import { Blinds, BrickWall, Camera, Compass, Cuboid, DoorOpen, Layers, Ruler, Trash2, X } from "lucide-react";
+import { Blinds, BrickWall, Camera, Compass, Cuboid, DoorOpen, Layers, Ruler, Square, Target, Trash2, X } from "lucide-react";
 import {
   soleSelection,
   type FloorPlan,
@@ -19,6 +19,8 @@ import { sensorOptions } from "@/src/lib/chatbot/slots";
 import { housingLabels } from "@/src/lib/planner/camera-templates";
 import { formatFa } from "@/src/lib/chatbot/persian";
 import { applyObstaclePreset, obstaclePreset, obstaclePresets } from "@/src/lib/planner/obstacle-presets";
+import { CoverageRequirementInspector, RoomInspector } from "@/src/components/planner/RoomInspector";
+import type { CustomSectionRecord } from "@/src/domain/planner/types";
 
 /**
  * Property editor for whatever is selected.
@@ -63,8 +65,11 @@ export function PlanInspector({
   activeTool,
   wallDrawMode,
   defaults,
+  venueTypeId,
+  customSectionTypes = [],
   onDefaultsChange,
   onFloorChange,
+  onCustomSectionType,
   onSelect
 }: {
   floor: FloorPlan;
@@ -72,8 +77,11 @@ export function PlanInspector({
   activeTool: PlanTool;
   wallDrawMode: WallDrawMode;
   defaults: PlanDefaults;
+  venueTypeId?: string;
+  customSectionTypes?: CustomSectionRecord[];
   onDefaultsChange: (patch: Partial<PlanDefaults>) => void;
   onFloorChange: (floor: FloorPlan) => void;
+  onCustomSectionType?: (section: CustomSectionRecord) => void;
   onSelect: (selection: PlanSelection) => void;
 }) {
   /*
@@ -134,6 +142,32 @@ export function PlanInspector({
       );
     }
 
+    if (activeTool === "room") {
+      return (
+        <aside className="plan-inspector plan-tool-inspector">
+          <header><Square size={18} aria-hidden="true" /><strong>رسم فضا</strong></header>
+          <p>
+            فضاهای بسته خودکار تشخیص داده می‌شوند. این ابزار برای جاهایی است که دیوار بسته ندارند —
+            مثل حیاط یا محوطه — و باید مرزشان را خودتان بکشید.
+          </p>
+          <div className="plan-tool-tip"><Ruler size={15} aria-hidden="true" /><span>گوشه اول و سپس گوشه مقابل را بزنید. مرز فضای جدید تا تعیین نوع، قرمز می‌ماند.</span></div>
+        </aside>
+      );
+    }
+
+    if (activeTool === "coverage") {
+      return (
+        <aside className="plan-inspector plan-tool-inspector">
+          <header><Target size={18} aria-hidden="true" /><strong>ناحیه پوشش اجباری</strong></header>
+          <p>
+            ناحیه‌ای که حتماً باید دیده شود. برخلاف اولویت‌ها که ترتیب پیشنهاد را تعیین می‌کنند،
+            این یک قید سخت است و جانمایی خودکار باید آن را برآورده کند.
+          </p>
+          <div className="plan-tool-tip"><span>دو گوشه مقابل ناحیه را بزنید.</span></div>
+        </aside>
+      );
+    }
+
     if (activeTool === "door") {
       return (
         <aside className="plan-inspector plan-tool-inspector">
@@ -152,6 +186,35 @@ export function PlanInspector({
         <strong>چیزی انتخاب نشده</strong>
         <p>با ابزار «انتخاب» روی دیوار، در، مانع یا دوربین کلیک کنید تا مشخصاتش را اینجا تنظیم کنید.</p>
       </aside>
+    );
+  }
+
+  if (sole.kind === "room") {
+    const room = (floor.rooms ?? []).find((item) => item.id === sole.id);
+    if (!room) return null;
+    return (
+      <RoomInspector
+        floor={floor}
+        room={room}
+        venueTypeId={venueTypeId}
+        customSectionTypes={customSectionTypes}
+        onFloorChange={onFloorChange}
+        onCustomSectionType={(section) => onCustomSectionType?.(section)}
+        onSelect={() => onSelect([])}
+      />
+    );
+  }
+
+  if (sole.kind === "requirement") {
+    const requirement = (floor.coverageRequirements ?? []).find((item) => item.id === sole.id);
+    if (!requirement) return null;
+    return (
+      <CoverageRequirementInspector
+        floor={floor}
+        requirement={requirement}
+        onFloorChange={onFloorChange}
+        onSelect={() => onSelect([])}
+      />
     );
   }
 

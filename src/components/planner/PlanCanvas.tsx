@@ -13,12 +13,14 @@ import {
   type PlanDefaults,
   type PlanSelection,
   type PlanSelectionRef,
+  type PlanRoom,
   type PlanTool,
   type PlanViewMode,
   type WallDrawMode,
   type Vec2
 } from "@/src/domain/planner/types";
 import { elementsInRect, mergeSelection } from "@/src/lib/planner/selection";
+import { findSectionType } from "@/src/domain/planner/venues";
 import { isCardinalAngle, snapRotationAngle } from "@/src/lib/planner/rotation";
 import { computeCameraCoverage, type CameraCoverage } from "@/src/lib/planner/coverage";
 import {
@@ -38,8 +40,10 @@ import {
   buildFloorSlab,
   buildObstacleMesh,
   buildObstacleRotateHandle,
+  buildCoverageArea,
   buildMarqueeRect,
   buildPreviewLine,
+  buildRoomOutline,
   buildPreviewRect,
   buildRightAngleMarker,
   buildWallWithDoors,
@@ -61,7 +65,7 @@ type Bundle = {
   orbitCamera: THREE_NS.PerspectiveCamera;
   topControls: OrbitControls;
   orbitControls: OrbitControls;
-  groups: Record<"content" | "coverage" | "cameras" | "backdrop" | "preview" | "placement" | "reference", THREE_NS.Group>;
+  groups: Record<"rooms" | "content" | "coverage" | "cameras" | "backdrop" | "preview" | "placement" | "reference", THREE_NS.Group>;
   ground: THREE_NS.Mesh;
   fineGrid: THREE_NS.GridHelper;
   majorGrid: THREE_NS.GridHelper;
@@ -174,6 +178,8 @@ export type PlanCanvasProps = {
   buildingFloors?: FloorPlan[];
   focusedFloorId?: string | null;
   referenceFloor?: FloorPlan | null;
+  /** Project-defined section types, so a custom "no camera" space also renders grey. */
+  customSectionTypes?: { id: string; forbidden?: boolean }[];
   onSelect: (selection: PlanSelection) => void;
   onFloorChange: (floor: FloorPlan) => void;
   onHint: (hint: string | null) => void;
@@ -199,14 +205,14 @@ const nextId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.
 export function PlanCanvas(props: PlanCanvasProps) {
   const {
     floor, tool, viewMode, selection, showCoverage, readOnly, buildingFloors,
-    focusedFloorId, referenceFloor, onSelect, onFloorChange, onHint
+    focusedFloorId, referenceFloor, customSectionTypes, onSelect, onFloorChange, onHint
   } = props;
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const labelHostRef = useRef<HTMLDivElement | null>(null);
   const smartGuideLabelHostRef = useRef<HTMLDivElement | null>(null);
   const bundleRef = useRef<Bundle | null>(null);
-  const draftRef = useRef<{ kind: "wall" | "obstacle" | "measure"; start: Vec2 } | null>(null);
+  const draftRef = useRef<{ kind: "wall" | "obstacle" | "measure" | "room" | "coverage"; start: Vec2 } | null>(null);
   const dragRef = useRef<DragState>(null);
 
   const latest = useRef(props);
@@ -334,6 +340,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
       scene.add(majorGrid);
 
       const groups = {
+        rooms: new THREE.Group(),
         content: new THREE.Group(),
         coverage: new THREE.Group(),
         cameras: new THREE.Group(),
@@ -419,13 +426,17 @@ export function PlanCanvas(props: PlanCanvasProps) {
   useEffect(() => {
     const bundle = bundleRef.current;
     if (!bundle) return;
-    syncScene(bundle, { floor, selection, viewMode, buildingFloors, focusedFloorId, referenceFloor }, coverages);
+    syncScene(
+      bundle,
+      { floor, selection, viewMode, buildingFloors, focusedFloorId, referenceFloor, customSectionTypes },
+      coverages
+    );
     const selected = soleSelection(selection);
     renderLabels(labelHostRef.current, viewMode === "building" ? [] : collectDimensionLabels(
       floor,
       selected?.kind === "wall" ? selected.id : undefined
     ));
-  }, [floor, selection, coverages, buildingFloors, focusedFloorId, referenceFloor, viewMode]);
+  }, [floor, selection, coverages, buildingFloors, focusedFloorId, referenceFloor, viewMode, customSectionTypes]);
 
   useEffect(() => {
     const bundle = bundleRef.current;
@@ -481,7 +492,11 @@ export function PlanCanvas(props: PlanCanvasProps) {
       latest.current.viewMode === "top" ? bundle.topCamera : bundle.orbitCamera
     );
     // Cameras and their yaw handles are tested first so a handle always wins over a wall.
-    const targets = [...bundle.groups.cameras.children, ...bundle.groups.content.children];
+    const targets = [
+      ...bundle.groups.cameras.children,
+      ...bundle.groups.content.children,
+      ...bundle.groups.rooms.children
+    ];
     for (const hit of bundle.raycaster.intersectObjects(targets, true)) {
       const data = hit.object.userData as { kind?: string; id?: string; floorId?: string };
       if (data.floorId && data.floorId !== latest.current.floor.id) continue;
@@ -563,7 +578,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
       && !(openingTool && picked.kind === "wall")
     ) {
       const kind = picked.kind === "camera-yaw" ? "camera" : picked.kind;
-      if (kind === "wall" || kind === "door" || kind === "obstacle" || kind === "camera") {
+      if (kind === "wall" || kind === "door" || kind === "obstacle" || kind === "camera" || kind === "room" || kind === "requirement") {
         onSelect([{ kind, id: picked.id }]);
         onHint("مشخصات آیتم در پنل سمت راست باز شد؛ برای ادامه طراحی روی فضای خالی کلیک کنید");
         return;
@@ -694,14 +709,18 @@ export function PlanCanvas(props: PlanCanvasProps) {
     const draft = draftRef.current;
     if (!draft) {
       onSelect([]);
-      draftRef.current = { kind: current.tool as "wall" | "obstacle" | "measure", start: snapped };
+      draftRef.current = { kind: current.tool as "wall" | "obstacle" | "measure" | "room" | "coverage", start: snapped };
       onHint(current.tool === "wall"
         ? current.wallDrawMode === "line"
           ? "نقطه پایان دیوار خطی را انتخاب کنید — Esc برای لغو"
           : current.wallDrawMode === "glass"
             ? "نقطه پایان جدار شیشه‌ای را انتخاب کنید — Esc برای لغو"
             : "گوشه مقابل مستطیل را انتخاب کنید — Esc برای لغو"
-        : "نقطه مقابل را بزنید");
+        : current.tool === "room"
+          ? "گوشه مقابل فضا را بزنید — Esc برای لغو"
+          : current.tool === "coverage"
+            ? "گوشه مقابل ناحیه پوشش اجباری را بزنید — Esc برای لغو"
+            : "نقطه مقابل را بزنید");
       return;
     }
 
@@ -768,6 +787,55 @@ export function PlanCanvas(props: PlanCanvasProps) {
       const bundle = bundleRef.current;
       if (bundle) disposeGroup(bundle.groups.preview);
       clearSmartGuideLabel(smartGuideLabelHostRef.current);
+      return;
+    }
+
+    if (draft.kind === "room" || draft.kind === "coverage") {
+      const widthM = Math.abs(snapped.x - draft.start.x);
+      const depthM = Math.abs(snapped.z - draft.start.z);
+      if (widthM >= 0.5 && depthM >= 0.5) {
+        const minX = Math.min(draft.start.x, snapped.x);
+        const maxX = Math.max(draft.start.x, snapped.x);
+        const minZ = Math.min(draft.start.z, snapped.z);
+        const maxZ = Math.max(draft.start.z, snapped.z);
+        const polygon: Vec2[] = [
+          { x: minX, z: minZ },
+          { x: maxX, z: minZ },
+          { x: maxX, z: maxZ },
+          { x: minX, z: maxZ }
+        ];
+        if (draft.kind === "room") {
+          const room: PlanRoom = {
+            id: nextId("room"),
+            polygon,
+            boundarySource: "drawn",
+            // Every edge is the user's own line rather than a wall, so all four are drawn
+            // dashed — the same language the inferred fourth side uses.
+            impliedEdgeIndices: [0, 1, 2, 3]
+          };
+          onFloorChange({ ...current.floor, rooms: [...(current.floor.rooms ?? []), room] });
+          onSelect([{ kind: "room", id: room.id }]);
+          onHint("فضا رسم شد — نوع آن را از پنل سمت راست انتخاب کنید تا مرز قرمز برداشته شود");
+        } else {
+          const requirement = {
+            id: nextId("cover"),
+            polygon,
+            label: `ناحیه اجباری ${(current.floor.coverageRequirements ?? []).filter((item) => item.origin === "user").length + 1}`,
+            origin: "user" as const
+          };
+          onFloorChange({
+            ...current.floor,
+            coverageRequirements: [...(current.floor.coverageRequirements ?? []), requirement]
+          });
+          onSelect([{ kind: "requirement", id: requirement.id }]);
+          onHint("این ناحیه به قید سخت تبدیل شد؛ جانمایی خودکار باید آن را پوشش دهد");
+        }
+      } else {
+        onHint("ابعاد این ناحیه باید حداقل ۵۰ سانتی‌متر باشد");
+      }
+      draftRef.current = null;
+      const bundle = bundleRef.current;
+      if (bundle) disposeGroup(bundle.groups.preview);
       return;
     }
 
@@ -879,19 +947,29 @@ export function PlanCanvas(props: PlanCanvasProps) {
     }
 
     const snapped = snapPoint(point, current.snapM);
-    if (draft.kind === "obstacle" || (draft.kind === "wall" && latest.current.wallDrawMode === "rectangle")) {
+    const rectangleDraft = draft.kind === "obstacle"
+      || draft.kind === "room"
+      || draft.kind === "coverage"
+      || (draft.kind === "wall" && latest.current.wallDrawMode === "rectangle");
+    if (rectangleDraft) {
       clearSmartGuideLabel(smartGuideLabelHostRef.current);
-      bundle.groups.preview.add(buildPreviewRect(
-        bundle.THREE,
-        draft.start,
-        snapped,
-        draft.kind === "wall" ? 0xe6572f : undefined
-      ));
+      const previewColour = draft.kind === "wall"
+        ? 0xe6572f
+        : draft.kind === "room"
+          ? 0xdc2626
+          : draft.kind === "coverage"
+            ? 0x16a34a
+            : undefined;
+      bundle.groups.preview.add(buildPreviewRect(bundle.THREE, draft.start, snapped, previewColour));
       const widthM = Math.abs(snapped.x - draft.start.x).toFixed(2);
       const depthM = Math.abs(snapped.z - draft.start.z).toFixed(2);
       onHint(draft.kind === "wall"
         ? `طول ${widthM} متر × عرض ${depthM} متر — کلیک برای ساخت چهار دیوار`
-        : `${widthM} × ${depthM} متر`);
+        : draft.kind === "room"
+          ? `فضای ${widthM} × ${depthM} متر — کلیک برای ثبت`
+          : draft.kind === "coverage"
+            ? `ناحیه اجباری ${widthM} × ${depthM} متر`
+            : `${widthM} × ${depthM} متر`);
     } else {
       const line = buildPreviewLine(bundle.THREE, draft.start, snapped);
       (line as THREE_NS.Line).computeLineDistances();
@@ -1002,13 +1080,17 @@ export function PlanCanvas(props: PlanCanvasProps) {
 
 function syncScene(
   bundle: Bundle,
-  props: Pick<PlanCanvasProps, "floor" | "selection" | "viewMode" | "buildingFloors" | "focusedFloorId" | "referenceFloor">,
+  props: Pick<
+    PlanCanvasProps,
+    "floor" | "selection" | "viewMode" | "buildingFloors" | "focusedFloorId" | "referenceFloor" | "customSectionTypes"
+  >,
   coverages: CameraCoverage[]
 ) {
   const { THREE, groups } = bundle;
-  const { floor, selection, buildingFloors, focusedFloorId, referenceFloor, viewMode } = props;
+  const { floor, selection, buildingFloors, focusedFloorId, referenceFloor, viewMode, customSectionTypes } = props;
   const sceneGeneration = ++bundle.sceneGeneration;
 
+  disposeGroup(groups.rooms);
   disposeGroup(groups.content);
   disposeGroup(groups.cameras);
   disposeGroup(groups.coverage);
@@ -1067,6 +1149,18 @@ function syncScene(
   configureGroundSurface(bundle, { viewMode, buildingFloors, focusedFloorId });
 
   if (referenceFloor) groups.reference.add(buildFloorFootprintGuide(THREE, referenceFloor));
+
+  for (const room of floor.rooms ?? []) {
+    const section = findSectionType(room.sectionTypeId, (customSectionTypes ?? []) as never);
+    groups.rooms.add(buildRoomOutline(THREE, room, {
+      selected: isSelected(selection, "room", room.id),
+      assigned: Boolean(room.sectionTypeId),
+      forbidden: Boolean(section?.forbidden)
+    }));
+  }
+  for (const requirement of floor.coverageRequirements ?? []) {
+    groups.rooms.add(buildCoverageArea(THREE, requirement, isSelected(selection, "requirement", requirement.id)));
+  }
 
   const backdrop = buildBackdrop(THREE, floor);
   if (backdrop) groups.backdrop.add(backdrop);

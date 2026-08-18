@@ -42,6 +42,7 @@ import {
   Settings2,
   Sofa,
   Sparkles,
+  Target,
   TriangleAlert,
   Trash2,
   Undo2,
@@ -56,6 +57,7 @@ import {
   duplicateFloor,
   emptySelection,
   type BuildingPlan,
+  type CustomSectionRecord,
   type FloorPlan,
   type PlanBackdrop,
   type PlanCameraDefinition,
@@ -67,8 +69,11 @@ import {
 } from "@/src/domain/planner/types";
 import { PlanCanvas } from "@/src/components/planner/PlanCanvas";
 import { PlanInspector } from "@/src/components/planner/PlanInspector";
+import { VenuePanel } from "@/src/components/planner/VenuePanel";
 import { computeFloorCoverage } from "@/src/lib/planner/coverage";
 import { floorAreaM2, largestClosedWallLoop } from "@/src/lib/planner/geometry";
+import { reconcileRooms, unassignedRooms, type OpenRegion } from "@/src/lib/planner/rooms";
+import { syncEquipmentRequirements } from "@/src/lib/planner/placement-rules";
 import {
   optimiseCameraPlacement,
   type SmartPlacementReport
@@ -106,6 +111,8 @@ const allTools: { id: PlanTool; label: string; icon: typeof MousePointer2; hint:
   { id: "door", label: "در", icon: DoorOpen, hint: "روی یک دیوار کلیک کنید تا در به همان نقطه متصل شود", modes: ["environment"] },
   { id: "window", label: "پنجره", icon: Blinds, hint: "روی یک دیوار کلیک کنید تا پنجره اضافه شود — شیشه مانع دید دوربین نیست", modes: ["environment"] },
   { id: "obstacle", label: "مانع", icon: Cuboid, hint: "دو نقطه مقابل هم را بزنید", modes: ["environment"] },
+  { id: "room", label: "فضا", icon: Square, hint: "برای محوطه‌های بدون دیوار بسته، مرز فضا را دستی بکشید", modes: ["environment"] },
+  { id: "coverage", label: "ناحیه اجباری", icon: Target, hint: "ناحیه‌ای که حتماً باید زیر پوشش باشد", modes: ["environment", "cameras"] },
   { id: "camera", label: "افزودن دوربین", icon: CameraIcon, hint: "روی نقشه کلیک کنید تا دوربین اضافه شود", modes: ["cameras"] },
   { id: "measure", label: "اندازه‌گیری", icon: Ruler, hint: "دو نقطه را بزنید تا فاصله را ببینید", modes: ["environment", "cameras"] }
 ];
@@ -155,6 +162,8 @@ export function FloorPlanDesigner({
 
   const activeFloor = plan.floors.find((floor) => floor.id === plan.activeFloorId) ?? plan.floors[0];
   const activeFloorIndex = plan.floors.findIndex((floor) => floor.id === activeFloor?.id);
+  /** Spaces still waiting for a section type — the red outlines. */
+  const pendingRoomCount = unassignedRooms(activeFloor ?? { rooms: [] } as never).length;
   const referenceFloor = activeFloorIndex > 0 ? plan.floors[activeFloorIndex - 1] : null;
   const designDefaults = { ...defaultPlanDefaults, ...plan.defaults };
   const buildingPreviewFloors = useMemo(() => {
@@ -239,9 +248,63 @@ export function FloorPlanDesigner({
     return () => window.removeEventListener("keydown", handleHistoryShortcut);
   }, [redo, undo]);
 
-  const updateFloor = useCallback((floor: FloorPlan) => {
-    commit({ ...plan, floors: plan.floors.map((item) => (item.id === floor.id ? floor : item)) });
+  /**
+   * Commits a floor, keeping its derived collections in step.
+   *
+   * Rooms are a reading of the walls, so any wall edit re-runs detection; the assigned
+   * section types survive because reconciliation matches the new outlines onto the old
+   * rooms. Equipment coverage follows the obstacles for the same reason. Both are skipped
+   * when their source did not change, so drawing a room by hand does not immediately
+   * trigger a detection pass that would discard it.
+   */
+  const updateFloor = useCallback((floor: FloorPlan, openChoices?: Record<string, "inferred" | "enclosing">) => {
+    const current = plan.floors.find((item) => item.id === floor.id);
+    let next = floor;
+    if (!current || current.walls !== floor.walls || openChoices) {
+      next = { ...next, rooms: reconcileRooms(next, { openChoices }) };
+    }
+    if (!current || current.obstacles !== floor.obstacles) {
+      next = { ...next, coverageRequirements: syncEquipmentRequirements(next) };
+    }
+    commit({ ...plan, floors: plan.floors.map((item) => (item.id === next.id ? next : item)) });
   }, [commit, plan]);
+
+  const resolveOpenRegion = useCallback((region: OpenRegion, choice: "inferred" | "enclosing") => {
+    updateFloor(activeFloor, { [region.id]: choice });
+    setHint(choice === "inferred"
+      ? "ضلع باقی‌مانده به‌صورت فرضی بسته شد — این ضلع نقطه‌چین رسم می‌شود"
+      : "محدوده بزرگ‌تر به‌عنوان یک فضا در نظر گرفته شد");
+  }, [activeFloor, updateFloor]);
+
+  const setVenueType = useCallback((venueTypeId: string) => {
+    commit({ ...plan, venueTypeId });
+  }, [commit, plan]);
+
+  const dismissSection = useCallback((sectionId: string, dismissed: boolean) => {
+    const current = plan.dismissedSectionIds ?? [];
+    commit({
+      ...plan,
+      dismissedSectionIds: dismissed
+        ? [...current.filter((item) => item !== sectionId), sectionId]
+        : current.filter((item) => item !== sectionId)
+    });
+  }, [commit, plan]);
+
+  const addCustomSectionType = useCallback((section: CustomSectionRecord) => {
+    commit({ ...plan, customSectionTypes: [...(plan.customSectionTypes ?? []), section] });
+  }, [commit, plan]);
+
+  /** Jumps to the first space of a checklist entry, or says there is none yet. */
+  const focusSection = useCallback((sectionId: string) => {
+    for (const floor of plan.floors) {
+      const room = (floor.rooms ?? []).find((item) => item.sectionTypeId === sectionId);
+      if (!room) continue;
+      if (floor.id !== plan.activeFloorId) publishPlan({ ...plan, activeFloorId: floor.id });
+      setSelection([{ kind: "room", id: room.id }]);
+      return;
+    }
+    setHint("هنوز فضایی از این نوع تعریف نشده است — یک فضا بکشید و نوعش را همین مورد بگذارید");
+  }, [plan, publishPlan]);
 
   /**
    * Adds a preset, either at an explicit drop point or staggered near the plan centre
@@ -813,7 +876,22 @@ export function FloorPlanDesigner({
         ) : null}
       </div>
 
-      <div className={mode === "cameras" ? "plan-workspace plan-workspace-cameras" : "plan-workspace"}>
+      <div className={mode === "cameras" ? "plan-workspace plan-workspace-cameras" : "plan-workspace plan-workspace-venue"}>
+        {mode === "environment" && viewMode !== "building" ? (
+          <div className="plan-venue-rail">
+            <VenuePanel
+              floor={activeFloor}
+              floors={plan.floors}
+              venueTypeId={plan.venueTypeId}
+              customSectionTypes={plan.customSectionTypes ?? []}
+              dismissedSectionIds={plan.dismissedSectionIds ?? []}
+              onVenueChange={setVenueType}
+              onDismissSection={dismissSection}
+              onResolveOpenRegion={resolveOpenRegion}
+              onFocusSection={focusSection}
+            />
+          </div>
+        ) : null}
         {mode === "cameras" ? (
           <div className="plan-camera-library">
             <section className="smart-placement-panel">
@@ -874,6 +952,7 @@ export function FloorPlanDesigner({
           referenceFloor={viewMode !== "building" && mode === "environment" ? referenceFloor : null}
           pendingBackdrop={pendingBackdrop}
           showCoverage={showCoverage}
+          customSectionTypes={plan.customSectionTypes}
           onSelect={setSelection}
           onFloorChange={updateFloor}
           onHint={setHint}
@@ -931,12 +1010,25 @@ export function FloorPlanDesigner({
             activeTool={tool}
             wallDrawMode={wallDrawMode}
             defaults={designDefaults}
+            venueTypeId={plan.venueTypeId}
+            customSectionTypes={plan.customSectionTypes ?? []}
             onDefaultsChange={(patch) => commit({ ...plan, defaults: { ...designDefaults, ...patch } })}
             onFloorChange={updateFloor}
+            onCustomSectionType={addCustomSectionType}
             onSelect={setSelection}
           /> : null}
         </div>
       </div>
+
+      {pendingRoomCount > 0 ? (
+        <div className="plan-closure-warning plan-room-warning" role="status">
+          <TriangleAlert size={17} aria-hidden="true" />
+          <div>
+            <strong>{formatFa(pendingRoomCount)} فضا هنوز نوع ندارد</strong>
+            <span>مرز این فضاها قرمز است. روی هرکدام کلیک کنید و از پنل سمت راست نوعش را انتخاب کنید تا در جانمایی هوشمند به حساب بیاید.</span>
+          </div>
+        </div>
+      ) : null}
 
       {activeFloor.walls.length > 0 && !hasClosedPerimeter ? (
         <div className="plan-closure-warning" role="status">
