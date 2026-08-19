@@ -314,26 +314,45 @@ describe("local LLM response policy", () => {
   });
 
   test("keeps exact catalog and calculation answers out of the generative model", () => {
-    assert.equal(shouldUseLocalLlm(reply("catalog", "product_search"), "دو دوربین تیاندی معرفی کن", 1, "high"), false);
-    assert.equal(shouldUseLocalLlm(reply("calculation", "calc_storage"), "برای ۱۶ دوربین چقدر هارد لازم است", 1, "high"), false);
+    for (const mode of ["low", "medium", "high"]) {
+      assert.equal(shouldUseLocalLlm(reply("catalog", "product_search"), "دو دوربین تیاندی معرفی کن", 1, mode), false);
+      assert.equal(shouldUseLocalLlm(reply("calculation", "calc_storage"), "برای ۱۶ دوربین چقدر هارد لازم است", 1, mode), false);
+    }
   });
 
-  test("answers simple facts directly but sends diagnosis and high-depth work to the LLM", () => {
-    assert.equal(shouldUseLocalLlm(reply("knowledge", "info_codec"), "فرق H.264 و H.265 چیست؟", 1, "medium"), false);
-    assert.equal(shouldUseLocalLlm(reply("knowledge", "info_troubleshoot"), "دوربین‌ها قطع و وصل می‌شوند؛ علت را مرحله به مرحله عیب‌یابی کن", 1, "medium"), true);
-    assert.equal(shouldUseLocalLlm(reply("knowledge", "info_codec"), "فرق H.264 و H.265 چیست؟", 1, "high"), true);
+  /*
+   * Everything else is the model's job, in every mode.
+   *
+   * The old policy served knowledge answers from the article store in low and medium,
+   * which meant the assistant behaved like a canned FAQ in the mode the widget opens in:
+   * "DORI چیست؟" never reached the model at all. The article is still retrieved — it is
+   * now passed to the model as grounding rather than shipped verbatim.
+   */
+  test("knowledge questions reach the model in every mode, not just high", () => {
+    for (const mode of ["low", "medium", "high"]) {
+      assert.equal(shouldUseLocalLlm(reply("knowledge", "info_codec"), "فرق H.264 و H.265 چیست؟", 1, mode), true, mode);
+      assert.equal(shouldUseLocalLlm(reply("knowledge", "info_camera"), "DORI چیست؟", 0, mode), true, mode);
+      assert.equal(shouldUseLocalLlm(reply("knowledge", "info_install"), "اصول نصب چیست؟", 1, mode), true, mode);
+    }
   });
 
-  test("sends site installation and complete-system requests through grounded reasoning", () => {
-    assert.equal(shouldUseLocalLlm(reply("knowledge", "info_install"), "دوربین را در پارکینگ چطور نصب کنم؟", 1, "medium"), true);
+  test("diagnosis, design and installation work still reach the model", () => {
+    assert.equal(shouldUseLocalLlm(reply("knowledge", "info_troubleshoot"), "دوربین‌ها قطع و وصل می‌شوند؛ علت را عیب‌یابی کن", 1, "medium"), true);
     assert.equal(shouldUseLocalLlm(reply("knowledge", "recommend_system"), "برای انبار چه سیستمی طراحی کنم؟", 1, "medium"), true);
-    assert.equal(shouldUseLocalLlm(reply("knowledge", "info_install"), "اصول نصب چیست؟", 1, "low"), false);
   });
 
-  test("uses conversation history for short contextual follow-ups without opening first-turn off-topic questions", () => {
-    const fallback = reply("system", "fallback", "این موضوع خارج از تخصص من است");
-    assert.equal(shouldUseLocalLlm(fallback, "برای حالت قبلی چی؟", 4, "medium"), true);
-    assert.equal(shouldUseLocalLlm(fallback, "قیمت دلار چقدر است؟", 1, "medium"), false);
+  test("greetings and follow-ups are answered by the model rather than a fixed string", () => {
+    assert.equal(shouldUseLocalLlm(reply("knowledge", "greeting"), "سلام", 0, "medium"), true);
+    assert.equal(shouldUseLocalLlm(reply("system", "fallback"), "برای حالت قبلی چی؟", 4, "medium"), true);
+  });
+
+  /*
+   * Off-topic refusal moved from a hard-coded string to the model's own domain rule.
+   * The fixed refusal was what produced the "سلام" misfire — a greeting classified as
+   * off-topic got told it was outside the assistant's expertise.
+   */
+  test("off-topic questions go to the model, which refuses them on its own terms", () => {
+    assert.equal(shouldUseLocalLlm(reply("system", "fallback"), "قیمت دلار چقدر است؟", 1, "medium"), true);
   });
 });
 

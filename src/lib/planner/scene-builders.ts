@@ -1867,11 +1867,24 @@ export function buildPreviewRect(THREE: ThreeModule, from: Vec2, to: Vec2, color
   return group;
 }
 
-export type DimensionLabel = {
+/**
+ * A text badge positioned in world space.
+ *
+ * Rendered as HTML over the canvas rather than as a mesh, because Persian text baked
+ * into a three.js texture loses its joining forms and can be neither selected nor read
+ * by a screen reader. The second field is the quieter line underneath: a room shows its
+ * own name above and what kind of space it is below.
+ */
+export type PlanLabel = {
   id: string;
-  kind: "overall-length" | "overall-width" | "selected-wall";
+  kind: string;
   text: string;
+  subtext?: string;
   world: { x: number; y: number; z: number };
+};
+
+export type DimensionLabel = PlanLabel & {
+  kind: "overall-length" | "overall-width" | "selected-wall";
 };
 
 function floorWallBounds(floor: FloorPlan) {
@@ -2118,4 +2131,69 @@ export function buildCoverageArea(
 
   group.userData = { kind: "requirement", id: requirement.id };
   return group;
+}
+
+
+/**
+ * Name-and-type badges for every space on the floor.
+ *
+ * The section type is the important half — it is what drives the whole design — so an
+ * unnamed room still gets a badge, and a room with no type at all says so rather than
+ * sitting silently as an anonymous red outline.
+ */
+export function collectRoomLabels(
+  floor: FloorPlan,
+  resolveSection: (id?: string) => { label: string; forbidden?: boolean } | null
+): PlanLabel[] {
+  const labels: PlanLabel[] = [];
+
+  for (const room of floor.rooms ?? []) {
+    const section = resolveSection(room.sectionTypeId);
+    const centre = polygonCentroid(room.polygon);
+    if (!centre) continue;
+    const name = room.name?.trim();
+    labels.push({
+      id: `room-${room.id}`,
+      // The modifier drives the colour: an untyped space has to keep reading as a problem.
+      kind: section ? (section.forbidden ? "room-forbidden" : "room") : "room-unassigned",
+      text: name || section?.label || "بدون نوع",
+      subtext: name ? section?.label ?? "بدون نوع" : undefined,
+      world: { x: centre.x, y: 0.25, z: centre.z }
+    });
+  }
+
+  for (const requirement of floor.coverageRequirements ?? []) {
+    const centre = polygonCentroid(requirement.polygon);
+    if (!centre) continue;
+    labels.push({
+      id: `requirement-${requirement.id}`,
+      kind: "room-requirement",
+      text: requirement.label,
+      subtext: "پوشش اجباری",
+      world: { x: centre.x, y: 0.3, z: centre.z }
+    });
+  }
+
+  return labels;
+}
+
+/** Area centroid, falling back to the vertex mean for a degenerate ring. */
+function polygonCentroid(polygon: Vec2[]): Vec2 | null {
+  if (polygon.length < 3) return null;
+  let x = 0;
+  let z = 0;
+  let weight = 0;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const current = polygon[index];
+    const next = polygon[(index + 1) % polygon.length];
+    const cross = current.x * next.z - next.x * current.z;
+    x += (current.x + next.x) * cross;
+    z += (current.z + next.z) * cross;
+    weight += cross;
+  }
+  if (Math.abs(weight) < 1e-9) {
+    const mean = polygon.reduce((acc, point) => ({ x: acc.x + point.x, z: acc.z + point.z }), { x: 0, z: 0 });
+    return { x: mean.x / polygon.length, z: mean.z / polygon.length };
+  }
+  return { x: x / (3 * weight), z: z / (3 * weight) };
 }

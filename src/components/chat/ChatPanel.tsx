@@ -550,8 +550,19 @@ function localLlmReply(
   };
 }
 
+/**
+ * Leading restatements of the question.
+ *
+ * The evidence packet labels the question with a tag, and a small model sometimes copies
+ * that label into the first line of its answer. The strip is anchored to the start of
+ * the response and to those exact labels, so it cannot eat a sentence that legitimately
+ * begins by quoting the user.
+ */
+const echoedQuestion = /^\s*(?:#{1,4}\s*)?(?:درخواست|سؤال|سوال|پرسش)\s*کاربر\s*[:：-]\s*[^\n]*\n+/;
+
 function generatedLines(content: string) {
   return content
+    .replace(echoedQuestion, "")
     .replace(/\r/g, "")
     .split("\n")
     .map((line) => line.trimEnd())

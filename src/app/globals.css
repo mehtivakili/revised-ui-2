@@ -10608,3 +10608,70 @@ body.chat-assistant-maximized { overflow: hidden; }
 
 .plan-room-generic:hover { border-color: #0f5f99; background: #e7f3fb; }
 .plan-room-generic small { grid-column: 2; font-weight: 600; color: var(--muted); }
+
+/* ---- Room name and type badges on the plan ---- */
+
+/*
+ * Room badges are lighter than the dimension chips they share a layer with: a plan can
+ * hold twenty of them at once, and at that density a solid dark badge over every space
+ * reads as clutter rather than as information.
+ */
+.plan-dimension.is-room,
+.plan-dimension.is-room-unassigned,
+.plan-dimension.is-room-forbidden,
+.plan-dimension.is-room-requirement {
+  display: grid;
+  gap: 1px;
+  padding: 4px 10px;
+  max-width: 190px;
+  font-weight: 800;
+  text-align: center;
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.plan-dimension.is-room b,
+.plan-dimension.is-room-unassigned b,
+.plan-dimension.is-room-forbidden b,
+.plan-dimension.is-room-requirement b {
+  font-size: 10.5px;
+  font-weight: 900;
+}
+
+.plan-dimension.is-room small,
+.plan-dimension.is-room-unassigned small,
+.plan-dimension.is-room-forbidden small,
+.plan-dimension.is-room-requirement small {
+  font-size: 9px;
+  font-weight: 700;
+  opacity: .82;
+}
+
+.plan-dimension.is-room {
+  color: #0b4a72;
+  background: rgba(240, 249, 255, .95);
+  border-color: rgba(25, 118, 183, .5);
+  box-shadow: 0 4px 14px rgba(25, 118, 183, .16);
+}
+
+/* The same red the outline uses, so the badge and the border read as one warning. */
+.plan-dimension.is-room-unassigned {
+  color: #fff;
+  background: rgba(220, 38, 38, .95);
+  border-color: rgba(255, 255, 255, .8);
+  box-shadow: 0 4px 14px rgba(153, 27, 27, .28);
+}
+
+.plan-dimension.is-room-forbidden {
+  color: #33415a;
+  background: rgba(241, 245, 249, .95);
+  border-color: rgba(100, 116, 139, .5);
+  box-shadow: 0 4px 12px rgba(71, 85, 105, .14);
+}
+
+.plan-dimension.is-room-requirement {
+  color: #0b5138;
+  background: rgba(232, 250, 241, .95);
+  border-color: rgba(22, 163, 74, .52);
+  box-shadow: 0 4px 14px rgba(20, 107, 71, .16);
+}

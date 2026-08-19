@@ -1,15 +1,26 @@
 import type { AssistantReasoningMode } from "@/src/lib/chatbot/assistant-types";
 import type { ChatReply } from "@/src/lib/chatbot/engine";
 
-const memoryCommandPattern = /(یادت باشه|یادت باشد|به خاطر بسپار|به یاد بسپار|اسم من|نام من|حافظه.*(?:پاک|نشان)|چه چیزی از من یادت|چی از من یادت|همه چیز را فراموش)/i;
-const contextualPattern = /^(?:و|پس|حالا|خب)?\s*(?:برای|اگر|یعنی|پس|اون|آن|این|همین|قبلی|بیشتر|ادامه|چطورش|چگونه‌اش|در موردش|باهاش|بدونش|چی|چه‌طور)/i;
-const synthesisPattern = /(طراح|معماری|سناریو|راهبرد|استراتژی|توپولوژی|مرحله\s*به\s*مرحله|قدم\s*به\s*قدم|عیب\s*یابی|رفع\s*مشکل|مشکل|قطع\s*(?:و|‌و)?\s*وصل|هک|نفوذ|حادثه|ریسک|علت|چرا|چطور|چگونه|امن\s*(?:کن|سازی)|vlan|فایروال|firewall|acl|trunk|access)/i;
-const installationPattern = /(نصب|جانمایی|کابل\s*کشی|پروژه|چه سیستمی|کجا\s*(?:بزن|نصب)|فروشگاه|مغازه|خانه|آپارتمان|انبار|سوله|کارخانه|پارکینگ|پلاک|بیمارستان|مدرسه|بانک|محوطه|آسانسور)/i;
-
 /**
- * Exact catalog, calculation and simple knowledge answers should not be rewritten by
- * a generative model. The LLM is reserved for synthesis, diagnosis and contextual
- * follow-ups where language-level reasoning actually improves the answer.
+ * Whether a message is answered by the local language model or by the deterministic
+ * engine on its own.
+ *
+ * The model is the default. It used to be the exception — knowledge answers were served
+ * straight from the article store in low and medium mode — which meant that in the mode
+ * the widget opens in, questions like "DORI چیست؟" never reached the model at all and
+ * the assistant read like a canned FAQ. Anything the model can phrase better, it now
+ * phrases, with the retrieved article passed to it as grounding rather than shipped
+ * verbatim.
+ *
+ * Two sources still bypass it, and only two:
+ *
+ *   • `catalog` — real product rows. A generative pass can silently alter a part number
+ *     or a price, and there is no upside to rewording a table.
+ *   • `calculation` — bandwidth, storage and PoE budgets that were computed exactly.
+ *     The number is the answer; regenerating it risks drift for no gain.
+ *
+ * Both still reach the model as evidence on any follow-up question, so "why is that
+ * number so high?" is answered generatively even though the number itself was not.
  */
 export function shouldUseLocalLlm(
   reply: ChatReply,
@@ -17,25 +28,11 @@ export function shouldUseLocalLlm(
   historyLength: number,
   mode: AssistantReasoningMode
 ) {
-  if (memoryCommandPattern.test(message)) return true;
-  if (reply.answer.source === "catalog" || reply.answer.source === "calculation") return false;
-  if (["greeting", "thanks", "help_menu", "contact"].includes(reply.intent)) return false;
+  void message;
+  void historyLength;
+  void mode;
 
-  if (reply.intent === "fallback") {
-    return historyLength >= 3 && contextualPattern.test(normalize(message));
-  }
-
-  if (reply.answer.source === "knowledge") {
-    if (mode === "low") return false;
-    if (mode === "high") return true;
-    return reply.intent === "recommend_system" || reply.intent === "info_install"
-      || synthesisPattern.test(normalize(message)) || installationPattern.test(normalize(message))
-      || message.length > 220;
-  }
-
+  if (reply.answer.source === "catalog") return false;
+  if (reply.answer.source === "calculation") return false;
   return true;
-}
-
-function normalize(message: string) {
-  return message.toLowerCase().replace(/ي/g, "ی").replace(/ك/g, "ک").trim();
 }

@@ -51,8 +51,10 @@ import {
   buildBackdrop,
   buildBackdropMesh,
   collectDimensionLabels,
+  collectRoomLabels,
   applyObjectOpacity,
-  disposeGroup
+  disposeGroup,
+  type PlanLabel
 } from "@/src/lib/planner/scene-builders";
 
 type ThreeModule = typeof THREE_NS;
@@ -399,11 +401,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
         groups.backdrop.visible = false;
         ensureBackdropPlacement(bundle, latest.current.pendingBackdrop);
       }
-      const initialSelection = soleSelection(latest.current.selection);
-      renderLabels(labelHostRef.current, collectDimensionLabels(
-        latest.current.floor,
-        initialSelection?.kind === "wall" ? initialSelection.id : undefined
-      ));
+      renderLabels(labelHostRef.current, labelsFor(latest.current));
     })();
 
     return () => {
@@ -431,11 +429,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
       { floor, selection, viewMode, buildingFloors, focusedFloorId, referenceFloor, customSectionTypes },
       coverages
     );
-    const selected = soleSelection(selection);
-    renderLabels(labelHostRef.current, viewMode === "building" ? [] : collectDimensionLabels(
-      floor,
-      selected?.kind === "wall" ? selected.id : undefined
-    ));
+    renderLabels(labelHostRef.current, labelsFor({ floor, selection, viewMode, customSectionTypes }));
   }, [floor, selection, coverages, buildingFloors, focusedFloorId, referenceFloor, viewMode, customSectionTypes]);
 
   useEffect(() => {
@@ -1209,13 +1203,38 @@ function syncScene(
   }
 }
 
-function renderLabels(host: HTMLDivElement | null, labels: ReturnType<typeof collectDimensionLabels>) {
+/**
+ * Everything the label layer should show for the current view.
+ *
+ * Room badges are suppressed in the stacked building view: that view is about massing,
+ * and a dozen storeys of overlapping room names is unreadable.
+ */
+function labelsFor(props: Pick<PlanCanvasProps, "floor" | "selection" | "viewMode" | "customSectionTypes">): PlanLabel[] {
+  if (props.viewMode === "building") return [];
+  const selected = soleSelection(props.selection);
+  const custom = (props.customSectionTypes ?? []) as never;
+  return [
+    ...collectRoomLabels(props.floor, (id) => findSectionType(id, custom)),
+    ...collectDimensionLabels(props.floor, selected?.kind === "wall" ? selected.id : undefined)
+  ];
+}
+
+function renderLabels(host: HTMLDivElement | null, labels: PlanLabel[]) {
   if (!host) return;
   host.replaceChildren();
   for (const label of labels) {
     const node = document.createElement("span");
     node.className = `plan-dimension is-${label.kind}`;
-    node.textContent = label.text;
+    if (label.subtext) {
+      // Two lines: the name the user gave the space, then what kind of space it is.
+      const title = document.createElement("b");
+      title.textContent = label.text;
+      const detail = document.createElement("small");
+      detail.textContent = label.subtext;
+      node.append(title, detail);
+    } else {
+      node.textContent = label.text;
+    }
     node.dataset.worldX = String(label.world.x);
     node.dataset.worldY = String(label.world.y);
     node.dataset.worldZ = String(label.world.z);
