@@ -211,48 +211,106 @@ export function wallSegment(wall: PlanWall): Segment {
   return { a: wall.a, b: wall.b, heightM: wall.heightM };
 }
 
-/** Occluding geometry for one floor, ready for ray casting. */
+const COINCIDENT_WALL_TOLERANCE_M = 0.04;
+const PARALLEL_WALL_TOLERANCE = Math.sin((0.5 * Math.PI) / 180);
+
+/**
+ * Returns the openings that physically cut a wall, including openings hosted by a
+ * coincident wall segment.
+ *
+ * Drawing a neighbouring rectangle often stores its shared side as a second wall. The
+ * two records are useful while drawing, but architecturally they are one boundary: a
+ * door cut into either record must therefore cut every collinear overlapping record.
+ */
+export function openingsOnWall(wall: PlanWall, walls: PlanWall[], doors: PlanDoor[]): PlanDoor[] {
+  const wallDx = wall.b.x - wall.a.x;
+  const wallDz = wall.b.z - wall.a.z;
+  const wallSpan = Math.hypot(wallDx, wallDz);
+  if (wallSpan < 1e-6) return [];
+  const wallUnit = { x: wallDx / wallSpan, z: wallDz / wallSpan };
+  const wallNormal = { x: -wallUnit.z, z: wallUnit.x };
+  const wallById = new Map(walls.map((item) => [item.id, item]));
+
+  return doors.flatMap((door) => {
+    const host = wallById.get(door.wallId);
+    if (!host) return [];
+    if (host.id === wall.id) return [door];
+
+    const hostDx = host.b.x - host.a.x;
+    const hostDz = host.b.z - host.a.z;
+    const hostSpan = Math.hypot(hostDx, hostDz);
+    if (hostSpan < 1e-6) return [];
+    const hostUnit = { x: hostDx / hostSpan, z: hostDz / hostSpan };
+    const directionCross = wallUnit.x * hostUnit.z - wallUnit.z * hostUnit.x;
+    if (Math.abs(directionCross) > PARALLEL_WALL_TOLERANCE) return [];
+
+    const center = {
+      x: host.a.x + hostDx * door.offset,
+      z: host.a.z + hostDz * door.offset
+    };
+    const centerFromWall = { x: center.x - wall.a.x, z: center.z - wall.a.z };
+    const perpendicularDistance = Math.abs(
+      centerFromWall.x * wallNormal.x + centerFromWall.z * wallNormal.z
+    );
+    if (perpendicularDistance > COINCIDENT_WALL_TOLERANCE_M) return [];
+
+    const halfWidth = door.widthM / 2;
+    const physicalStart = {
+      x: center.x - hostUnit.x * halfWidth,
+      z: center.z - hostUnit.z * halfWidth
+    };
+    const physicalEnd = {
+      x: center.x + hostUnit.x * halfWidth,
+      z: center.z + hostUnit.z * halfWidth
+    };
+    const projectM = (point: Vec2) =>
+      (point.x - wall.a.x) * wallUnit.x + (point.z - wall.a.z) * wallUnit.z;
+    const projectedStart = projectM(physicalStart);
+    const projectedEnd = projectM(physicalEnd);
+    const overlapStart = Math.max(0, Math.min(projectedStart, projectedEnd));
+    const overlapEnd = Math.min(wallSpan, Math.max(projectedStart, projectedEnd));
+    if (overlapEnd - overlapStart < 0.01) return [];
+
+    return [{
+      ...door,
+      wallId: wall.id,
+      offset: ((overlapStart + overlapEnd) / 2) / wallSpan,
+      widthM: overlapEnd - overlapStart
+    }];
+  });
+}
+
+/**
+ * Occluding geometry for one floor, ready for ray casting.
+ *
+ * DORI is deliberately conservative: every architectural door and window is evaluated
+ * in its closed state. `openAngleDeg` remains a drawing/editing property only and never
+ * creates visibility into the next room. Solid walls therefore stay continuous. On a
+ * transparent partition, an explicitly placed door/window still contributes a closed
+ * opaque span while the rest of the glass partition remains transparent.
+ */
 export function collectOccluders(walls: PlanWall[], obstacles: PlanObstacle[], doors: PlanDoor[] = []): Segment[] {
   const segments: Segment[] = [];
   for (const wall of walls) {
-    if (!wall.blocksView) continue;
     const span = distance(wall.a, wall.b);
-    const openings = doors
-      /*
-       * Only doorways are cut out of the wall.
-       *
-       * A window is a cosmetic element drawn on the wall — the masonry around and behind
-       * it still stops a camera, so it must not create a gap in the occluder. Seeing
-       * *through* a boundary is a property of the wall itself (`blocksView: false`),
-       * which is how a glass partition is modelled.
-       */
-      .filter((door) => door.wallId === wall.id && door.type !== "window")
-      .map((door) => {
-        const halfOffset = span > 0 ? Math.min(0.49, door.widthM / span / 2) : 0;
-        return {
-          start: Math.max(0, door.offset - halfOffset),
-          end: Math.min(1, door.offset + halfOffset)
-        };
-      })
-      .sort((first, second) => first.start - second.start);
-    if (!openings.length) {
+    if (span < 1e-6) continue;
+    if (wall.blocksView) {
       segments.push(wallSegment(wall));
       continue;
     }
 
-    let cursor = 0;
+    // A glass partition itself is transparent, but its closed doors/windows are not.
     const pointAt = (offset: number): Vec2 => ({
       x: wall.a.x + (wall.b.x - wall.a.x) * offset,
       z: wall.a.z + (wall.b.z - wall.a.z) * offset
     });
-    for (const opening of openings) {
-      if (opening.start > cursor + 1e-4) {
-        segments.push({ a: pointAt(cursor), b: pointAt(opening.start), heightM: wall.heightM });
+    for (const opening of openingsOnWall(wall, walls, doors)) {
+      const halfOffset = Math.min(0.49, opening.widthM / span / 2);
+      const start = Math.max(0, opening.offset - halfOffset);
+      const end = Math.min(1, opening.offset + halfOffset);
+      if (end - start > 1e-4) {
+        segments.push({ a: pointAt(start), b: pointAt(end), heightM: wall.heightM });
       }
-      cursor = Math.max(cursor, opening.end);
-    }
-    if (cursor < 1 - 1e-4) {
-      segments.push({ a: pointAt(cursor), b: pointAt(1), heightM: wall.heightM });
     }
   }
   for (const obstacle of obstacles) if (obstacle.blocksView) segments.push(...obstacleSegments(obstacle));

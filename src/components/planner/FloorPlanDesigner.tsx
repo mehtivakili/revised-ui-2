@@ -52,7 +52,6 @@ import type { ProjectCameraTemplate } from "@/src/domain/catalog/types";
 import {
   createEmptyPlan,
   createFloor,
-  defaultCameraOptics,
   defaultPlanDefaults,
   duplicateFloor,
   emptySelection,
@@ -60,7 +59,7 @@ import {
   type CustomSectionRecord,
   type FloorPlan,
   type PlanBackdrop,
-  type PlanCameraDefinition,
+  type PlanDoorVariant,
   type PlanSelection,
   type PlanTool,
   type PlanViewMode,
@@ -72,15 +71,24 @@ import { PlanInspector } from "@/src/components/planner/PlanInspector";
 import { VenuePanel } from "@/src/components/planner/VenuePanel";
 import { computeFloorCoverage } from "@/src/lib/planner/coverage";
 import { floorAreaM2, largestClosedWallLoop } from "@/src/lib/planner/geometry";
-import { reconcileRooms, unassignedRooms, type OpenRegion } from "@/src/lib/planner/rooms";
-import { syncEquipmentRequirements } from "@/src/lib/planner/placement-rules";
+import { reconcileRooms, roomAtPoint, unassignedRooms, type OpenRegion } from "@/src/lib/planner/rooms";
+import { constrainCameraMountHeight, syncEquipmentRequirements } from "@/src/lib/planner/placement-rules";
+import { findSectionType } from "@/src/domain/planner/venues";
 import {
   optimiseCameraPlacement,
+  resetCameraPlacements,
+  validateSmartPlacementPlan,
   type SmartPlacementReport
 } from "@/src/lib/planner/smart-placement";
 import { formatFa } from "@/src/lib/chatbot/persian";
 import { cameraFromTemplate, createBlankCamera, housingLabels } from "@/src/lib/planner/camera-templates";
 import { obstaclePresets, type ObstacleGroup, type ObstaclePreset } from "@/src/lib/planner/obstacle-presets";
+import {
+  copySelection,
+  deleteSelection,
+  pasteSelection,
+  type PlanClipboard
+} from "@/src/lib/planner/selection";
 
 /** Sentinel dropped from the palette when the position does not match a defined type. */
 const BLANK_CAMERA_ID = "__blank__";
@@ -120,12 +128,14 @@ const allTools: { id: PlanTool; label: string; icon: typeof MousePointer2; hint:
 export function FloorPlanDesigner({
   plan: controlledPlan,
   mode = "environment",
+  variant = "default",
   cameraTemplates = [],
   onPlanChange,
   onSummaryChange
 }: {
   plan?: BuildingPlan;
   mode?: DesignerMode;
+  variant?: "default" | "focus";
   cameraTemplates?: ProjectCameraTemplate[];
   onPlanChange?: (plan: BuildingPlan) => void;
   onSummaryChange?: (summary: PlanSummary) => void;
@@ -139,6 +149,7 @@ export function FloorPlanDesigner({
 
   const [requestedTool, setTool] = useState<PlanTool>("select");
   const [wallDrawMode, setWallDrawMode] = useState<WallDrawMode>("rectangle");
+  const [doorVariant, setDoorVariant] = useState<PlanDoorVariant>("single-solid");
   /* Derived, not stored: switching mode retires tools like "دیوار", and falling back
      here avoids an effect that would setState during render. */
   const tool: PlanTool = tools.some((item) => item.id === requestedTool)
@@ -158,12 +169,24 @@ export function FloorPlanDesigner({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const pastRef = useRef<BuildingPlan[]>([]);
   const futureRef = useRef<BuildingPlan[]>([]);
+  const clipboardRef = useRef<PlanClipboard | null>(null);
+  const pointerPlanPositionRef = useRef<Vec2 | null>(null);
   const [historyState, setHistoryState] = useState({ past: 0, future: 0 });
 
-  const activeFloor = plan.floors.find((floor) => floor.id === plan.activeFloorId) ?? plan.floors[0];
+  const storedActiveFloor = plan.floors.find((floor) => floor.id === plan.activeFloorId) ?? plan.floors[0];
+  const activeFloor = useMemo(() => {
+    if (!storedActiveFloor) return storedActiveFloor;
+    const reconciled = reconcileRooms(storedActiveFloor);
+    // Old projects may carry the result of an earlier, stricter detector. Surface newly
+    // recoverable rooms immediately; the next ordinary edit persists this repaired set.
+    return reconciled.length > (storedActiveFloor.rooms ?? []).length
+      ? { ...storedActiveFloor, rooms: reconciled }
+      : storedActiveFloor;
+  }, [storedActiveFloor]);
   const activeFloorIndex = plan.floors.findIndex((floor) => floor.id === activeFloor?.id);
   /** Spaces still waiting for a section type — the red outlines. */
   const pendingRoomCount = unassignedRooms(activeFloor ?? { rooms: [] } as never).length;
+  const smartPlacementErrors = useMemo(() => validateSmartPlacementPlan(plan), [plan]);
   const referenceFloor = activeFloorIndex > 0 ? plan.floors[activeFloorIndex - 1] : null;
   const designDefaults = { ...defaultPlanDefaults, ...plan.defaults };
   const buildingPreviewFloors = useMemo(() => {
@@ -182,6 +205,10 @@ export function FloorPlanDesigner({
     }
     return counts;
   }, [plan.floors]);
+  const placedCameraCount = useMemo(
+    () => plan.floors.reduce((sum, floor) => sum + floor.cameras.length, 0),
+    [plan.floors]
+  );
 
   const publishPlan = useCallback((next: BuildingPlan) => {
     if (onPlanChange) onPlanChange(next);
@@ -263,11 +290,81 @@ export function FloorPlanDesigner({
     if (!current || current.walls !== floor.walls || openChoices) {
       next = { ...next, rooms: reconcileRooms(next, { openChoices }) };
     }
+    if (next.coverageRequirements?.some((requirement) => requirement.sourceRoomId)) {
+      const roomsById = new Map((next.rooms ?? []).map((room) => [room.id, room]));
+      next = {
+        ...next,
+        coverageRequirements: next.coverageRequirements
+          .filter((requirement) => !requirement.sourceRoomId || roomsById.has(requirement.sourceRoomId))
+          .map((requirement) => {
+            const room = requirement.sourceRoomId ? roomsById.get(requirement.sourceRoomId) : null;
+            return room
+              ? {
+                ...requirement,
+                polygon: room.polygon.map((point) => ({ ...point })),
+                sectionTypeId: room.sectionTypeId
+              }
+              : requirement;
+          })
+      };
+    }
     if (!current || current.obstacles !== floor.obstacles) {
       next = { ...next, coverageRequirements: syncEquipmentRequirements(next) };
     }
     commit({ ...plan, floors: plan.floors.map((item) => (item.id === next.id ? next : item)) });
   }, [commit, plan]);
+
+  useEffect(() => {
+    const handleEditShortcut = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
+
+      const modifier = event.ctrlKey || event.metaKey;
+      const key = event.key.toLowerCase();
+      if (modifier && key === "c") {
+        const copied = copySelection(activeFloor, selection);
+        if (!copied) return;
+        event.preventDefault();
+        clipboardRef.current = copied;
+        setHint("آیتم انتخاب‌شده کپی شد — برای چسباندن Ctrl+V را بزنید");
+        return;
+      }
+      if (modifier && key === "x") {
+        const copied = copySelection(activeFloor, selection);
+        if (!copied) return;
+        event.preventDefault();
+        clipboardRef.current = copied;
+        updateFloor(deleteSelection(activeFloor, selection));
+        setSelection(emptySelection);
+        setHint("آیتم انتخاب‌شده بریده شد");
+        return;
+      }
+      if (modifier && key === "v") {
+        if (!clipboardRef.current) return;
+        event.preventDefault();
+        const pointer = pointerPlanPositionRef.current;
+        const delta = pointer
+          ? {
+              x: pointer.x - clipboardRef.current.anchor.x,
+              z: pointer.z - clipboardRef.current.anchor.z
+            }
+          : { x: Math.max(0.25, plan.snapM), z: Math.max(0.25, plan.snapM) };
+        const pasted = pasteSelection(activeFloor, clipboardRef.current, delta, pointer ?? undefined);
+        updateFloor(pasted.floor);
+        setSelection(pasted.selection);
+        setHint("یک نسخه جدید چسبانده شد");
+        return;
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && selection.length) {
+        event.preventDefault();
+        updateFloor(deleteSelection(activeFloor, selection));
+        setSelection(emptySelection);
+        setHint("آیتم انتخاب‌شده حذف شد");
+      }
+    };
+    window.addEventListener("keydown", handleEditShortcut);
+    return () => window.removeEventListener("keydown", handleEditShortcut);
+  }, [activeFloor, plan.snapM, selection, updateFloor]);
 
   const resolveOpenRegion = useCallback((region: OpenRegion, choice: "inferred" | "enclosing") => {
     updateFloor(activeFloor, { [region.id]: choice });
@@ -298,9 +395,12 @@ export function FloorPlanDesigner({
   const focusSection = useCallback((sectionId: string) => {
     for (const floor of plan.floors) {
       const room = (floor.rooms ?? []).find((item) => item.sectionTypeId === sectionId);
-      if (!room) continue;
+      const requirement = (floor.coverageRequirements ?? []).find((item) => item.sectionTypeId === sectionId);
+      if (!room && !requirement) continue;
       if (floor.id !== plan.activeFloorId) publishPlan({ ...plan, activeFloorId: floor.id });
-      setSelection([{ kind: "room", id: room.id }]);
+      setSelection([room
+        ? { kind: "room", id: room.id }
+        : { kind: "requirement", id: requirement!.id }]);
       return;
     }
     setHint("هنوز فضایی از این نوع تعریف نشده است — یک فضا بکشید و نوعش را همین مورد بگذارید");
@@ -354,9 +454,16 @@ export function FloorPlanDesigner({
    */
   const placeTemplateCamera = useCallback((templateId: string, position: Vec2) => {
     const totalPlaced = plan.floors.reduce((sum, floor) => sum + floor.cameras.length, 0);
+    const room = roomAtPoint(activeFloor, position);
+    const section = findSectionType(room?.sectionTypeId, (plan.customSectionTypes ?? []) as never);
+    if (section?.forbidden) {
+      setHint(`در فضای «${room?.name || section.label}» نصب دوربین ممنوع است.`);
+      return;
+    }
 
     if (templateId === BLANK_CAMERA_ID) {
       const camera = createBlankCamera(position, totalPlaced + 1, designDefaults.cameraMountHeightM);
+      camera.optics.mountHeightM = constrainCameraMountHeight(activeFloor, position, camera.optics.mountHeightM, camera.mountKind);
       updateFloor({ ...activeFloor, cameras: [...activeFloor.cameras, camera] });
       setSelection([{ kind: "camera", id: camera.id }]);
       setHint("دوربین بدون نوع اضافه شد؛ مشخصات آن را از پنل سمت راست تنظیم کنید");
@@ -370,43 +477,11 @@ export function FloorPlanDesigner({
     }
     const ordinal = (placedByTemplate.get(template.id) ?? 0) + 1;
     const camera = cameraFromTemplate(template, position, ordinal);
+    camera.optics.mountHeightM = constrainCameraMountHeight(activeFloor, position, camera.optics.mountHeightM, camera.mountKind);
     updateFloor({ ...activeFloor, cameras: [...activeFloor.cameras, camera] });
     setSelection([{ kind: "camera", id: camera.id }]);
     setHint(`${camera.name} روی نقشه قرار گرفت؛ مشخصاتش از پنل سمت راست قابل تغییر است`);
-  }, [activeFloor, cameraTemplates, designDefaults.cameraMountHeightM, placedByTemplate, plan.floors, updateFloor]);
-
-  /**
-   * The optimiser still works in single-use slots, so the remaining quantity of each
-   * device type is expanded into one slot apiece. Placements it returns are rewritten
-   * back to template links afterwards, keeping types reusable everywhere else.
-   */
-  const remainingDefinitions = useMemo<PlanCameraDefinition[]>(() =>
-    cameraTemplates.flatMap((template) => {
-      const remaining = Math.max(0, template.quantity - (placedByTemplate.get(template.id) ?? 0));
-      return Array.from({ length: remaining }, (_, index) => ({
-        id: `${template.id}#${index}`,
-        zoneId: template.id,
-        groupName: template.label,
-        name: `${template.label} ${(placedByTemplate.get(template.id) ?? 0) + index + 1}`,
-        housing: template.housing,
-        goal: template.goal,
-        optics: {
-          ...defaultCameraOptics,
-          megapixel: template.megapixel,
-          sensorWidthMm: template.sensorWidthMm,
-          focalMm: template.focalMm,
-          mountHeightM: template.mountingHeightM,
-          tiltDeg: template.cameraTiltDeg,
-          irRangeM: template.irRangeM,
-          maxRangeM: template.maxRangeM
-        },
-        features: {
-          microphone: template.microphone,
-          colorNightVision: template.colorNightVision,
-          weatherproof: template.weatherproof
-        }
-      }));
-    }), [cameraTemplates, placedByTemplate]);
+  }, [activeFloor, cameraTemplates, designDefaults.cameraMountHeightM, placedByTemplate, plan.customSectionTypes, plan.floors, updateFloor]);
 
   const runSmartPlacement = () => {
     if (isOptimisingPlacement) return;
@@ -415,28 +490,8 @@ export function FloorPlanDesigner({
     setHint("در حال تحلیل هندسه طبقات، ورودی‌ها، موانع، PPM و نقاط کور...");
     window.requestAnimationFrame(() => {
       window.setTimeout(() => {
-        const raw = optimiseCameraPlacement(plan, remainingDefinitions);
-        const templateStream = new Map(cameraTemplates.map((item) => [item.id, item.stream]));
-        const result = {
-          ...raw,
-          plan: {
-            ...raw.plan,
-            floors: raw.plan.floors.map((floor) => ({
-              ...floor,
-              cameras: floor.cameras.map((camera) => {
-                if (!camera.definitionId?.includes("#")) return camera;
-                const templateId = camera.definitionId.split("#")[0];
-                return {
-                  ...camera,
-                  definitionId: undefined,
-                  templateId,
-                  stream: camera.stream ?? (templateStream.get(templateId) ? { ...templateStream.get(templateId)! } : undefined)
-                };
-              })
-            }))
-          }
-        };
-        if (result.report.placed > 0) {
+        const result = optimiseCameraPlacement(plan, [], { enforceSemanticValidation: true });
+        if (result.report.accepted && result.report.placed > 0) {
           commit(result.plan);
           setViewMode("top");
           setTool("select");
@@ -454,6 +509,17 @@ export function FloorPlanDesigner({
         setIsOptimisingPlacement(false);
       }, 20);
     });
+  };
+
+  const resetPlacement = () => {
+    if (isOptimisingPlacement || placedCameraCount === 0) return;
+    commit(resetCameraPlacements(plan));
+    setSmartPlacementReport(null);
+    setSelection(emptySelection);
+    setTool("select");
+    setViewMode("top");
+    setShowCoverage(true);
+    setHint(`${formatFa(placedCameraCount)} دوربین از جانمایی همه طبقات حذف شد؛ اکنون می‌توانید انتخاب و جانمایی را از ابتدا انجام دهید. Ctrl+Z برای بازگردانی.`);
   };
 
   const coverage = useMemo(() => (activeFloor ? computeFloorCoverage(activeFloor, 1.5) : null), [activeFloor]);
@@ -566,8 +632,8 @@ export function FloorPlanDesigner({
   const activeTool = tools.find((item) => item.id === tool);
 
   return (
-    <section className={`plan-designer plan-designer-${mode}`}>
-      <header className="plan-designer-head">
+    <section className={`plan-designer plan-designer-${mode} plan-designer-${variant}`}>
+      {variant !== "focus" ? <header className="plan-designer-head">
         <span className="plan-designer-head-icon"><Building2 size={20} aria-hidden="true" /></span>
         <div>
           <strong>{mode === "environment" ? "استودیوی طراحی محیط" : "استودیوی جانمایی دوربین"}</strong>
@@ -581,7 +647,7 @@ export function FloorPlanDesigner({
           <span><MousePointer2 size={13} aria-hidden="true" />کشیدن بدنه: جابه‌جایی</span>
           <span><RotateCcw size={13} aria-hidden="true" />دستگیره نارنجی: چرخش</span>
         </div>
-      </header>
+      </header> : null}
       <div className="plan-floor-rail">
         <div className="plan-floor-switcher">
           <span className="plan-floor-switcher-icon"><Layers size={16} aria-hidden="true" /></span>
@@ -664,6 +730,21 @@ export function FloorPlanDesigner({
                       setHint(nextMode === "line"
                         ? "گوشه اول و دوم را انتخاب کنید تا یک دیوار خطی رسم شود"
                         : "گوشه اول و مقابل را انتخاب کنید تا چهار دیوار مستطیلی رسم شود");
+                    }}
+                  />
+                );
+              }
+              if (item.id === "door") {
+                return (
+                  <DoorToolMenu
+                    key={item.id}
+                    active={tool === "door"}
+                    variant={doorVariant}
+                    onSelect={(nextVariant) => {
+                      setDoorVariant(nextVariant);
+                      setTool("door");
+                      setSelection(emptySelection);
+                      setHint(`در ${doorVariantLabel(nextVariant)} فعال شد؛ روی دیوار کلیک کنید`);
                     }}
                   />
                 );
@@ -824,7 +905,7 @@ export function FloorPlanDesigner({
         </section>
       ) : null}
 
-      <div className="plan-defaults-section">
+      {variant !== "focus" ? <div className="plan-defaults-section">
         <button
           type="button"
           className={showDefaults ? "plan-defaults-toggle active" : "plan-defaults-toggle"}
@@ -874,7 +955,7 @@ export function FloorPlanDesigner({
             />
           </div>
         ) : null}
-      </div>
+      </div> : null}
 
       <div className={mode === "cameras" ? "plan-workspace plan-workspace-cameras" : "plan-workspace plan-workspace-venue"}>
         {mode === "environment" && viewMode !== "building" ? (
@@ -889,6 +970,7 @@ export function FloorPlanDesigner({
               onDismissSection={dismissSection}
               onResolveOpenRegion={resolveOpenRegion}
               onFocusSection={focusSection}
+              compact={variant === "focus"}
             />
           </div>
         ) : null}
@@ -903,15 +985,31 @@ export function FloorPlanDesigner({
                 </div>
                 <em>قرارگیری پیشنهادی</em>
               </div>
-              <button
-                type="button"
-                className="smart-placement-action"
-                onClick={runSmartPlacement}
-                disabled={isOptimisingPlacement || remainingDefinitions.length === 0}
-              >
-                <Sparkles className={isOptimisingPlacement ? "is-spinning" : undefined} size={16} aria-hidden="true" />
-                {isOptimisingPlacement ? "در حال تحلیل عمیق نقشه..." : "تحلیل و ساخت چیدمان پیشنهادی"}
-              </button>
+              <div className="smart-placement-actions">
+                <button
+                  type="button"
+                  className="smart-placement-action"
+                  onClick={runSmartPlacement}
+                  disabled={isOptimisingPlacement || smartPlacementErrors.length > 0}
+                >
+                  <Sparkles className={isOptimisingPlacement ? "is-spinning" : undefined} size={16} aria-hidden="true" />
+                  {isOptimisingPlacement ? "در حال تحلیل عمیق نقشه..." : "تحلیل و ساخت چیدمان پیشنهادی"}
+                </button>
+                <button
+                  type="button"
+                  className="smart-placement-reset"
+                  onClick={resetPlacement}
+                  disabled={isOptimisingPlacement || placedCameraCount === 0}
+                  title="فقط دوربین‌های همه طبقات پاک می‌شوند و با Ctrl+Z قابل بازگردانی است"
+                >
+                  <RotateCcw size={14} aria-hidden="true" />
+                  ریست جانمایی دوربین‌ها
+                  {placedCameraCount > 0 ? <small>{formatFa(placedCameraCount)}</small> : null}
+                </button>
+              </div>
+              {smartPlacementErrors.length > 0 ? (
+                <small className="plan-room-alert">{smartPlacementErrors[0]}</small>
+              ) : null}
               <p>دوربین‌های موجود ثابت می‌مانند؛ فقط موارد جانمایی‌نشده با یک عملیات قابل Undo اضافه می‌شوند.</p>
               {smartPlacementReport ? (
                 <div className="smart-placement-result" role="status">
@@ -942,6 +1040,7 @@ export function FloorPlanDesigner({
           floor={activeFloor}
           tool={tool}
           wallDrawMode={wallDrawMode}
+          doorVariant={doorVariant}
           viewMode={viewMode}
           selection={selection}
           snapM={plan.snapM}
@@ -952,10 +1051,12 @@ export function FloorPlanDesigner({
           referenceFloor={viewMode !== "building" && mode === "environment" ? referenceFloor : null}
           pendingBackdrop={pendingBackdrop}
           showCoverage={showCoverage}
+          palette={variant === "focus" ? "studio" : "classic"}
           customSectionTypes={plan.customSectionTypes}
           onSelect={setSelection}
           onFloorChange={updateFloor}
           onHint={setHint}
+          onPointerPlanPosition={(position) => { pointerPlanPositionRef.current = position; }}
           onDropCamera={mode === "cameras" ? placeTemplateCamera : undefined}
           onDropPreset={mode === "environment" ? dropPresetObstacle : undefined}
           onPlaceBackdrop={placePendingBackdrop}
@@ -1009,6 +1110,8 @@ export function FloorPlanDesigner({
             selection={selection}
             activeTool={tool}
             wallDrawMode={wallDrawMode}
+            doorVariant={doorVariant}
+            onDoorVariantChange={setDoorVariant}
             defaults={designDefaults}
             venueTypeId={plan.venueTypeId}
             customSectionTypes={plan.customSectionTypes ?? []}
@@ -1075,6 +1178,72 @@ export function FloorPlanDesigner({
   );
 }
 
+const doorToolVariants: {
+  id: PlanDoorVariant;
+  label: string;
+  description: string;
+  width: string;
+  glass: boolean;
+}[] = [
+  { id: "single-solid", label: "در معمولی تک‌لنگه", description: "یک لنگه با لولای قابل‌تنظیم", width: "0.9 m", glass: false },
+  { id: "double-solid", label: "در معمولی دولنگه", description: "دو لنگه با بازشدن از مرکز", width: "1.8 m", glass: false },
+  { id: "single-glass", label: "در شیشه‌ای تک‌لنگه", description: "یک لنگه شفاف با قاب فلزی", width: "0.9 m", glass: true },
+  { id: "double-glass", label: "در شیشه‌ای دولنگه", description: "دو لنگه شفاف، بازشو از وسط", width: "1.8 m", glass: true }
+];
+
+const doorVariantLabel = (variant: PlanDoorVariant) =>
+  doorToolVariants.find((item) => item.id === variant)?.label ?? "معمولی تک‌لنگه";
+
+/** Hover/focus menu that makes the available door constructions visible at the tool itself. */
+function DoorToolMenu({
+  active,
+  variant,
+  onSelect
+}: {
+  active: boolean;
+  variant: PlanDoorVariant;
+  onSelect: (variant: PlanDoorVariant) => void;
+}) {
+  return (
+    <div className="plan-object-tool-menu plan-door-tool-menu">
+      <button
+        type="button"
+        className={active ? "plan-object-tool-trigger active" : "plan-object-tool-trigger"}
+        onClick={() => onSelect(variant)}
+        aria-haspopup="menu"
+        title="برای دیدن انواع در، نشانگر را روی این ابزار نگه دارید"
+      >
+        <DoorOpen className="plan-object-tool-main-icon" size={16} aria-hidden="true" />
+        <span>در</span>
+        <ChevronDown className="plan-object-tool-chevron" size={11} aria-hidden="true" />
+      </button>
+      <div className="plan-object-tool-popover plan-door-mode-popover" role="menu" aria-label="انتخاب نوع در">
+        <div className="plan-object-tool-popover-title">
+          <DoorOpen size={17} aria-hidden="true" />
+          <div><strong>انواع در</strong><small>نوع موردنظر را انتخاب و سپس روی دیوار کلیک کنید</small></div>
+        </div>
+        {doorToolVariants.map((item) => {
+          const Icon = item.glass ? Blinds : DoorOpen;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={variant === item.id}
+              className={variant === item.id ? "active" : ""}
+              onClick={() => onSelect(item.id)}
+            >
+              <span><strong>{item.label}</strong><small>{item.description}</small></span>
+              <em>{item.width}</em>
+              <Icon size={17} aria-hidden="true" />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function WallToolMenu({
   active,
   mode,
@@ -1107,7 +1276,7 @@ function WallToolMenu({
           <Minus size={18} aria-hidden="true" />
         </button>
         <button type="button" className={mode === "rectangle" ? "active" : ""} role="menuitem" onClick={() => onSelect("rectangle")}>
-          <span><strong>فضای مستطیلی</strong><small>ساخت چهار دیوار بسته با دو کلیک</small></span>
+          <span><strong>رسم مستطیل</strong><small>رسم هم‌زمان چهار دیوار با تعیین دو گوشه</small></span>
           <Square size={17} aria-hidden="true" />
         </button>
         <button type="button" className={mode === "glass" ? "active" : ""} role="menuitem" onClick={() => onSelect("glass")}>

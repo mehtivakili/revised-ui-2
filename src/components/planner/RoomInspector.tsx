@@ -62,9 +62,41 @@ export function RoomInspector({
   const section = findSectionType(room.sectionTypeId, custom);
 
   const update = (patch: Partial<PlanRoom>) => {
+    const nextRoom = { ...room, ...patch };
     onFloorChange({
       ...floor,
-      rooms: (floor.rooms ?? []).map((item) => (item.id === room.id ? { ...item, ...patch } : item))
+      rooms: (floor.rooms ?? []).map((item) => (item.id === room.id ? nextRoom : item)),
+      coverageRequirements: (floor.coverageRequirements ?? []).map((requirement) =>
+        requirement.sourceRoomId === room.id
+          ? {
+            ...requirement,
+            polygon: nextRoom.polygon.map((point) => ({ ...point })),
+            sectionTypeId: nextRoom.sectionTypeId
+          }
+          : requirement
+      )
+    });
+  };
+
+  const roomRequirement = (floor.coverageRequirements ?? []).find((item) => item.sourceRoomId === room.id);
+  const setWholeRoomRequired = (required: boolean) => {
+    const manual = { ...room.manual, mustCover: required || undefined };
+    const withoutLinked = (floor.coverageRequirements ?? []).filter((item) => item.sourceRoomId !== room.id);
+    const linked: CoverageRequirement | null = required
+      ? {
+        id: roomRequirement?.id ?? `cover-room-${room.id}`,
+        polygon: room.polygon.map((point) => ({ ...point })),
+        label: roomRequirement?.label ?? `پوشش کامل ${room.name?.trim() || section?.label || "فضا"}`,
+        origin: "user",
+        sectionTypeId: room.sectionTypeId,
+        sourceRoomId: room.id,
+        satisfied: roomRequirement?.satisfied
+      }
+      : null;
+    onFloorChange({
+      ...floor,
+      rooms: (floor.rooms ?? []).map((item) => item.id === room.id ? { ...item, manual } : item),
+      coverageRequirements: linked ? [...withoutLinked, linked] : withoutLinked
     });
   };
 
@@ -99,7 +131,11 @@ export function RoomInspector({
           type="button"
           className="plan-inspector-delete"
           onClick={() => {
-            onFloorChange({ ...floor, rooms: (floor.rooms ?? []).filter((item) => item.id !== room.id) });
+            onFloorChange({
+              ...floor,
+              rooms: (floor.rooms ?? []).filter((item) => item.id !== room.id),
+              coverageRequirements: (floor.coverageRequirements ?? []).filter((item) => item.sourceRoomId !== room.id)
+            });
             onSelect([]);
           }}
         >
@@ -179,6 +215,15 @@ export function RoomInspector({
         step={0.1}
         onChange={(ceilingHeightM) => update({ ceilingHeightM })}
       />
+
+      <label className="plan-check">
+        <input
+          type="checkbox"
+          checked={Boolean(roomRequirement || room.manual?.mustCover)}
+          onChange={(event) => setWholeRoomRequired(event.target.checked)}
+        />
+        <span>پوشش تمام این فضا الزامی است</span>
+      </label>
 
       <ManualParameters room={room} onChange={(manual) => update({ manual })} />
 
@@ -440,14 +485,6 @@ function ManualParameters({
         />
         <span>این فضا سقف ندارد (نصب سقفی ممکن نیست)</span>
       </label>
-      <label className="plan-check">
-        <input
-          type="checkbox"
-          checked={manual.mustCover ?? false}
-          onChange={(event) => patch({ mustCover: event.target.checked || undefined })}
-        />
-        <span>پوشش این فضا الزامی است</span>
-      </label>
     </details>
   );
 }
@@ -457,14 +494,22 @@ function ManualParameters({
 export function CoverageRequirementInspector({
   floor,
   requirement,
+  venueTypeId,
+  customSectionTypes,
   onFloorChange,
+  onCustomSectionType,
   onSelect
 }: {
   floor: FloorPlan;
   requirement: CoverageRequirement;
+  venueTypeId?: string;
+  customSectionTypes: CustomSectionRecord[];
   onFloorChange: (floor: FloorPlan) => void;
+  onCustomSectionType: (section: CustomSectionRecord) => void;
   onSelect: (selection: []) => void;
 }) {
+  const custom = customSectionTypes as unknown as SectionType[];
+  const section = findSectionType(requirement.sectionTypeId, custom);
   const update = (patch: Partial<CoverageRequirement>) => {
     onFloorChange({
       ...floor,
@@ -485,6 +530,11 @@ export function CoverageRequirementInspector({
           onClick={() => {
             onFloorChange({
               ...floor,
+              rooms: requirement.sourceRoomId
+                ? (floor.rooms ?? []).map((room) => room.id === requirement.sourceRoomId
+                  ? { ...room, manual: { ...room.manual, mustCover: undefined } }
+                  : room)
+                : floor.rooms,
               coverageRequirements: (floor.coverageRequirements ?? []).filter((item) => item.id !== requirement.id)
             });
             onSelect([]);
@@ -503,6 +553,27 @@ export function CoverageRequirementInspector({
         <span>عنوان</span>
         <input type="text" value={requirement.label} onChange={(event) => update({ label: event.target.value })} />
       </label>
+
+      {requirement.origin === "user" && (
+        <>
+          <SectionTypePicker
+            venueTypeId={venueTypeId}
+            custom={custom}
+            value={requirement.sectionTypeId}
+            onPick={(picked) => update({ sectionTypeId: picked.id, satisfied: undefined })}
+            onCreate={(label) => {
+              const created = createCustomSectionType(label);
+              onCustomSectionType(created as unknown as CustomSectionRecord);
+              update({ sectionTypeId: created.id, satisfied: undefined });
+            }}
+          />
+          <p className="plan-room-recipe-note">
+            {section
+              ? `این ناحیه در چک‌لیست به‌عنوان «${section.label}» ثبت می‌شود و قواعد همان مورد را می‌گیرد.`
+              : "در صورت نیاز این ناحیه را به یکی از موارد چک‌لیست متصل کنید؛ لازم نیست نوع کل اتاق را تغییر دهید."}
+          </p>
+        </>
+      )}
 
       <div className="plan-field-readout">
         <span>منشأ</span>

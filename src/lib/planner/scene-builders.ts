@@ -5,6 +5,7 @@ import type {
   FloorPlan,
   ObstacleVariant,
   PlanBackdrop,
+  PlanCamera,
   PlanDoor,
   PlanObstacle,
   PlanRoom,
@@ -190,19 +191,18 @@ export function buildDoorMesh(
   const normal = { x: -u.z, z: u.x };
   const center = { x: wall.a.x + dx * door.offset, z: wall.a.z + dz * door.offset };
   const halfWidth = Math.min(door.widthM, span) / 2;
-  const hingeSign = door.hinge === "start" ? -1 : 1;
-  const hinge = { x: center.x + u.x * halfWidth * hingeSign, z: center.z + u.z * halfWidth * hingeSign };
-  const closedDirection = { x: -u.x * hingeSign, z: -u.z * hingeSign };
   const angleRad = (Math.max(0, Math.min(90, door.openAngleDeg)) * Math.PI) / 180;
-  const openDirection = {
-    x: closedDirection.x * Math.cos(angleRad) + normal.x * Math.sin(angleRad),
-    z: closedDirection.z * Math.cos(angleRad) + normal.z * Math.sin(angleRad)
-  };
-  const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x7c4a2d, roughness: 0.55, metalness: 0.05 });
+  const variant = door.variant ?? "single-solid";
+  const isDouble = variant.startsWith("double");
+  const isGlass = variant.endsWith("glass");
+  const frameMaterial = new THREE.MeshStandardMaterial({ color: isGlass ? 0x64748b : 0x7c4a2d, roughness: 0.55, metalness: isGlass ? 0.65 : 0.05 });
   const leafMaterial = new THREE.MeshStandardMaterial({
-    color: selected ? 0xf59e0b : 0xb86f3c,
-    roughness: 0.48,
-    metalness: 0.03
+    color: selected ? 0xf59e0b : isGlass ? 0x8bd3e6 : 0xb86f3c,
+    roughness: isGlass ? 0.12 : 0.48,
+    metalness: isGlass ? 0.08 : 0.03,
+    transparent: isGlass,
+    opacity: isGlass ? 0.38 : 1,
+    depthWrite: !isGlass
   });
 
   for (const sign of [-1, 1]) {
@@ -216,44 +216,128 @@ export function buildDoorMesh(
   header.rotation.y = -Math.atan2(u.z, u.x);
   group.add(header);
 
-  const leaf = new THREE.Mesh(new THREE.BoxGeometry(door.widthM, door.heightM - 0.08, 0.07), leafMaterial);
-  leaf.position.set(
-    hinge.x + openDirection.x * door.widthM / 2,
-    (door.heightM - 0.08) / 2,
-    hinge.z + openDirection.z * door.widthM / 2
-  );
-  leaf.rotation.y = -Math.atan2(openDirection.z, openDirection.x);
-  group.add(leaf);
-
-  const handle = new THREE.Mesh(
-    new THREE.SphereGeometry(0.055, 12, 8),
-    new THREE.MeshStandardMaterial({ color: 0xd6a83d, roughness: 0.22, metalness: 0.8 })
-  );
-  handle.position.set(
-    hinge.x + openDirection.x * door.widthM * 0.85 + normal.x * 0.055,
-    Math.min(1.05, door.heightM * 0.52),
-    hinge.z + openDirection.z * door.widthM * 0.85 + normal.z * 0.055
-  );
-  group.add(handle);
-
-  const arcPoints: THREE_NS.Vector3[] = [];
-  for (let index = 0; index <= 24; index += 1) {
-    const radians = angleRad * (index / 24);
-    const direction = {
-      x: closedDirection.x * Math.cos(radians) + normal.x * Math.sin(radians),
-      z: closedDirection.z * Math.cos(radians) + normal.z * Math.sin(radians)
+  const addLeaf = (hingeSign: -1 | 1, leafWidth: number) => {
+    const hinge = { x: center.x + u.x * halfWidth * hingeSign, z: center.z + u.z * halfWidth * hingeSign };
+    const closedDirection = { x: -u.x * hingeSign, z: -u.z * hingeSign };
+    // Both leaves swing to the same side of the wall; because their closed directions
+    // are opposite, they rotate away from the centre in opposite angular directions.
+    const swingNormal = normal;
+    const openDirection = {
+      x: closedDirection.x * Math.cos(angleRad) + swingNormal.x * Math.sin(angleRad),
+      z: closedDirection.z * Math.cos(angleRad) + swingNormal.z * Math.sin(angleRad)
     };
-    arcPoints.push(new THREE.Vector3(hinge.x + direction.x * door.widthM, 0.18, hinge.z + direction.z * door.widthM));
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(leafWidth, door.heightM - 0.08, isGlass ? 0.035 : 0.07), leafMaterial);
+    leaf.position.set(
+      hinge.x + openDirection.x * leafWidth / 2,
+      (door.heightM - 0.08) / 2,
+      hinge.z + openDirection.z * leafWidth / 2
+    );
+    leaf.rotation.y = -Math.atan2(openDirection.z, openDirection.x);
+    group.add(leaf);
+
+    const handle = new THREE.Mesh(
+      new THREE.SphereGeometry(0.055, 12, 8),
+      new THREE.MeshStandardMaterial({ color: 0xd6a83d, roughness: 0.22, metalness: 0.8 })
+    );
+    handle.position.set(
+      hinge.x + openDirection.x * leafWidth * 0.84 + swingNormal.x * 0.055,
+      Math.min(1.05, door.heightM * 0.52),
+      hinge.z + openDirection.z * leafWidth * 0.84 + swingNormal.z * 0.055
+    );
+    group.add(handle);
+
+    const arcPoints: THREE_NS.Vector3[] = [];
+    for (let index = 0; index <= 24; index += 1) {
+      const radians = angleRad * (index / 24);
+      const direction = {
+        x: closedDirection.x * Math.cos(radians) + swingNormal.x * Math.sin(radians),
+        z: closedDirection.z * Math.cos(radians) + swingNormal.z * Math.sin(radians)
+      };
+      arcPoints.push(new THREE.Vector3(hinge.x + direction.x * leafWidth, 0.18, hinge.z + direction.z * leafWidth));
+    }
+    const arc = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(arcPoints),
+      new THREE.LineBasicMaterial({ color: selected ? 0xf59e0b : isGlass ? 0x38bdf8 : 0x9a5b2c, depthTest: false })
+    );
+    arc.renderOrder = 25;
+    group.add(arc);
+  };
+
+  if (isDouble) {
+    addLeaf(-1, door.widthM / 2);
+    addLeaf(1, door.widthM / 2);
+  } else {
+    addLeaf(door.hinge === "start" ? -1 : 1, door.widthM);
   }
-  const arc = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(arcPoints),
-    new THREE.LineBasicMaterial({ color: selected ? 0xf59e0b : 0x9a5b2c, depthTest: false })
-  );
-  arc.renderOrder = 25;
-  group.add(arc);
 
   group.userData = { kind: "door", id: door.id };
   group.traverse((child) => { child.userData = { kind: "door", id: door.id }; });
+  return group;
+}
+
+function resizeKnob(THREE: ThreeModule, position: Vec2, kind: string, id: string, color = 0x2563eb) {
+  const knob = new THREE.Mesh(
+    // Slightly larger than the old marker so the grab target remains reliable at
+    // ordinary zoom levels and on touch screens.
+    new THREE.SphereGeometry(0.32, 16, 12),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.3, depthTest: false })
+  );
+  knob.position.set(position.x, 0.32, position.z);
+  knob.renderOrder = 60;
+  knob.userData = { kind, id };
+  return knob;
+}
+
+/** Direct-manipulation handles for stretching either end of a selected wall. */
+export function buildWallEndpointHandles(THREE: ThreeModule, wall: PlanWall): THREE_NS.Group {
+  const group = new THREE.Group();
+  group.add(resizeKnob(THREE, wall.a, "wall-end-a", wall.id));
+  group.add(resizeKnob(THREE, wall.b, "wall-end-b", wall.id));
+  return group;
+}
+
+/** Handles at the physical jambs; dragging one keeps the opposite jamb fixed. */
+export function buildDoorResizeHandles(THREE: ThreeModule, door: PlanDoor, wall: PlanWall): THREE_NS.Group {
+  const group = new THREE.Group();
+  const span = Math.max(0.01, Math.hypot(wall.b.x - wall.a.x, wall.b.z - wall.a.z));
+  const ux = (wall.b.x - wall.a.x) / span;
+  const uz = (wall.b.z - wall.a.z) / span;
+  const centreM = door.offset * span;
+  const startM = centreM - door.widthM / 2;
+  const endM = centreM + door.widthM / 2;
+  group.add(resizeKnob(THREE, { x: wall.a.x + ux * startM, z: wall.a.z + uz * startM }, "door-resize-start", door.id, 0x0ea5e9));
+  group.add(resizeKnob(THREE, { x: wall.a.x + ux * endM, z: wall.a.z + uz * endM }, "door-resize-end", door.id, 0x0ea5e9));
+  return group;
+}
+
+/** Four side handles resize a rotated obstacle along its own local axes. */
+export function buildObstacleResizeHandles(THREE: ThreeModule, obstacle: PlanObstacle): THREE_NS.Group {
+  const group = new THREE.Group();
+  const radians = (obstacle.rotationDeg * Math.PI) / 180;
+  const widthAxis = { x: Math.cos(radians), z: Math.sin(radians) };
+  const depthAxis = { x: -Math.sin(radians), z: Math.cos(radians) };
+  const at = (axis: Vec2, amount: number) => ({
+    x: obstacle.center.x + axis.x * amount,
+    z: obstacle.center.z + axis.z * amount
+  });
+  group.add(resizeKnob(THREE, at(widthAxis, -obstacle.widthM / 2), "obstacle-resize-width-start", obstacle.id, 0x14b8a6));
+  group.add(resizeKnob(THREE, at(widthAxis, obstacle.widthM / 2), "obstacle-resize-width-end", obstacle.id, 0x14b8a6));
+  group.add(resizeKnob(THREE, at(depthAxis, -obstacle.depthM / 2), "obstacle-resize-depth-start", obstacle.id, 0x14b8a6));
+  group.add(resizeKnob(THREE, at(depthAxis, obstacle.depthM / 2), "obstacle-resize-depth-end", obstacle.id, 0x14b8a6));
+  return group;
+}
+
+/** Vertex handles for hand-drawn rooms and must-cover polygons. */
+export function buildPolygonVertexHandles(
+  THREE: ThreeModule,
+  polygon: Vec2[],
+  owner: "room" | "requirement",
+  id: string
+): THREE_NS.Group {
+  const group = new THREE.Group();
+  polygon.forEach((point, index) => {
+    group.add(resizeKnob(THREE, point, `${owner}-vertex-${index}`, id, owner === "room" ? 0x2563eb : 0x16a34a));
+  });
   return group;
 }
 
@@ -1427,7 +1511,8 @@ export function buildCameraMarker(
   mountHeightM: number,
   yawDeg: number,
   selected: boolean,
-  housing: CameraHousing = "bullet"
+  housing: CameraHousing = "bullet",
+  mountKind: PlanCamera["mountKind"] = "wall-edge"
 ): THREE_NS.Group {
   const group = new THREE.Group();
   const color = selected ? palette.cameraSelected : palette.cameraBody;
@@ -1552,12 +1637,16 @@ export function buildCameraMarker(
   }
   group.add(heading);
 
-  const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.04, 0.055, Math.max(0.1, mountHeightM - 0.25), 10),
-    new THREE.MeshStandardMaterial({ color: 0x8fa6b6 })
-  );
-  pole.position.y = Math.max(0.1, (mountHeightM - 0.25) / 2);
-  group.add(pole);
+  if (mountKind === "pole") {
+    const supportHeightM = 0.45;
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.055, supportHeightM, 10),
+      new THREE.MeshStandardMaterial({ color: 0x8fa6b6 })
+    );
+    pole.name = "camera-pole-support";
+    pole.position.y = Math.max(supportHeightM / 2, mountHeightM - supportHeightM / 2);
+    group.add(pole);
+  }
 
   const footprint = new THREE.Mesh(
     new THREE.RingGeometry(
@@ -2156,8 +2245,10 @@ export function collectRoomLabels(
       id: `room-${room.id}`,
       // The modifier drives the colour: an untyped space has to keep reading as a problem.
       kind: section ? (section.forbidden ? "room-forbidden" : "room") : "room-unassigned",
-      text: name || section?.label || "بدون نوع",
-      subtext: name ? section?.label ?? "بدون نوع" : undefined,
+      text: name || section?.label || "بدون فضا",
+      subtext: name
+        ? section?.label ?? "بدون فضا"
+        : section ? undefined : "نوع کاربری مشخص نشده",
       world: { x: centre.x, y: 0.25, z: centre.z }
     });
   }
@@ -2165,11 +2256,12 @@ export function collectRoomLabels(
   for (const requirement of floor.coverageRequirements ?? []) {
     const centre = polygonCentroid(requirement.polygon);
     if (!centre) continue;
+    const section = resolveSection(requirement.sectionTypeId);
     labels.push({
       id: `requirement-${requirement.id}`,
       kind: "room-requirement",
       text: requirement.label,
-      subtext: "پوشش اجباری",
+      subtext: section ? `پوشش اجباری • ${section.label}` : "پوشش اجباری",
       world: { x: centre.x, y: 0.3, z: centre.z }
     });
   }

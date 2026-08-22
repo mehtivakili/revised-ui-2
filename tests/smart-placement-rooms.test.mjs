@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test, { describe } from "node:test";
 import { defaultCameraOptics } from "@/src/domain/planner/types";
 import { pointInPolygon } from "@/src/lib/planner/geometry";
-import { optimiseCameraPlacement } from "@/src/lib/planner/smart-placement";
+import {
+  definitionsFromRooms,
+  optimiseCameraPlacement,
+  validateSmartPlacementPlan
+} from "@/src/lib/planner/smart-placement";
 
 /**
  * A 24 × 12 hall, split into a left half and a right half by nothing but the room
@@ -136,6 +140,9 @@ describe("must-cover areas are hard constraints", () => {
       "the failure is named in the warnings, not just counted"
     );
     assert.equal(result.plan.floors[0].coverageRequirements[0].satisfied, false);
+    assert.equal(result.report.accepted, false, "an unmet hard constraint rejects the proposal");
+    assert.equal(result.report.placed, 0, "rejected cameras are not applied to the plan");
+    assert.equal(result.plan.floors[0].cameras.length, 0);
   });
 });
 
@@ -147,5 +154,104 @@ describe("unassigned rooms", () => {
     ]), [definition("a"), definition("b")]);
 
     assert.ok(untyped.report.placed > 0, "an unassigned plan still gets a layout");
+  });
+});
+
+describe("room rules feed the placement engine", () => {
+  test("a room recipe becomes concrete definitions including overrides and overview pair", () => {
+    const plan = planWith([{
+      id: "entry-room",
+      polygon: leftHalf,
+      sectionTypeId: "shop.entrance",
+      boundarySource: "drawn",
+      overrides: { housing: "dome", focalMm: 6, mountHeightM: 2.5, mountKind: "ceiling" }
+    }]);
+    const definitions = definitionsFromRooms(plan);
+
+    assert.equal(definitions.length, 2);
+    assert.equal(definitions[0].housing, "dome");
+    assert.equal(definitions[0].optics.focalMm, 6);
+    assert.equal(definitions[0].optics.mountHeightM, 2.5);
+    assert.equal(definitions[0].mountKind, "ceiling");
+    assert.equal(definitions[0].roomId, "entry-room");
+    assert.equal(definitions[1].goal, "monitor", "the second entrance camera is the overview");
+    assert.ok(definitions[0].placementReasons.length > 0);
+  });
+
+  test("a checklist item can belong to a mandatory sub-area instead of the whole room", () => {
+    const checkoutArea = [{ x: 2, z: 2 }, { x: 7, z: 2 }, { x: 7, z: 5 }, { x: 2, z: 5 }];
+    const plan = planWith([{
+      id: "sales-room",
+      polygon: [...leftHalf, ...rightHalf.slice(1)],
+      sectionTypeId: "shop.salesfloor",
+      boundarySource: "drawn"
+    }], [{
+      id: "checkout-zone",
+      polygon: checkoutArea,
+      label: "صندوق داخل سالن",
+      origin: "user",
+      sectionTypeId: "shop.checkout"
+    }]);
+    const definitions = definitionsFromRooms(plan);
+    const checkout = definitions.find((item) => item.requirementId === "checkout-zone");
+
+    assert.ok(checkout, "the nested mandatory area should produce its own camera request");
+    assert.equal(checkout.sectionTypeId, "shop.checkout");
+    assert.equal(checkout.roomId, undefined, "the surrounding sales room is not retyped as a checkout");
+  });
+
+  test("the optimiser creates a camera from the room without wizard definitions", () => {
+    const plan = planWith([{
+      id: "sales-room",
+      polygon: [{ x: 0, z: 0 }, { x: 24, z: 0 }, { x: 24, z: 12 }, { x: 0, z: 12 }],
+      sectionTypeId: "shop.salesfloor",
+      boundarySource: "drawn"
+    }]);
+    const result = optimiseCameraPlacement(plan);
+    const camera = result.plan.floors[0].cameras[0];
+
+    assert.equal(result.report.accepted, true);
+    assert.equal(result.report.placed, 1);
+    assert.equal(camera.roomId, "sales-room");
+    assert.equal(camera.sectionTypeId, "shop.salesfloor");
+    assert.ok(camera.placementReasons.length > 0);
+    assert.ok(["corner", "wall-edge"].includes(camera.mountKind));
+    assert.equal(camera.optics.mountHeightM, 2.75, "the actual 3 m wall caps the camera 25 cm below its top");
+  });
+
+  test("a hand-drawn outdoor room can be optimised without a closed wall loop", () => {
+    const room = {
+      id: "yard",
+      polygon: [{ x: 0, z: 0 }, { x: 18, z: 0 }, { x: 18, z: 10 }, { x: 0, z: 10 }],
+      sectionTypeId: "residential.yard",
+      boundarySource: "drawn",
+      manual: { openAbove: true }
+    };
+    const plan = planWith([room]);
+    plan.floors[0].walls = [];
+    const result = optimiseCameraPlacement(plan);
+
+    assert.equal(result.report.accepted, true, JSON.stringify(result.report));
+    assert.equal(result.report.placed, 1);
+    assert.equal(result.plan.floors[0].cameras[0].housing, "bullet");
+  });
+});
+
+describe("semantic validation", () => {
+  test("venue, room types and forbidden manual cameras are checked before placement", () => {
+    const plan = planWith([
+      { id: "unknown", polygon: leftHalf, boundarySource: "drawn" },
+      { id: "private", polygon: rightHalf, sectionTypeId: "shared.washroom", boundarySource: "drawn" }
+    ]);
+    plan.floors[0].cameras = [{
+      ...definition("manual"),
+      position: { x: 18, z: 6 },
+      yawDeg: 0
+    }];
+    const errors = validateSmartPlacementPlan(plan);
+
+    assert.ok(errors.some((error) => error.includes("کاربری")));
+    assert.ok(errors.some((error) => error.includes("نوع این فضاها")));
+    assert.ok(errors.some((error) => error.includes("فضای ممنوع")));
   });
 });

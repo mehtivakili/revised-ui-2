@@ -50,6 +50,15 @@ const threeSided = [
   wall("u3", 8, 5, 8, 0)
 ];
 
+/** A rectangle added from the middle of an existing wall, as the canvas tool stores it. */
+const rectangleAttachedToWall = [
+  ...singleRoom,
+  wall("a1", 3, 0, 7, 0), // deliberately coincides with part of w1
+  wall("a2", 7, 0, 7, -3),
+  wall("a3", 7, -3, 3, -3),
+  wall("a4", 3, -3, 3, 0)
+];
+
 describe("room detection", () => {
   test("a closed rectangle becomes one room", () => {
     const detection = detectRooms(floorWith(singleRoom));
@@ -59,11 +68,55 @@ describe("room detection", () => {
     assert.equal(detection.openRegions.length, 0);
   });
 
+  test("an internal loose partition is not reported as a room that needs closing", () => {
+    const internalPartition = [
+      wall("p1", 2, 2, 5, 2),
+      wall("p2", 5, 2, 5, 4)
+    ];
+    const detection = detectRooms(floorWith([...singleRoom, ...internalPartition]));
+    assert.equal(detection.closed.length, 1);
+    assert.equal(detection.openRegions.length, 0, "an internal partition is not an open perimeter");
+  });
+
   test("a shared wall yields two rooms, not one merged outline", () => {
     const detection = detectRooms(floorWith(twoRooms));
     assert.equal(detection.closed.length, 2, "each side of the spine is its own space");
     const areas = detection.closed.map((room) => Math.round(room.areaM2)).sort((a, b) => a - b);
     assert.deepEqual(areas, [60, 60]);
+  });
+
+  test("a rectangle drawn from the middle of an existing wall creates a second room", () => {
+    const detection = detectRooms(floorWith(rectangleAttachedToWall));
+    assert.equal(detection.closed.length, 2, "T-junctions are real corners in the room graph");
+    const areas = detection.closed.map((room) => Math.round(room.areaM2)).sort((a, b) => a - b);
+    assert.deepEqual(areas, [12, 60]);
+    assert.equal(detection.openRegions.length, 0, "the coincident side is not reported as an opening");
+  });
+
+  test("a visually touching side room closes against a host wall despite small centreline gaps", () => {
+    const attachedOnLeft = [
+      ...singleRoom,
+      wall("left-top", -4, 1.5, -0.22, 1.5),
+      wall("left-outer", -4, 1.5, -4, 4.5),
+      wall("left-bottom", -4, 4.5, -0.22, 4.5)
+    ];
+    const detection = detectRooms(floorWith(attachedOnLeft));
+
+    assert.equal(detection.closed.length, 2, "the host wall supplies the side shared by both rooms");
+    const areas = detection.closed.map((room) => Math.round(room.areaM2)).sort((a, b) => a - b);
+    assert.deepEqual(areas, [12, 60]);
+  });
+
+  test("a real opening wider than the visual junction tolerance stays open", () => {
+    const detachedOnLeft = [
+      ...singleRoom,
+      wall("left-top", -4, 1.5, -0.35, 1.5),
+      wall("left-outer", -4, 1.5, -4, 4.5),
+      wall("left-bottom", -4, 4.5, -0.35, 4.5)
+    ];
+    const detection = detectRooms(floorWith(detachedOnLeft));
+
+    assert.equal(detection.closed.length, 1, "a deliberate gap must not invent another room");
   });
 
   test("the outer face is discarded rather than reported as a room", () => {
@@ -132,6 +185,7 @@ describe("room reconciliation", () => {
     const assigned = reconcileRooms(floorWith(singleRoom)).map((room) => ({
       ...room, sectionTypeId: "shop.checkout", name: "صندوق جلو"
     }));
+    assigned[0].overrides = { focalMm: 6, cameraCount: 2 };
 
     const moved = singleRoom.map((item) =>
       item.id === "w2" ? wall("w2", 10.4, 0, 10.4, 6) : item
@@ -148,6 +202,25 @@ describe("room reconciliation", () => {
     assert.equal(after[0].sectionTypeId, "shop.checkout", "the programme survives the edit");
     assert.equal(after[0].name, "صندوق جلو");
     assert.equal(after[0].id, assigned[0].id, "and it is still the same room");
+    assert.deepEqual(after[0].overrides, assigned[0].overrides, "rule overrides survive the edit too");
+  });
+
+  test("adding an attached rectangle preserves the existing room and leaves only the new space unassigned", () => {
+    const assigned = reconcileRooms(floorWith(singleRoom)).map((room) => ({
+      ...room,
+      sectionTypeId: "shop.salesfloor",
+      name: "فضای اصلی"
+    }));
+
+    const after = reconcileRooms(floorWith(rectangleAttachedToWall, assigned));
+    assert.equal(after.length, 2);
+    assert.equal(after.filter((room) => room.sectionTypeId === "shop.salesfloor").length, 1);
+    assert.equal(unassignedRooms({ ...floorWith(rectangleAttachedToWall), rooms: after }).length, 1);
+    assert.equal(
+      Math.round(roomAreaM2(unassignedRooms({ ...floorWith(rectangleAttachedToWall), rooms: after })[0].polygon)),
+      12,
+      "the new attached space remains visible and awaits its type"
+    );
   });
 
   test("a hand-drawn room is never rebuilt from the walls", () => {

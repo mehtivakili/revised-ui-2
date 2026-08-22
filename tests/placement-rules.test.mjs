@@ -42,7 +42,7 @@ describe("housing selection", () => {
 describe("mount height", () => {
   test("a low ceiling keeps the camera just under it", () => {
     const recipe = recipeFor(section("shop.salesfloor"), context({ ceilingHeightM: 2.6 }));
-    assert.equal(recipe.mountHeightM, 2.4);
+    assert.equal(recipe.mountHeightM, 2.35);
   });
 
   test("a high ceiling stops the camera at three metres", () => {
@@ -68,21 +68,21 @@ describe("mount height", () => {
     assert.equal(recipe.mountHeightM, 2.8);
   });
 
-  test("outdoor walls sit in the 3 to 4 metre band", () => {
+  test("an outdoor wall mount also stays below a short wall", () => {
     const recipe = recipeFor(section("residential.yard"), context({ areaM2: 200, spanM: 18 }));
-    assert.ok(recipe.mountHeightM >= 3 && recipe.mountHeightM <= 4);
+    assert.equal(recipe.mountHeightM, 2.55);
   });
 
-  test("a perimeter camera goes higher still", () => {
-    assert.equal(recipeFor(section("farm.perimeter"), context({ spanM: 60 })).mountHeightM, 4);
+  test("a perimeter pole rises exactly 45 centimetres above the wall", () => {
+    assert.equal(recipeFor(section("farm.perimeter"), context({ spanM: 60 })).mountHeightM, 3.25);
   });
 });
 
 describe("mount position", () => {
-  test("indoor rooms start in a corner and fall back to the wall then the ceiling", () => {
+  test("indoor rooms stay on the wall and never fall back to a pole or ceiling", () => {
     const recipe = recipeFor(section("residential.living"), context());
     assert.equal(recipe.mountKind, "corner");
-    assert.deepEqual(recipe.mountFallbacks, ["wall-edge", "ceiling"]);
+    assert.deepEqual(recipe.mountFallbacks, ["wall-edge"]);
   });
 
   test("a space with no ceiling never falls back to a ceiling mount", () => {

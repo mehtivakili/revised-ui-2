@@ -5,6 +5,7 @@ import {
   soleSelection,
   type FloorPlan,
   type PlanDefaults,
+  type PlanDoorVariant,
   type PlanObstacle,
   type PlanSelection,
   type PlanSelectionRef,
@@ -21,6 +22,9 @@ import { formatFa } from "@/src/lib/chatbot/persian";
 import { applyObstaclePreset, obstaclePreset, obstaclePresets } from "@/src/lib/planner/obstacle-presets";
 import { CoverageRequirementInspector, RoomInspector } from "@/src/components/planner/RoomInspector";
 import type { CustomSectionRecord } from "@/src/domain/planner/types";
+import { findSectionType } from "@/src/domain/planner/venues";
+import { roomAtPoint } from "@/src/lib/planner/rooms";
+import { constrainCameraMountHeight } from "@/src/lib/planner/placement-rules";
 
 /**
  * Property editor for whatever is selected.
@@ -64,10 +68,12 @@ export function PlanInspector({
   selection,
   activeTool,
   wallDrawMode,
+  doorVariant,
   defaults,
   venueTypeId,
   customSectionTypes = [],
   onDefaultsChange,
+  onDoorVariantChange,
   onFloorChange,
   onCustomSectionType,
   onSelect
@@ -76,10 +82,12 @@ export function PlanInspector({
   selection: PlanSelection;
   activeTool: PlanTool;
   wallDrawMode: WallDrawMode;
+  doorVariant: PlanDoorVariant;
   defaults: PlanDefaults;
   venueTypeId?: string;
   customSectionTypes?: CustomSectionRecord[];
   onDefaultsChange: (patch: Partial<PlanDefaults>) => void;
+  onDoorVariantChange: (variant: PlanDoorVariant) => void;
   onFloorChange: (floor: FloorPlan) => void;
   onCustomSectionType?: (section: CustomSectionRecord) => void;
   onSelect: (selection: PlanSelection) => void;
@@ -173,7 +181,19 @@ export function PlanInspector({
         <aside className="plan-inspector plan-tool-inspector">
           <header><DoorOpen size={18} aria-hidden="true" /><strong>افزودن در</strong></header>
           <p>روی بدنه یک دیوار کلیک کنید. پس از جای‌گذاری، عرض، ارتفاع، سمت لولا و زاویه بازشدگی همین‌جا نمایش داده می‌شوند.</p>
-          <div className="plan-field-readout"><span>عرض اولیه</span><strong>۰٫۹ متر</strong></div>
+          <label className="plan-text-field">
+            <span>نوع در جدید</span>
+            <select value={doorVariant} onChange={(event) => onDoorVariantChange(event.target.value as PlanDoorVariant)}>
+              <option value="single-solid">در معمولی تک‌لنگه</option>
+              <option value="double-solid">در معمولی دولنگه</option>
+              <option value="single-glass">در شیشه‌ای تک‌لنگه</option>
+              <option value="double-glass">در شیشه‌ای دولنگه از وسط بازشو</option>
+            </select>
+          </label>
+          <div className="plan-field-readout">
+            <span>عرض اولیه</span>
+            <strong>{doorVariant.startsWith("double") ? "۱٫۸" : "۰٫۹"} متر</strong>
+          </div>
           <div className="plan-field-readout"><span>ارتفاع اولیه</span><strong>۲٫۱ متر</strong></div>
           <div className="plan-tool-tip"><span>درها به دیوار متصل می‌مانند و با حذف دیوار پاک می‌شوند.</span></div>
         </aside>
@@ -184,7 +204,7 @@ export function PlanInspector({
       <aside className="plan-inspector plan-inspector-empty">
         <Compass size={26} aria-hidden="true" />
         <strong>چیزی انتخاب نشده</strong>
-        <p>با ابزار «انتخاب» روی دیوار، در، مانع یا دوربین کلیک کنید تا مشخصاتش را اینجا تنظیم کنید.</p>
+        <p>روی آیتم کلیک کنید؛ دستگیره‌های لبه برای تغییر اندازه ظاهر می‌شوند. Ctrl+C/X/V برای کپی، برش و چسباندن، Delete برای حذف و Ctrl+Z/Y برای واگرد و ازنو است.</p>
       </aside>
     );
   }
@@ -212,7 +232,10 @@ export function PlanInspector({
       <CoverageRequirementInspector
         floor={floor}
         requirement={requirement}
+        venueTypeId={venueTypeId}
+        customSectionTypes={customSectionTypes}
         onFloorChange={onFloorChange}
+        onCustomSectionType={(section) => onCustomSectionType?.(section)}
         onSelect={() => onSelect([])}
       />
     );
@@ -335,17 +358,37 @@ export function PlanInspector({
         />
         {isWindow ? (
           <div className="plan-tool-tip">
-            <span>پنجره فقط یک عنصر ظاهری روی دیوار است و پوشش دوربین را تغییر نمی‌دهد. برای دیوار شیشه‌ای که دید از آن عبور می‌کند، از ابزار «جدار شیشه‌ای» استفاده کنید.</span>
+            <span>پنجره در تمام محاسبات پوشش و DORI بسته و غیرقابل عبور فرض می‌شود. برای یک مرز شفاف واقعی از ابزار «جدار شیشه‌ای» استفاده کنید.</span>
           </div>
         ) : (
           <>
             <label className="plan-text-field">
-              <span>سمت لولا</span>
-              <select value={door.hinge} onChange={(event) => update({ hinge: event.target.value as typeof door.hinge })}>
-                <option value="start">ابتدای بازشو</option>
-                <option value="end">انتهای بازشو</option>
+              <span>نوع در</span>
+              <select
+                value={door.variant ?? "single-solid"}
+                onChange={(event) => {
+                  const variant = event.target.value as PlanDoorVariant;
+                  const widthM = variant.startsWith("double") && door.widthM < 1.2
+                    ? Math.min(1.8, Math.max(0.5, wallLengthM - 0.2))
+                    : door.widthM;
+                  update({ variant, widthM, blocksView: !variant.endsWith("glass") });
+                }}
+              >
+                <option value="single-solid">معمولی تک‌لنگه</option>
+                <option value="double-solid">معمولی دولنگه</option>
+                <option value="single-glass">شیشه‌ای تک‌لنگه</option>
+                <option value="double-glass">شیشه‌ای دولنگه از وسط بازشو</option>
               </select>
             </label>
+            {(door.variant ?? "single-solid").startsWith("single") ? (
+              <label className="plan-text-field">
+                <span>سمت لولا</span>
+                <select value={door.hinge} onChange={(event) => update({ hinge: event.target.value as typeof door.hinge })}>
+                  <option value="start">ابتدای بازشو</option>
+                  <option value="end">انتهای بازشو</option>
+                </select>
+              </label>
+            ) : null}
             <NumberField
               label="میزان بازشدگی"
               unit="درجه"
@@ -355,6 +398,9 @@ export function PlanInspector({
               step={5}
               onChange={(openAngleDeg) => update({ openAngleDeg })}
             />
+            <div className="plan-tool-tip">
+              <span>زاویه بازشدگی فقط برای نمایش نقشه است؛ در محاسبات پوشش و DORI این در همیشه بسته فرض می‌شود.</span>
+            </div>
           </>
         )}
       </aside>
@@ -419,10 +465,18 @@ export function PlanInspector({
 
   const camera = floor.cameras.find((item) => item.id === sole.id);
   if (!camera) return null;
+  const cameraRoom = roomAtPoint(floor, camera.position);
+  const cameraSection = findSectionType(cameraRoom?.sectionTypeId, customSectionTypes as never);
 
   const update = (patch: Partial<typeof camera>) =>
     onFloorChange({ ...floor, cameras: floor.cameras.map((item) => (item.id === camera.id ? { ...item, ...patch } : item)) });
-  const updateOptics = (patch: Partial<typeof camera.optics>) => update({ optics: { ...camera.optics, ...patch } });
+  const updateOptics = (patch: Partial<typeof camera.optics>) => {
+    const optics = { ...camera.optics, ...patch };
+    if (patch.mountHeightM !== undefined) {
+      optics.mountHeightM = constrainCameraMountHeight(floor, camera.position, patch.mountHeightM, camera.mountKind);
+    }
+    update({ optics });
+  };
 
   const coverage = computeCameraCoverage(camera, collectOccluders(floor.walls, floor.obstacles, floor.doors), 48);
   const fov = cameraFovDeg(camera);
@@ -452,6 +506,19 @@ export function PlanInspector({
 
       {camera.groupName ? (
         <div className="plan-defined-camera-group"><span>نوع دستگاه</span><strong>{camera.groupName}</strong></div>
+      ) : null}
+
+      {cameraSection?.forbidden ? (
+        <div className="plan-room-alert forbidden">این دوربین داخل فضای ممنوع «{cameraRoom?.name || cameraSection.label}» قرار دارد؛ آن را جابه‌جا یا حذف کنید.</div>
+      ) : null}
+
+      {camera.placementReasons?.length ? (
+        <details className="plan-room-reasons" open>
+          <summary>دلیل این جانمایی</summary>
+          <ul>{camera.placementReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+          {camera.mountKind ? <small>شیوه نصب نهایی: {camera.mountKind}</small> : null}
+          {camera.requiredFeatures?.length ? <small>قابلیت‌های لازم: {camera.requiredFeatures.join("، ")}</small> : null}
+        </details>
       ) : null}
 
       {/* Body style first: it changes how the camera mounts and how the coverage reads. */}

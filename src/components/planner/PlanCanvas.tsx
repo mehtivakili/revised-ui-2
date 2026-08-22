@@ -11,6 +11,7 @@ import {
   type FloorPlan,
   type PlanBackdrop,
   type PlanDefaults,
+  type PlanDoorVariant,
   type PlanSelection,
   type PlanSelectionRef,
   type PlanRoom,
@@ -22,11 +23,13 @@ import {
 import { elementsInRect, mergeSelection } from "@/src/lib/planner/selection";
 import { findSectionType } from "@/src/domain/planner/venues";
 import { isCardinalAngle, snapRotationAngle } from "@/src/lib/planner/rotation";
+import { constrainCameraMountHeight } from "@/src/lib/planner/placement-rules";
 import { computeCameraCoverage, type CameraCoverage } from "@/src/lib/planner/coverage";
 import {
   collectOccluders,
   collectRightAngleCorners,
   distance,
+  openingsOnWall,
   projectPointToWall,
   rectFromPoints,
   snapPoint
@@ -35,11 +38,14 @@ import {
   buildCameraMarker,
   buildCoverageMesh,
   buildDoorMesh,
+  buildDoorResizeHandles,
   buildFloorFootprintGuide,
   buildOverallDimensionGuide,
   buildFloorSlab,
   buildObstacleMesh,
   buildObstacleRotateHandle,
+  buildObstacleResizeHandles,
+  buildPolygonVertexHandles,
   buildCoverageArea,
   buildMarqueeRect,
   buildPreviewLine,
@@ -47,6 +53,7 @@ import {
   buildPreviewRect,
   buildRightAngleMarker,
   buildWallWithDoors,
+  buildWallEndpointHandles,
   buildYawHandle,
   buildBackdrop,
   buildBackdropMesh,
@@ -170,12 +177,14 @@ export type PlanCanvasProps = {
   floor: FloorPlan;
   tool: PlanTool;
   wallDrawMode: WallDrawMode;
+  doorVariant: PlanDoorVariant;
   viewMode: PlanViewMode;
   selection: PlanSelection;
   snapM: number;
   defaults: PlanDefaults;
   pendingBackdrop?: PlanBackdrop | null;
   showCoverage: boolean;
+  palette?: "classic" | "studio";
   readOnly?: boolean;
   buildingFloors?: FloorPlan[];
   focusedFloorId?: string | null;
@@ -185,6 +194,8 @@ export type PlanCanvasProps = {
   onSelect: (selection: PlanSelection) => void;
   onFloorChange: (floor: FloorPlan) => void;
   onHint: (hint: string | null) => void;
+  /** Last valid plan-space pointer position, used by commands such as paste-at-pointer. */
+  onPointerPlanPosition?: (position: Vec2) => void;
   onDropCamera?: (definitionId: string, position: Vec2) => void;
   onDropPreset?: (presetId: string, position: Vec2) => void;
   onPlaceBackdrop?: (center: Vec2) => void;
@@ -196,6 +207,12 @@ type DragState =
   | { kind: "move-obstacle"; id: string }
   | { kind: "yaw"; id: string }
   | { kind: "rotate-obstacle"; id: string }
+  | { kind: "wall-end"; id: string; endpoint: "a" | "b" }
+  | { kind: "door-resize"; id: string; edge: "start" | "end" }
+  | { kind: "obstacle-resize"; id: string; axis: "width" | "depth"; edge: "start" | "end" }
+  | { kind: "move-door"; id: string }
+  | { kind: "polygon-vertex"; owner: "room" | "requirement"; id: string; index: number }
+  | { kind: "move-polygon"; owner: "room" | "requirement"; id: string; start: Vec2; polygon: Vec2[] }
   | { kind: "marquee"; start: Vec2; additive: boolean }
   | null;
 
@@ -247,7 +264,8 @@ export function PlanCanvas(props: PlanCanvasProps) {
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(width, height);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.setClearColor(0xeaf3f7, 1);
+      const studioPalette = props.palette === "studio";
+      renderer.setClearColor(studioPalette ? 0xf0f1f7 : 0xeaf3f7, 1);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.08;
@@ -319,7 +337,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
 
       const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(200, 200),
-        new THREE.MeshStandardMaterial({ color: 0xf3f8f7, roughness: 0.94, metalness: 0 })
+        new THREE.MeshStandardMaterial({ color: studioPalette ? 0xf7f7fb : 0xf3f8f7, roughness: 0.94, metalness: 0 })
       );
       ground.rotation.x = -Math.PI / 2;
       ground.position.y = -0.035;
@@ -328,13 +346,23 @@ export function PlanCanvas(props: PlanCanvasProps) {
 
       // Two grid densities make scale readable without turning the canvas into visual noise:
       // a one-metre construction grid and a stronger five-metre navigation grid.
-      const fineGrid = new THREE.GridHelper(200, 200, 0x75a9c4, 0xc3dce8);
+      const fineGrid = new THREE.GridHelper(
+        200,
+        200,
+        studioPalette ? 0x8e98c5 : 0x75a9c4,
+        studioPalette ? 0xd5d8e8 : 0xc3dce8
+      );
       (fineGrid.material as THREE_NS.Material).transparent = true;
       (fineGrid.material as THREE_NS.Material).opacity = 0.82;
       (fineGrid.material as THREE_NS.Material).depthWrite = false;
       scene.add(fineGrid);
 
-      const majorGrid = new THREE.GridHelper(200, 40, 0x397fa5, 0x82b5cd);
+      const majorGrid = new THREE.GridHelper(
+        200,
+        40,
+        studioPalette ? 0x5968ae : 0x397fa5,
+        studioPalette ? 0xa9b0d1 : 0x82b5cd
+      );
       (majorGrid.material as THREE_NS.Material).transparent = true;
       (majorGrid.material as THREE_NS.Material).opacity = 0.68;
       (majorGrid.material as THREE_NS.Material).depthWrite = false;
@@ -485,13 +513,36 @@ export function PlanCanvas(props: PlanCanvasProps) {
       ndcFor(clientX, clientY),
       latest.current.viewMode === "top" ? bundle.topCamera : bundle.orbitCamera
     );
-    // Cameras and their yaw handles are tested first so a handle always wins over a wall.
+    // Handles are rendered through walls (`depthTest:false`), so their picking must obey
+    // the same visual stacking. A single distance-sorted raycast can otherwise return a
+    // wall or obstacle behind the visible blue knob and make the drag feel intermittent.
     const targets = [
       ...bundle.groups.cameras.children,
       ...bundle.groups.content.children,
       ...bundle.groups.rooms.children
     ];
-    for (const hit of bundle.raycaster.intersectObjects(targets, true)) {
+    const isHandleKind = (kind?: string) => Boolean(
+      kind === "camera-yaw"
+      || kind === "obstacle-rotate"
+      || kind?.startsWith("wall-end-")
+      || kind?.startsWith("door-resize-")
+      || kind?.startsWith("obstacle-resize-")
+      || kind?.startsWith("room-vertex-")
+      || kind?.startsWith("requirement-vertex-")
+    );
+    const handleTargets: THREE_NS.Object3D[] = [];
+    for (const target of targets) {
+      target.traverse((child) => {
+        if (isHandleKind((child.userData as { kind?: string }).kind)) handleTargets.push(child);
+      });
+    }
+    const hits = [
+      // These objects were collected recursively, so recursive=false prevents duplicate
+      // tests while guaranteeing every visible handle is considered before scene geometry.
+      ...bundle.raycaster.intersectObjects(handleTargets, false),
+      ...bundle.raycaster.intersectObjects(targets, true)
+    ];
+    for (const hit of hits) {
       const data = hit.object.userData as { kind?: string; id?: string; floorId?: string };
       if (data.floorId && data.floorId !== latest.current.floor.id) continue;
       if (data.kind && data.id) return { kind: data.kind, id: data.id };
@@ -550,6 +601,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
 
     const point = planPointAt(event.clientX, event.clientY);
     if (!point) return;
+    current.onPointerPlanPosition?.(point);
     if (current.pendingBackdrop) {
       current.onPlaceBackdrop?.(point);
       return;
@@ -557,19 +609,30 @@ export function PlanCanvas(props: PlanCanvasProps) {
     const snapped = snapPoint(point, current.snapM);
     const picked = pickAt(event.clientX, event.clientY);
     const activeDraft = draftRef.current;
+    const pickedWallForDrawing = current.tool === "wall" && picked?.kind === "wall"
+      ? current.floor.walls.find((wall) => wall.id === picked.id)
+      : undefined;
+    // Make a wall-to-wall click an exact T-junction even when the grid and host wall
+    // differ slightly. Room detection can then treat the new boundary as connected.
+    const wallDrawPoint = pickedWallForDrawing
+      ? projectPointToWall(point, pickedWallForDrawing).point
+      : snapped;
 
     /*
      * Inspecting an existing object must not require leaving the active drawing tool.
      * A click on an object opens its properties whenever no two-click/chain operation is
-     * underway — except for the opening tools, which need wall clicks to place a door or
-     * window on the wall that was clicked.
+     * underway — except for opening tools and the wall tool, which use a wall click as
+     * an exact host point for an opening or a new junction.
      */
     const openingTool = current.tool === "door" || current.tool === "window";
+    const regionDrawingTool = current.tool === "room" || current.tool === "coverage";
     if (
       current.tool !== "select"
       && !activeDraft
       && picked
+      && !regionDrawingTool
       && !(openingTool && picked.kind === "wall")
+      && !(current.tool === "wall" && picked.kind === "wall")
     ) {
       const kind = picked.kind === "camera-yaw" ? "camera" : picked.kind;
       if (kind === "wall" || kind === "door" || kind === "obstacle" || kind === "camera" || kind === "room" || kind === "requirement") {
@@ -594,6 +657,47 @@ export function PlanCanvas(props: PlanCanvasProps) {
         setControlsEnabled(false);
         (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
         onHint("بکشید تا جهت این عنصر تغییر کند");
+        return;
+      }
+
+      if (picked?.kind === "wall-end-a" || picked?.kind === "wall-end-b") {
+        dragRef.current = { kind: "wall-end", id: picked.id, endpoint: picked.kind.endsWith("a") ? "a" : "b" };
+        setControlsEnabled(false);
+        (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+        onHint("سر دیوار را بکشید تا طول و زاویه آن تغییر کند");
+        return;
+      }
+
+      if (picked?.kind === "door-resize-start" || picked?.kind === "door-resize-end") {
+        dragRef.current = { kind: "door-resize", id: picked.id, edge: picked.kind.endsWith("start") ? "start" : "end" };
+        setControlsEnabled(false);
+        (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+        onHint("لبه در را روی امتداد دیوار بکشید تا عرض آن تغییر کند");
+        return;
+      }
+
+      if (picked?.kind.startsWith("obstacle-resize-")) {
+        const parts = picked.kind.split("-");
+        dragRef.current = {
+          kind: "obstacle-resize",
+          id: picked.id,
+          axis: parts[2] === "depth" ? "depth" : "width",
+          edge: parts[3] === "start" ? "start" : "end"
+        };
+        setControlsEnabled(false);
+        (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+        onHint("لبه آیتم را بکشید تا اندازه آن تغییر کند");
+        return;
+      }
+
+      if (picked?.kind.startsWith("room-vertex-") || picked?.kind.startsWith("requirement-vertex-")) {
+        const owner = picked.kind.startsWith("room-") ? "room" : "requirement";
+        const index = Number(picked.kind.split("-").at(-1));
+        if (!Number.isInteger(index)) return;
+        dragRef.current = { kind: "polygon-vertex", owner, id: picked.id, index };
+        setControlsEnabled(false);
+        (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+        onHint("رأس را بکشید تا شکل ناحیه تغییر کند");
         return;
       }
 
@@ -624,10 +728,28 @@ export function PlanCanvas(props: PlanCanvasProps) {
       // be nudged without collapsing back to a single element.
       if (!alreadySelected) onSelect([ref]);
 
-      if (picked.kind === "camera" || picked.kind === "obstacle") {
-        dragRef.current = { kind: picked.kind === "camera" ? "move-camera" : "move-obstacle", id: picked.id };
+      if (picked.kind === "camera" || picked.kind === "obstacle" || picked.kind === "door") {
+        dragRef.current = {
+          kind: picked.kind === "camera" ? "move-camera" : picked.kind === "obstacle" ? "move-obstacle" : "move-door",
+          id: picked.id
+        };
         setControlsEnabled(false);
         (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+      } else if (picked.kind === "room" || picked.kind === "requirement") {
+        const polygon = picked.kind === "room"
+          ? (current.floor.rooms ?? []).find((item) => item.id === picked.id)?.polygon
+          : (current.floor.coverageRequirements ?? []).find((item) => item.id === picked.id)?.polygon;
+        if (polygon) {
+          dragRef.current = {
+            kind: "move-polygon",
+            owner: picked.kind,
+            id: picked.id,
+            start: point,
+            polygon: polygon.map((item) => ({ ...item }))
+          };
+          setControlsEnabled(false);
+          (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+        }
       }
       return;
     }
@@ -649,12 +771,11 @@ export function PlanCanvas(props: PlanCanvasProps) {
       }
       const widthM = isWindow
         ? Math.min(1.4, Math.max(0.6, wallLengthM - 0.2))
-        : Math.min(0.9, Math.max(0.6, wallLengthM - 0.2));
+        : Math.min(current.doorVariant.startsWith("double") ? 1.8 : 0.9, Math.max(0.6, wallLengthM - 0.2));
       const projection = projectPointToWall(point, wall, widthM / 2 + 0.1);
       // Openings share one list, so a new window must clear existing doors as well.
-      const overlaps = (current.floor.doors ?? []).some((door) =>
-        door.wallId === wall.id
-        && Math.abs((door.offset - projection.offset) * wallLengthM) < (door.widthM + widthM) / 2 + 0.1
+      const overlaps = openingsOnWall(wall, current.floor.walls, current.floor.doors ?? []).some((door) =>
+        Math.abs((door.offset - projection.offset) * wallLengthM) < (door.widthM + widthM) / 2 + 0.1
       );
       if (overlaps) {
         onHint("این قسمت از دیوار قبلاً بازشو دارد؛ نقطه دیگری را انتخاب کنید");
@@ -669,6 +790,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
         id: nextId(isWindow ? "win" : "door"),
         wallId: wall.id,
         type: isWindow ? ("window" as const) : ("door" as const),
+        variant: isWindow ? undefined : current.doorVariant,
         offset: projection.offset,
         widthM,
         heightM,
@@ -676,7 +798,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
         hinge: "start" as const,
         openAngleDeg: isWindow ? 0 : 45,
         // Glass bounds the room without blocking the view through it.
-        blocksView: !isWindow
+        blocksView: !isWindow && !current.doorVariant.endsWith("glass")
       };
       onFloorChange({ ...current.floor, doors: [...(current.floor.doors ?? []), door] });
       onSelect([{ kind: "door", id: door.id }]);
@@ -687,13 +809,18 @@ export function PlanCanvas(props: PlanCanvasProps) {
     }
 
     if (current.tool === "camera") {
+      const mountHeightM = constrainCameraMountHeight(
+        current.floor,
+        snapped,
+        current.defaults.cameraMountHeightM
+      );
       const camera = {
         id: nextId("cam"),
         name: `دوربین ${current.floor.cameras.length + 1}`,
         position: snapped,
         yawDeg: 0,
         goal: "monitor" as const,
-        optics: { ...defaultCameraOptics, mountHeightM: current.defaults.cameraMountHeightM }
+        optics: { ...defaultCameraOptics, mountHeightM }
       };
       onFloorChange({ ...current.floor, cameras: [...current.floor.cameras, camera] });
       onSelect([{ kind: "camera", id: camera.id }]);
@@ -703,7 +830,10 @@ export function PlanCanvas(props: PlanCanvasProps) {
     const draft = draftRef.current;
     if (!draft) {
       onSelect([]);
-      draftRef.current = { kind: current.tool as "wall" | "obstacle" | "measure" | "room" | "coverage", start: snapped };
+      draftRef.current = {
+        kind: current.tool as "wall" | "obstacle" | "measure" | "room" | "coverage",
+        start: current.tool === "wall" ? wallDrawPoint : snapped
+      };
       onHint(current.tool === "wall"
         ? current.wallDrawMode === "line"
           ? "نقطه پایان دیوار خطی را انتخاب کنید — Esc برای لغو"
@@ -721,14 +851,14 @@ export function PlanCanvas(props: PlanCanvasProps) {
     if (draft.kind === "wall") {
       const isGlass = current.wallDrawMode === "glass";
       if (current.wallDrawMode === "line" || isGlass) {
-        const lengthM = distance(draft.start, snapped);
+        const lengthM = distance(draft.start, wallDrawPoint);
         if (lengthM >= 0.1) {
           onFloorChange({
             ...current.floor,
             walls: [...current.floor.walls, {
               id: nextId("wall"),
               a: draft.start,
-              b: snapped,
+              b: wallDrawPoint,
               heightM: current.defaults.wallHeightM,
               // Glazing is thinner than masonry and, crucially, is not an occluder.
               thicknessM: isGlass ? Math.min(0.08, current.defaults.wallThicknessM) : current.defaults.wallThicknessM,
@@ -748,13 +878,13 @@ export function PlanCanvas(props: PlanCanvasProps) {
         return;
       }
 
-      const widthM = Math.abs(snapped.x - draft.start.x);
-      const depthM = Math.abs(snapped.z - draft.start.z);
+      const widthM = Math.abs(wallDrawPoint.x - draft.start.x);
+      const depthM = Math.abs(wallDrawPoint.z - draft.start.z);
       if (widthM >= 0.2 && depthM >= 0.2) {
-        const minX = Math.min(draft.start.x, snapped.x);
-        const maxX = Math.max(draft.start.x, snapped.x);
-        const minZ = Math.min(draft.start.z, snapped.z);
-        const maxZ = Math.max(draft.start.z, snapped.z);
+        const minX = Math.min(draft.start.x, wallDrawPoint.x);
+        const maxX = Math.max(draft.start.x, wallDrawPoint.x);
+        const minZ = Math.min(draft.start.z, wallDrawPoint.z);
+        const maxZ = Math.max(draft.start.z, wallDrawPoint.z);
         const corners: Vec2[] = [
           { x: minX, z: minZ },
           { x: maxX, z: minZ },
@@ -861,6 +991,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
 
     const point = planPointAt(event.clientX, event.clientY);
     if (!point) return;
+    current.onPointerPlanPosition?.(point);
 
     if (current.pendingBackdrop) {
       const preview = bundle.groups.placement.children[0] ?? ensureBackdropPlacement(bundle, current.pendingBackdrop);
@@ -879,6 +1010,172 @@ export function PlanCanvas(props: PlanCanvasProps) {
         onHint(hits.length
           ? `${hits.length} آیتم داخل کادر`
           : "کادر را روی آیتم‌های موردنظر بکشید");
+        return;
+      }
+
+      if (drag.kind === "move-door") {
+        const door = (current.floor.doors ?? []).find((item) => item.id === drag.id);
+        const wall = door ? current.floor.walls.find((item) => item.id === door.wallId) : undefined;
+        if (!door || !wall) return;
+        const span = Math.max(0.01, distance(wall.a, wall.b));
+        const projection = projectPointToWall(point, wall, door.widthM / 2 + 0.1);
+        const overlaps = openingsOnWall(wall, current.floor.walls, current.floor.doors ?? []).some((other) =>
+          other.id !== door.id
+          && Math.abs(other.offset - projection.offset) * span < (other.widthM + door.widthM) / 2 + 0.1
+        );
+        if (overlaps) {
+          onHint("این محل با بازشوی دیگری تداخل دارد");
+          return;
+        }
+        onFloorChange({
+          ...current.floor,
+          doors: (current.floor.doors ?? []).map((item) => item.id === door.id
+            ? { ...item, offset: projection.offset }
+            : item)
+        });
+        onHint(`${door.type === "window" ? "پنجره" : "در"} روی دیوار جابه‌جا شد`);
+        return;
+      }
+
+      if (drag.kind === "polygon-vertex") {
+        const nextPoint = snapPoint(point, current.snapM);
+        if (drag.owner === "room") {
+          onFloorChange({
+            ...current.floor,
+            rooms: (current.floor.rooms ?? []).map((room) => {
+              if (room.id !== drag.id || !room.polygon[drag.index]) return room;
+              const polygon = room.polygon.map((item, index) => index === drag.index ? nextPoint : item);
+              return { ...room, polygon, boundarySource: "drawn", wallIds: undefined, impliedEdgeIndices: undefined };
+            })
+          });
+        } else {
+          onFloorChange({
+            ...current.floor,
+            coverageRequirements: (current.floor.coverageRequirements ?? []).map((requirement) => {
+              if (requirement.id !== drag.id || !requirement.polygon[drag.index]) return requirement;
+              return {
+                ...requirement,
+                polygon: requirement.polygon.map((item, index) => index === drag.index ? nextPoint : item),
+                satisfied: undefined
+              };
+            })
+          });
+        }
+        onHint("شکل ناحیه تغییر کرد");
+        return;
+      }
+
+      if (drag.kind === "move-polygon") {
+        const delta = {
+          x: snapPoint(point, current.snapM).x - snapPoint(drag.start, current.snapM).x,
+          z: snapPoint(point, current.snapM).z - snapPoint(drag.start, current.snapM).z
+        };
+        const polygon = drag.polygon.map((item) => ({ x: item.x + delta.x, z: item.z + delta.z }));
+        if (drag.owner === "room") {
+          onFloorChange({
+            ...current.floor,
+            rooms: (current.floor.rooms ?? []).map((room) => room.id === drag.id
+              ? { ...room, polygon, boundarySource: "drawn", wallIds: undefined, impliedEdgeIndices: undefined }
+              : room)
+          });
+        } else {
+          onFloorChange({
+            ...current.floor,
+            coverageRequirements: (current.floor.coverageRequirements ?? []).map((requirement) => requirement.id === drag.id
+              ? { ...requirement, polygon, satisfied: undefined }
+              : requirement)
+          });
+        }
+        onHint("ناحیه جابه‌جا شد");
+        return;
+      }
+
+      if (drag.kind === "wall-end") {
+        const wall = current.floor.walls.find((item) => item.id === drag.id);
+        if (!wall) return;
+        const previous = wall[drag.endpoint];
+        const nextPoint = snapPoint(point, current.snapM);
+        const touches = (candidate: Vec2) => distance(candidate, previous) < 0.04;
+        const changedWallIds = new Set<string>();
+        const walls = current.floor.walls.map((item) => {
+          let a = item.a;
+          let b = item.b;
+          if (touches(a)) { a = nextPoint; changedWallIds.add(item.id); }
+          if (touches(b)) { b = nextPoint; changedWallIds.add(item.id); }
+          return a === item.a && b === item.b ? item : { ...item, a, b };
+        });
+        const wallById = new Map(walls.map((item) => [item.id, item]));
+        const doors = (current.floor.doors ?? []).map((door) => {
+          if (!changedWallIds.has(door.wallId)) return door;
+          const host = wallById.get(door.wallId);
+          const span = host ? distance(host.a, host.b) : 0;
+          const widthM = Math.min(door.widthM, Math.max(0.5, span - 0.2));
+          const clearance = span > 0 ? Math.min(0.49, (widthM / 2 + 0.1) / span) : 0.49;
+          return { ...door, widthM, offset: Math.max(clearance, Math.min(1 - clearance, door.offset)) };
+        });
+        onFloorChange({ ...current.floor, walls, doors });
+        onHint(`طول دیوار: ${distance(drag.endpoint === "a" ? nextPoint : wall.a, drag.endpoint === "b" ? nextPoint : wall.b).toFixed(2)} متر`);
+        return;
+      }
+
+      if (drag.kind === "door-resize") {
+        const door = (current.floor.doors ?? []).find((item) => item.id === drag.id);
+        const wall = door ? current.floor.walls.find((item) => item.id === door.wallId) : null;
+        if (!door || !wall) return;
+        const span = Math.max(0.01, distance(wall.a, wall.b));
+        const ux = (wall.b.x - wall.a.x) / span;
+        const uz = (wall.b.z - wall.a.z) / span;
+        const pointerM = Math.max(0.1, Math.min(span - 0.1, (point.x - wall.a.x) * ux + (point.z - wall.a.z) * uz));
+        const centreM = door.offset * span;
+        const oldStart = centreM - door.widthM / 2;
+        const oldEnd = centreM + door.widthM / 2;
+        const startM = drag.edge === "start" ? Math.min(pointerM, oldEnd - 0.5) : oldStart;
+        const endM = drag.edge === "end" ? Math.max(pointerM, oldStart + 0.5) : oldEnd;
+        const widthM = Math.max(0.5, endM - startM);
+        const nextCentreM = (startM + endM) / 2;
+        const overlaps = openingsOnWall(wall, current.floor.walls, current.floor.doors ?? []).some((other) => {
+          if (other.id === door.id) return false;
+          const otherCentre = other.offset * span;
+          return Math.abs(otherCentre - nextCentreM) < (other.widthM + widthM) / 2 + 0.1;
+        });
+        if (overlaps) {
+          onHint("عرض بیشتر با بازشوی کناری تداخل دارد");
+          return;
+        }
+        onFloorChange({
+          ...current.floor,
+          doors: (current.floor.doors ?? []).map((item) => item.id === door.id
+            ? { ...item, widthM, offset: nextCentreM / span }
+            : item)
+        });
+        onHint(`عرض در: ${widthM.toFixed(2)} متر`);
+        return;
+      }
+
+      if (drag.kind === "obstacle-resize") {
+        const obstacle = current.floor.obstacles.find((item) => item.id === drag.id);
+        if (!obstacle) return;
+        const radians = (obstacle.rotationDeg * Math.PI) / 180;
+        const axis = drag.axis === "width"
+          ? { x: Math.cos(radians), z: Math.sin(radians) }
+          : { x: -Math.sin(radians), z: Math.cos(radians) };
+        const size = drag.axis === "width" ? obstacle.widthM : obstacle.depthM;
+        const sign = drag.edge === "end" ? 1 : -1;
+        const fixed = {
+          x: obstacle.center.x - axis.x * sign * size / 2,
+          z: obstacle.center.z - axis.z * sign * size / 2
+        };
+        const rawSize = ((point.x - fixed.x) * axis.x + (point.z - fixed.z) * axis.z) * sign;
+        const nextSize = Math.max(0.1, Math.round(rawSize / Math.max(0.05, current.snapM / 2)) * Math.max(0.05, current.snapM / 2));
+        const moving = { x: fixed.x + axis.x * sign * nextSize, z: fixed.z + axis.z * sign * nextSize };
+        const center = { x: (fixed.x + moving.x) / 2, z: (fixed.z + moving.z) / 2 };
+        onFloorChange({
+          ...current.floor,
+          obstacles: current.floor.obstacles.map((item) => item.id === obstacle.id
+            ? { ...item, center, [drag.axis === "width" ? "widthM" : "depthM"]: nextSize }
+            : item)
+        });
+        onHint(`${drag.axis === "width" ? "طول" : "عرض"} آیتم: ${nextSize.toFixed(2)} متر`);
         return;
       }
 
@@ -922,7 +1219,14 @@ export function PlanCanvas(props: PlanCanvasProps) {
       if (drag.kind === "move-camera") {
         onFloorChange({
           ...current.floor,
-          cameras: current.floor.cameras.map((item) => item.id === drag.id ? { ...item, position: snapped } : item)
+          cameras: current.floor.cameras.map((item) => item.id === drag.id ? {
+            ...item,
+            position: snapped,
+            optics: {
+              ...item.optics,
+              mountHeightM: constrainCameraMountHeight(current.floor, snapped, item.optics.mountHeightM, item.mountKind)
+            }
+          } : item)
         });
       } else {
         onFloorChange({
@@ -1108,7 +1412,7 @@ function syncScene(
         ? stackedFloor.walls
         : stackedFloor.walls.filter((wall) => /(?:shell|envelope|estate|yard)-/.test(wall.id));
       for (const wall of visibleWalls) {
-        const doors = (stackedFloor.doors ?? []).filter((door) => door.wallId === wall.id);
+        const doors = openingsOnWall(wall, stackedFloor.walls, stackedFloor.doors ?? []);
         floorGroup.add(buildWallWithDoors(THREE, wall, isFocused ? doors : [], false));
       }
       if (isFocused || showingAllFloors) {
@@ -1130,7 +1434,8 @@ function syncScene(
             camera.optics.mountHeightM,
             camera.yawDeg,
             false,
-            camera.housing
+            camera.housing,
+            camera.mountKind
           ));
         }
       }
@@ -1146,14 +1451,22 @@ function syncScene(
 
   for (const room of floor.rooms ?? []) {
     const section = findSectionType(room.sectionTypeId, (customSectionTypes ?? []) as never);
+    const selected = isSelected(selection, "room", room.id);
     groups.rooms.add(buildRoomOutline(THREE, room, {
-      selected: isSelected(selection, "room", room.id),
+      selected,
       assigned: Boolean(room.sectionTypeId),
       forbidden: Boolean(section?.forbidden)
     }));
+    if (selected && selection.length === 1) {
+      groups.rooms.add(buildPolygonVertexHandles(THREE, room.polygon, "room", room.id));
+    }
   }
   for (const requirement of floor.coverageRequirements ?? []) {
-    groups.rooms.add(buildCoverageArea(THREE, requirement, isSelected(selection, "requirement", requirement.id)));
+    const selected = isSelected(selection, "requirement", requirement.id);
+    groups.rooms.add(buildCoverageArea(THREE, requirement, selected));
+    if (selected && selection.length === 1) {
+      groups.rooms.add(buildPolygonVertexHandles(THREE, requirement.polygon, "requirement", requirement.id));
+    }
   }
 
   const backdrop = buildBackdrop(THREE, floor);
@@ -1161,8 +1474,10 @@ function syncScene(
   groups.content.add(buildOverallDimensionGuide(THREE, floor));
 
   for (const wall of floor.walls) {
-    const doors = (floor.doors ?? []).filter((door) => door.wallId === wall.id);
-    groups.content.add(buildWallWithDoors(THREE, wall, doors, isSelected(selection, "wall", wall.id)));
+    const doors = openingsOnWall(wall, floor.walls, floor.doors ?? []);
+    const selected = isSelected(selection, "wall", wall.id);
+    groups.content.add(buildWallWithDoors(THREE, wall, doors, selected));
+    if (selected && selection.length === 1) groups.content.add(buildWallEndpointHandles(THREE, wall));
   }
   for (const corner of collectRightAngleCorners(floor.walls)) {
     groups.content.add(buildRightAngleMarker(THREE, corner));
@@ -1173,6 +1488,7 @@ function syncScene(
     // scatter twenty overlapping arrows across the plan.
     if (obstacleSelected && selection.length === 1) {
       groups.content.add(buildObstacleRotateHandle(THREE, obstacle));
+      groups.content.add(buildObstacleResizeHandles(THREE, obstacle));
     }
     groups.content.add(buildObstacleMesh(
       THREE,
@@ -1183,7 +1499,11 @@ function syncScene(
   }
   for (const door of floor.doors ?? []) {
     const wall = floor.walls.find((item) => item.id === door.wallId);
-    if (wall) groups.content.add(buildDoorMesh(THREE, door, wall, isSelected(selection, "door", door.id)));
+    if (wall) {
+      const selected = isSelected(selection, "door", door.id);
+      groups.content.add(buildDoorMesh(THREE, door, wall, selected));
+      if (selected && selection.length === 1) groups.content.add(buildDoorResizeHandles(THREE, door, wall));
+    }
   }
   for (const camera of floor.cameras) {
     const cameraSelected = isSelected(selection, "camera", camera.id);
@@ -1194,7 +1514,8 @@ function syncScene(
       camera.optics.mountHeightM,
       camera.yawDeg,
       cameraSelected,
-      camera.housing
+      camera.housing,
+      camera.mountKind
     ));
     if (cameraSelected) groups.cameras.add(buildYawHandle(THREE, camera.id, camera.position, camera.optics.mountHeightM, camera.yawDeg));
   }

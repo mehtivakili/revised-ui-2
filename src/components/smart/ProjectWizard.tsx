@@ -3,7 +3,8 @@
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Bookmark, Cable, Check, ChevronLeft, CircleAlert, FileDown, Info, LoaderCircle, Mic, Moon, PencilRuler, RotateCcw, Save, ShieldCheck, Sparkles, SquareStack, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bookmark, BriefcaseBusiness, Cable, Check, ChevronLeft, CircleAlert, CircleParking, Factory, FileDown, Fuel, Gem, GraduationCap, HeartPulse, Hotel, House, Info, Landmark, LoaderCircle, LockKeyhole, Mic, Moon, PencilRuler, Rocket, RotateCcw, Save, Search, ShieldCheck, ShoppingCart, Sparkles, Sprout, SquareStack, Store, Trash2, UtensilsCrossed, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { ProjectBrief, ProjectCameraTemplate, ProjectZone, RecommendationPlan, RecommendationResult } from "@/src/domain/catalog/types";
 import { createEmptyPlan, type BuildingPlan } from "@/src/domain/planner/types";
 import type { PlanSummary } from "@/src/components/planner/FloorPlanDesigner";
@@ -13,6 +14,7 @@ import { CameraTemplateEditor } from "@/src/components/smart/CameraTemplateEdito
 import { CameraStreamEditor } from "@/src/components/smart/CameraStreamEditor";
 import { defaultCameraTemplates, zonesFromPlan, zonesFromTemplates } from "@/src/lib/planner/camera-templates";
 import { createSamplePlan, type SamplePlanId } from "@/src/lib/planner/sample-plans";
+import { venueTypes, type VenueType, type VenueTypeId } from "@/src/domain/planner/venues";
 
 const formatFaCount = (value: number) => new Intl.NumberFormat("fa-IR").format(value);
 
@@ -230,6 +232,30 @@ const samplePresets: WizardPreset[] = [
 
 const allPresets = [...presets, ...samplePresets];
 
+type VenueExperience = {
+  icon: LucideIcon;
+  shortLabel: string;
+  projectType: ProjectBrief["projectType"];
+  defaults: Pick<ProjectBrief, "siteAreaM2" | "floors" | "entrances" | "archiveDays"> & Partial<Pick<ProjectBrief, "lowLightPriority" | "redundancyRequired">>;
+};
+
+const venueExperiences: Record<VenueTypeId, VenueExperience> = {
+  residential: { icon: House, shortLabel: "مسکونی و ویلا", projectType: "residential", defaults: { siteAreaM2: 350, floors: 1, entrances: 2, archiveDays: 30 } },
+  shop: { icon: Store, shortLabel: "فروشگاه کوچک", projectType: "shop", defaults: { siteAreaM2: 180, floors: 1, entrances: 1, archiveDays: 21 } },
+  supermarket: { icon: ShoppingCart, shortLabel: "هایپرمارکت", projectType: "shop", defaults: { siteAreaM2: 1200, floors: 1, entrances: 3, archiveDays: 30 } },
+  jewellery: { icon: Gem, shortLabel: "طلافروشی و بانک", projectType: "shop", defaults: { siteAreaM2: 220, floors: 1, entrances: 2, archiveDays: 60, redundancyRequired: true } },
+  office: { icon: BriefcaseBusiness, shortLabel: "اداری و سازمانی", projectType: "office", defaults: { siteAreaM2: 850, floors: 3, entrances: 2, archiveDays: 30 } },
+  industrial: { icon: Factory, shortLabel: "کارخانه و انبار", projectType: "factory", defaults: { siteAreaM2: 4500, floors: 2, entrances: 4, archiveDays: 60, redundancyRequired: true } },
+  parking: { icon: CircleParking, shortLabel: "پارکینگ عمومی", projectType: "parking", defaults: { siteAreaM2: 1200, floors: 2, entrances: 2, archiveDays: 45, lowLightPriority: true } },
+  restaurant: { icon: UtensilsCrossed, shortLabel: "رستوران و کافه", projectType: "shop", defaults: { siteAreaM2: 320, floors: 1, entrances: 2, archiveDays: 30 } },
+  school: { icon: GraduationCap, shortLabel: "مدرسه و مهدکودک", projectType: "office", defaults: { siteAreaM2: 1800, floors: 2, entrances: 3, archiveDays: 30 } },
+  hospital: { icon: HeartPulse, shortLabel: "بیمارستان و درمان", projectType: "office", defaults: { siteAreaM2: 3000, floors: 5, entrances: 5, archiveDays: 60, redundancyRequired: true } },
+  hotel: { icon: Hotel, shortLabel: "هتل و اقامتگاه", projectType: "shop", defaults: { siteAreaM2: 2500, floors: 6, entrances: 3, archiveDays: 45 } },
+  fuel: { icon: Fuel, shortLabel: "جایگاه سوخت", projectType: "factory", defaults: { siteAreaM2: 1800, floors: 1, entrances: 3, archiveDays: 45, lowLightPriority: true } },
+  apartment: { icon: Landmark, shortLabel: "مجتمع و برج", projectType: "residential", defaults: { siteAreaM2: 3000, floors: 8, entrances: 2, archiveDays: 30 } },
+  farm: { icon: Sprout, shortLabel: "باغ و مزرعه", projectType: "factory", defaults: { siteAreaM2: 8000, floors: 1, entrances: 3, archiveDays: 45, lowLightPriority: true } }
+};
+
 function migrateSavedZone(zone: Partial<ProjectZone>, index: number): ProjectZone {
   const legacyGoal = String(zone.goal);
   const goal: ProjectZone["goal"] = legacyGoal === "general" ? "monitor" : legacyGoal === "face" ? "face-identify" : legacyGoal === "plate" ? "plate-capture" : taskOptions.some(([value]) => value === legacyGoal) ? legacyGoal as ProjectZone["goal"] : "monitor";
@@ -254,7 +280,9 @@ export function ProjectWizard() {
   const [savedMessage, setSavedMessage] = useState("");
   const [hasSavedDefaults, setHasSavedDefaults] = useState(false);
   const [siteMode, setSiteMode] = useState<"manual" | "designer">("designer");
-  const [buildingPlan, setBuildingPlan] = useState<BuildingPlan>(() => createEmptyPlan());
+  const [buildingPlan, setBuildingPlan] = useState<BuildingPlan>(() => ({ ...createEmptyPlan(), venueTypeId: "shop" }));
+  const [designFocusActive, setDesignFocusActive] = useState(false);
+  const [venueQuery, setVenueQuery] = useState("");
   // Memoised: the `?? []` fallback would otherwise be a fresh array every render and
   // invalidate every hook downstream of it.
   const cameraTemplates = useMemo(() => brief.cameraTemplates ?? [], [brief.cameraTemplates]);
@@ -273,11 +301,24 @@ export function ProjectWizard() {
   }, [cameraTemplates, buildingPlan]);
 
   const planReady = siteMode === "designer" && placement.placed > 0;
+  const cameraFocusActive = step === 3 && siteMode === "designer";
 
   useEffect(() => {
     const timer = window.setTimeout(() => setHasSavedDefaults(Boolean(window.localStorage.getItem(DEFAULTS_KEY))), 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!designFocusActive && !cameraFocusActive) return;
+    const bodyOverflow = document.body.style.overflow;
+    const rootOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = bodyOverflow;
+      document.documentElement.style.overflow = rootOverflow;
+    };
+  }, [designFocusActive, cameraFocusActive]);
 
   useEffect(() => {
     if (previousStepRef.current === step) return;
@@ -292,6 +333,25 @@ export function ProjectWizard() {
 
   const progress = useMemo(() => `${Math.round((Math.min(step, 6) / 6) * 100)}%`, [step]);
   const update = <K extends keyof ProjectBrief>(key: K, value: ProjectBrief[K]) => setBrief((current) => ({ ...current, [key]: value }));
+  const selectedVenueId = (buildingPlan.venueTypeId as VenueTypeId | undefined) ?? "shop";
+  const selectedVenue = venueTypes.find((venue) => venue.id === selectedVenueId) ?? venueTypes[1]!;
+  const filteredVenues = useMemo(() => {
+    const query = venueQuery.trim().toLocaleLowerCase("fa");
+    if (!query) return venueTypes;
+    return venueTypes.filter((venue) => [venue.label, venue.blurb, ...venue.aliases].some((value) => value.toLocaleLowerCase("fa").includes(query)));
+  }, [venueQuery]);
+
+  const selectVenue = useCallback((venueId: VenueTypeId) => {
+    const experience = venueExperiences[venueId];
+    setBrief((current) => ({ ...current, ...experience.defaults, projectType: experience.projectType }));
+    setBuildingPlan((current) => ({ ...current, venueTypeId: venueId }));
+  }, []);
+
+  const startFocusedDesign = useCallback(() => {
+    selectVenue(selectedVenueId);
+    setSiteMode("designer");
+    setDesignFocusActive(true);
+  }, [selectVenue, selectedVenueId]);
 
   /**
    * The drawn plan is the source of truth for area and storey count once the designer is
@@ -410,6 +470,44 @@ export function ProjectWizard() {
     setError("");
     setStep(2);
   }
+
+  if (designFocusActive) return (
+    <DesignFocusStage
+      venue={selectedVenue}
+      plan={buildingPlan}
+      onPlanChange={setBuildingPlan}
+      onSummaryChange={applyPlanSummary}
+      onCancel={() => setDesignFocusActive(false)}
+      onContinue={() => {
+        setDesignFocusActive(false);
+        setStep(2);
+      }}
+    />
+  );
+
+  if (cameraFocusActive) return (
+    <CameraPlacementFocusStage
+      venue={selectedVenue}
+      plan={buildingPlan}
+      cameraTemplates={cameraTemplates}
+      placement={placement}
+      onPlanChange={setBuildingPlan}
+      onSummaryChange={applyPlanSummary}
+      onBack={() => setStep(2)}
+      onContinue={() => setStep(4)}
+    />
+  );
+
+  if (step === 1) return (
+    <ProjectTypeGateway
+      venues={filteredVenues}
+      selectedVenueId={selectedVenueId}
+      query={venueQuery}
+      onQueryChange={setVenueQuery}
+      onSelect={selectVenue}
+      onStart={startFocusedDesign}
+    />
+  );
 
   // The drawn plan only reaches the results when it was actually used and completed.
   if (step === 7 && result) return <RecommendationResults result={result} plan={planReady ? buildingPlan : undefined} onReset={() => { setResult(null); setStep(1); }} onUseCompatibleDefaults={retryWithCompatibleDefaults} />;
@@ -583,6 +681,194 @@ export function ProjectWizard() {
   </section>;
 }
 
+function ProjectTypeGateway({
+  venues,
+  selectedVenueId,
+  query,
+  onQueryChange,
+  onSelect,
+  onStart
+}: {
+  venues: VenueType[];
+  selectedVenueId: VenueTypeId;
+  query: string;
+  onQueryChange: (value: string) => void;
+  onSelect: (venueId: VenueTypeId) => void;
+  onStart: () => void;
+}) {
+  return (
+    <section className="project-type-gateway" dir="rtl">
+      <header className="project-gateway-header">
+        <div className="project-gateway-brand">
+          <span><ShieldCheck size={25} aria-hidden="true" /></span>
+          <div><strong>طراحی هوشمند پروژه</strong><small>جانمایی دقیق، متناسب با کاربری واقعی محیط</small></div>
+        </div>
+        <div className="project-gateway-steps" aria-label="مراحل شروع پروژه">
+          <span className="is-active"><b>۱</b>نوع پروژه</span>
+          <i aria-hidden="true" />
+          <span><b>۲</b>اطلاعات پروژه</span>
+          <i aria-hidden="true" />
+          <span><b>۳</b>تأیید و شروع</span>
+        </div>
+      </header>
+
+      <div className="project-gateway-content">
+        <div className="project-gateway-intro">
+          <p>مرحله اول از سه مرحله</p>
+          <h1>چه فضایی را طراحی می‌کنید؟</h1>
+          <span>نوع پروژه را انتخاب کنید تا تنظیمات، فضاهای پیشنهادی و پیش‌فرض‌های طراحی به‌صورت خودکار آماده شوند.</span>
+        </div>
+
+        <label className="project-venue-search">
+          <Search size={18} aria-hidden="true" />
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="جست‌وجوی نوع پروژه؛ مثل مدرسه، فروشگاه یا کارخانه" />
+          {query && <button type="button" onClick={() => onQueryChange("")} aria-label="پاک کردن جست‌وجو"><X size={16} /></button>}
+        </label>
+
+        <div className="project-venue-grid" aria-live="polite">
+          {venues.map((venue) => {
+            const experience = venueExperiences[venue.id];
+            const Icon = experience.icon;
+            const selected = venue.id === selectedVenueId;
+            return (
+              <button
+                type="button"
+                key={venue.id}
+                className={`project-venue-card venue-${venue.id}${selected ? " is-selected" : ""}`}
+                onClick={() => onSelect(venue.id)}
+                aria-pressed={selected}
+              >
+                <span className="project-venue-icon"><Icon size={28} strokeWidth={1.8} aria-hidden="true" /></span>
+                <span className="project-venue-copy"><strong>{experience.shortLabel}</strong><small>{venue.blurb}</small></span>
+                {selected && <span className="project-venue-check"><Check size={14} aria-hidden="true" /></span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {!venues.length && <div className="project-venue-empty"><Search size={24} /><strong>نوع پروژه‌ای پیدا نشد</strong><span>عبارت دیگری را امتحان کنید.</span></div>}
+      </div>
+
+      <footer className="project-gateway-footer">
+        <div className="project-gateway-help"><Info size={17} /><span>پس از ورود به طراحی، صفحه قفل می‌شود تا تمام تمرکز روی نقشه باشد.</span></div>
+        <div>
+          <button type="button" className="project-gateway-cancel" onClick={() => window.history.back()}>لغو</button>
+          <button type="button" className="project-gateway-start" onClick={onStart}>شروع طراحی<Rocket size={18} /><ArrowLeft size={17} /></button>
+        </div>
+      </footer>
+    </section>
+  );
+}
+
+function DesignFocusStage({
+  venue,
+  plan,
+  onPlanChange,
+  onSummaryChange,
+  onCancel,
+  onContinue
+}: {
+  venue: VenueType;
+  plan: BuildingPlan;
+  onPlanChange: (plan: BuildingPlan) => void;
+  onSummaryChange: (summary: PlanSummary) => void;
+  onCancel: () => void;
+  onContinue: () => void;
+}) {
+  const experience = venueExperiences[venue.id];
+  const Icon = experience.icon;
+  return (
+    <section className={`design-focus-shell venue-${venue.id}`} dir="rtl">
+      <header className="design-focus-header">
+        <div className="design-focus-brand"><ShieldCheck size={22} /><strong>طراحی هوشمند پروژه</strong></div>
+        <div className="design-focus-project">
+          <span><Icon size={20} aria-hidden="true" /></span>
+          <div><small>نوع پروژه فعال</small><strong>{venue.label}</strong></div>
+        </div>
+        <div className="design-focus-lock"><LockKeyhole size={15} /><span>حالت تمرکز فعال است</span></div>
+      </header>
+      <main className="design-focus-content">
+        <FloorPlanDesigner plan={plan} mode="environment" variant="focus" onPlanChange={onPlanChange} onSummaryChange={onSummaryChange} />
+      </main>
+      <footer className="design-focus-footer">
+        <div><Info size={16} /><span>تغییرات نقشه در همین فرایند حفظ می‌شود.</span></div>
+        <div className="design-focus-actions">
+          <button type="button" className="design-focus-cancel" onClick={onCancel}><X size={17} />لغو طراحی</button>
+          <button type="button" className="design-focus-next" onClick={onContinue}>مرحله بعد: دستگاه‌ها<ChevronLeft size={18} /></button>
+        </div>
+      </footer>
+    </section>
+  );
+}
+
+function CameraPlacementFocusStage({
+  venue,
+  plan,
+  cameraTemplates,
+  placement,
+  onPlanChange,
+  onSummaryChange,
+  onBack,
+  onContinue
+}: {
+  venue: VenueType;
+  plan: BuildingPlan;
+  cameraTemplates: ProjectCameraTemplate[];
+  placement: { required: number; placed: number; complete: boolean };
+  onPlanChange: (plan: BuildingPlan) => void;
+  onSummaryChange: (summary: PlanSummary) => void;
+  onBack: () => void;
+  onContinue: () => void;
+}) {
+  const experience = venueExperiences[venue.id];
+  const Icon = experience.icon;
+  const remaining = Math.max(0, placement.required - placement.placed);
+
+  return (
+    <section className={`design-focus-shell design-focus-camera venue-${venue.id}`} dir="rtl">
+      <header className="design-focus-header">
+        <div className="design-focus-brand">
+          <ShieldCheck size={22} />
+          <div><strong>طراحی هوشمند پروژه</strong><small>استودیوی جانمایی دوربین</small></div>
+        </div>
+        <div className="design-focus-project">
+          <span><Icon size={20} aria-hidden="true" /></span>
+          <div><small>مرحله ۳ از ۶ · نوع پروژه فعال</small><strong>{venue.label}</strong></div>
+        </div>
+        <div className="design-focus-lock"><LockKeyhole size={15} /><span>حالت تمرکز فعال است</span></div>
+      </header>
+      <main className="design-focus-content">
+        <FloorPlanDesigner
+          plan={plan}
+          mode="cameras"
+          variant="focus"
+          cameraTemplates={cameraTemplates}
+          onPlanChange={onPlanChange}
+          onSummaryChange={onSummaryChange}
+        />
+      </main>
+      <footer className="design-focus-footer">
+        <div className={`camera-focus-progress${placement.complete ? " is-complete" : ""}`}>
+          {placement.complete ? <Check size={16} aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" />}
+          <span>
+            {placement.complete
+              ? `${formatFaCount(placement.placed)} دوربین جانمایی شده؛ برای ادامه آماده است.`
+              : placement.placed > 0
+                ? `${formatFaCount(placement.placed)} از ${formatFaCount(placement.required)} دوربین جانمایی شده؛ ${formatFaCount(remaining)} مورد باقی مانده.`
+                : "برای ادامه، حداقل یک دوربین را روی نقشه جانمایی کنید."}
+          </span>
+        </div>
+        <div className="design-focus-actions">
+          <button type="button" className="design-focus-cancel" onClick={onBack}><ArrowRight size={17} />بازگشت به دستگاه‌ها</button>
+          <button type="button" className="design-focus-next" disabled={placement.placed === 0} onClick={onContinue}>
+            مرحله بعد: مشخصات دوربین‌ها<ChevronLeft size={18} />
+          </button>
+        </div>
+      </footer>
+    </section>
+  );
+}
+
 function WizardVisual({ image, title, description, tips }: { image: string; title: string; description: string; tips: string[] }) {
   return <aside className="wizard-visual"><div className="wizard-visual-image"><Image src={image} alt="" fill sizes="(max-width: 900px) 100vw, 38vw" priority /></div><div className="wizard-visual-copy"><span><Info size={15} />راهنمای این مرحله</span><h2>{title}</h2><p>{description}</p><ul>{tips.map((tip) => <li key={tip}><Check size={13} />{tip}</li>)}</ul></div></aside>;
 }
@@ -657,9 +943,7 @@ function RecommendationResults({ result, plan, onReset, onUseCompatibleDefaults 
       <div className="why-plan"><Sparkles size={20} /><div><strong>چرا این ترکیب؟</strong><p>{selected.highlights.join(" · ")}</p></div></div>
       <details className="rejected-options"><summary>دامنه بررسی فنی این پلن <ChevronLeft size={16} /></summary><ul>{selected.constraints.checked.map((item) => <li key={item}><strong>بررسی شده</strong><span>{item}</span></li>)}{selected.constraints.pending.map((item) => <li key={item}><strong>نیازمند بررسی تکمیلی</strong><span>{item}</span></li>)}</ul></details>
       <details className="rejected-options"><summary>جزئیات امتیاز محاسبه‌شده <ChevronLeft size={16} /></summary><ul>{Object.entries(selected.scoreBreakdown).map(([key, value]) => <li key={key}><strong>{scoreLabels[key as keyof RecommendationPlan["scoreBreakdown"]]}</strong><span>{value}</span></li>)}</ul></details></div>}
-    {selected && <details className="product-evaluation-report"><summary>گزارش قبول و رد تمام محصولات ({selected.evaluations.length} محصول) <ChevronLeft size={16} /></summary><div>{selected.evaluations.map((evaluation) => <article key={evaluation.productId} className={`evaluation-row ${evaluation.status}`}><div><span>{evaluation.status === "selected" ? "انتخاب‌شده" : evaluation.status === "accepted" ? "قابل قبول" : "ردشده"}</span><strong>{evaluation.productName}</strong><small>{evaluation.category}</small></div><ul>{[...evaluation.reasons, ...evaluation.failedConstraints].map((reason) => <li key={reason}>{reason}</li>)}</ul></article>)}</div></details>}
-    {!selected && <div className="wizard-error no-plan-state"><CircleAlert size={18} /><div><strong>هیچ پلنی تمام قیود فعلی را تأمین نکرد</strong><span>می‌توانید گزارش ردها را بررسی کنید یا با تنظیمات سازگار با موجودی فعلی دوباره شروع کنید.</span></div><button type="button" onClick={onUseCompatibleDefaults}><RotateCcw size={14} />بارگذاری پیش‌فرض سازگار</button></div>}
-    {result.rejected.length > 0 && <details className="rejected-options"><summary>چرا بعضی گزینه‌ها حذف شدند؟ <ChevronLeft size={16} /></summary><ul>{result.rejected.map((item, index) => <li key={`${item.productName}-${item.reason}-${index}`}><strong>{item.productName}</strong><span>{item.reason}</span></li>)}</ul></details>}
+    {!selected && <div className="wizard-error no-plan-state"><CircleAlert size={18} /><div><strong>هیچ پلنی تمام قیود فعلی را تأمین نکرد</strong><span>برای ساخت یک پیشنهاد قابل اجرا، تنظیمات سازگار با موجودی فعلی را بارگذاری کنید.</span></div><button type="button" onClick={onUseCompatibleDefaults}><RotateCcw size={14} />بارگذاری پیش‌فرض سازگار</button></div>}
   </section>;
 }
 

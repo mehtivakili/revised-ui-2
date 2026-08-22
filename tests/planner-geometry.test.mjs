@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test, { describe } from "node:test";
-import { castRay, collectOccluders, collectRightAngleCorners, convexHull, findRightAngleCorner, floorAreaM2, isAxisAlignedSegment, polygonArea, pointInPolygon, projectPointToWall, snapWallToEqualParallel, traceWallLoop } from "@/src/lib/planner/geometry";
-import { cameraFovDeg, computeCameraCoverage, ppmAtDistance } from "@/src/lib/planner/coverage";
+import { castRay, collectOccluders, collectRightAngleCorners, convexHull, findRightAngleCorner, floorAreaM2, isAxisAlignedSegment, openingsOnWall, polygonArea, pointInPolygon, projectPointToWall, snapWallToEqualParallel, traceWallLoop } from "@/src/lib/planner/geometry";
+import { cameraFovDeg, computeCameraCoverage, ppmAtDistance, roomCoverageForGoal } from "@/src/lib/planner/coverage";
 import { defaultCameraOptics, duplicateFloor, createFloor } from "@/src/domain/planner/types";
 
 const wall = (id, ax, az, bx, bz, heightM = 3) => ({
@@ -104,12 +104,29 @@ describe("openings and glazing", () => {
     id, wallId: "host", type, offset: 0.5, widthM: 2, heightM: 1.4, sillHeightM: type === "window" ? 0.9 : 0, hinge: "start", openAngleDeg: 45
   });
 
-  test("a doorway is cut out of the wall", () => {
+  test("a doorway is closed for DORI visibility", () => {
     const segments = collectOccluders([hostWall], [], [opening("d", "door")]);
-    // Two stubs either side of the opening rather than one continuous wall.
-    assert.equal(segments.length, 2);
+    assert.equal(segments.length, 1, "the host wall remains a continuous occluder");
     const reach = castRay({ x: -4, z: 0 }, 0, 20, segments);
-    assert.equal(reach, 20, "a camera should see straight through an open doorway");
+    assert.ok(reach < 5, "DORI must not pass through a door, regardless of its drawn angle");
+  });
+
+  test("a closed doorway blocks every coincident wall as one architectural boundary", () => {
+    const duplicate = wall("duplicate", 0, 5, 0, -5);
+    const effective = openingsOnWall(duplicate, [hostWall, duplicate], [opening("d", "door")]);
+    assert.equal(effective.length, 1);
+    assert.equal(effective[0].wallId, "duplicate");
+    assert.ok(Math.abs(effective[0].offset - 0.5) < 1e-9, "reversed walls preserve the physical centre");
+    assert.equal(effective[0].widthM, 2);
+
+    const segments = collectOccluders([hostWall, duplicate], [], [opening("d", "door")]);
+    assert.ok(castRay({ x: -4, z: 0 }, 0, 20, segments) < 5,
+      "coincident wall records still represent one closed architectural boundary");
+  });
+
+  test("a nearby parallel wall remains independent", () => {
+    const separate = wall("separate", 0.2, -5, 0.2, 5);
+    assert.equal(openingsOnWall(separate, [hostWall, separate], [opening("d", "door")]).length, 0);
   });
 
   test("a window is cosmetic and never opens the wall", () => {
@@ -125,10 +142,11 @@ describe("openings and glazing", () => {
     assert.equal(castRay({ x: -4, z: 0 }, 0, 20, segments), 20);
   });
 
-  test("a window on a glass partition changes nothing", () => {
+  test("a window on a glass partition is closed for DORI", () => {
     const glass = { ...wall("host", 0, -5, 0, 5), blocksView: false };
     const segments = collectOccluders([glass], [], [opening("w", "window")]);
-    assert.equal(segments.length, 0);
+    assert.equal(segments.length, 1);
+    assert.ok(castRay({ x: -4, z: 0 }, 0, 20, segments) < 5);
   });
 });
 
@@ -185,6 +203,21 @@ describe("camera coverage", () => {
     const far = ppmAtDistance(2560, 65.5, 20);
     assert.ok(near > far);
     assert.ok(Math.abs(near / far - 4) < 0.05, "density should be inversely proportional to distance");
+  });
+
+  test("room completion is based on the declared PPM goal, not camera presence", () => {
+    const auditedRoom = {
+      id: "audit",
+      polygon: [{ x: 10, z: 1 }, { x: 20, z: 1 }, { x: 20, z: 5 }, { x: 10, z: 5 }],
+      boundarySource: "drawn"
+    };
+    const floor = { ...createFloor("audit", 0), cameras: [camera] };
+    const monitor = roomCoverageForGoal(floor, auditedRoom, "monitor");
+    const identify = roomCoverageForGoal(floor, auditedRoom, "face-identify");
+
+    assert.equal(monitor.hasCoverage, true);
+    assert.ok(monitor.coveredPercent > identify.coveredPercent);
+    assert.ok(identify.coveredPercent < 95, "a visible room must not be called fully identified");
   });
 
   test("all four DORI zones are drawn for a normally-ranged camera", () => {
@@ -261,7 +294,15 @@ describe("floor duplication", () => {
     const source = createFloor("همکف", 0);
     source.walls.push(wall("w1", 0, 0, 5, 0));
     source.doors.push({ id: "door-1", wallId: "w1", offset: 0.5, widthM: 0.9, heightM: 2.1, hinge: "start", openAngleDeg: 45 });
-    source.cameras.push({ id: "cam-1", name: "دوربین ۱", position: { x: 2, z: 2 }, yawDeg: 0, goal: "monitor", optics: { ...defaultCameraOptics } });
+    source.rooms.push({ id: "room-1", polygon: [{ x: 0, z: 0 }, { x: 5, z: 0 }, { x: 5, z: 5 }], boundarySource: "drawn", manual: { mustCover: true } });
+    source.coverageRequirements.push({
+      id: "cover-room-room-1",
+      polygon: source.rooms[0].polygon.map((point) => ({ ...point })),
+      label: "پوشش کل اتاق",
+      origin: "user",
+      sourceRoomId: "room-1"
+    });
+    source.cameras.push({ id: "cam-1", roomId: "room-1", name: "دوربین ۱", position: { x: 2, z: 2 }, yawDeg: 0, goal: "monitor", optics: { ...defaultCameraOptics } });
 
     const copy = duplicateFloor(source, "طبقه اول", 1);
 
@@ -270,6 +311,8 @@ describe("floor duplication", () => {
     assert.notEqual(copy.doors[0].id, source.doors[0].id);
     assert.equal(copy.doors[0].wallId, copy.walls[0].id);
     assert.notEqual(copy.cameras[0].id, source.cameras[0].id);
+    assert.equal(copy.cameras[0].roomId, copy.rooms[0].id);
+    assert.equal(copy.coverageRequirements[0].sourceRoomId, copy.rooms[0].id);
 
     // Moving the copy's camera must not disturb the original.
     copy.cameras[0].position.x = 9;

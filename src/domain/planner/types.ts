@@ -32,11 +32,14 @@ export type PlanWall = {
  * a camera's sight line the way an open doorway does.
  */
 export type PlanOpeningType = "door" | "window";
+export type PlanDoorVariant = "single-solid" | "double-solid" | "single-glass" | "double-glass";
 
 export type PlanDoor = {
   id: string;
   wallId: string;
   type?: PlanOpeningType;
+  /** Door construction; absent in older saves means a normal single solid leaf. */
+  variant?: PlanDoorVariant;
   /** Normalised distance of the opening's centre from wall.a toward wall.b. */
   offset: number;
   widthM: number;
@@ -212,6 +215,16 @@ export type PlanCamera = {
   /** Links the placement back to a wizard zone so counts and goals stay in sync. */
   zoneId?: string;
   groupName?: string;
+  /** Space and rule that produced an automatic placement. */
+  roomId?: string;
+  /** Mandatory sub-area and rule that produced an automatic placement. */
+  requirementId?: string;
+  sectionTypeId?: string;
+  mountKind?: "corner" | "wall-edge" | "ceiling" | "pole";
+  /** Human-readable audit trail retained on the placed camera. */
+  placementReasons?: string[];
+  /** Analytics/features required by the section taxonomy, kept separate from image quality. */
+  requiredFeatures?: string[];
   housing?: CameraHousing;
   outdoor?: boolean;
   features?: {
@@ -234,6 +247,7 @@ export type PlanCameraDefinition = {
   groupName: string;
   name: string;
   housing: CameraHousing;
+  outdoor?: boolean;
   goal: SurveillanceTask;
   optics: PlanCameraOptics;
   features: {
@@ -241,6 +255,14 @@ export type PlanCameraDefinition = {
     colorNightVision: boolean;
     weatherproof: boolean;
   };
+  /** Optional rule metadata for definitions generated from a declared room. */
+  roomId?: string;
+  requirementId?: string;
+  sectionTypeId?: string;
+  mountKind?: "corner" | "wall-edge" | "ceiling" | "pole";
+  mountFallbacks?: ("corner" | "wall-edge" | "ceiling" | "pole")[];
+  placementReasons?: string[];
+  requiredFeatures?: string[];
 };
 
 /**
@@ -339,6 +361,10 @@ export type CoverageRequirement = {
   polygon: Vec2[];
   label: string;
   origin: "user" | "equipment";
+  /** Optional checklist/programme item represented by this sub-area instead of a room. */
+  sectionTypeId?: string;
+  /** Present when the whole requirement mirrors a room marked as mandatory. */
+  sourceRoomId?: string;
   /** Set once a solution covers it, so the checklist can tick without recomputing. */
   satisfied?: boolean;
 };
@@ -505,6 +531,12 @@ export function duplicateFloor(source: FloorPlan, name: string, index: number): 
       // A duplicated floor keeps the *template* link — the type is still the same device —
       // but drops the single-use definition id so both copies stay independently valid.
       id: `cam-${stamp}-${order}`,
+      roomId: camera.roomId
+        ? (() => {
+            const roomIndex = (source.rooms ?? []).findIndex((room) => room.id === camera.roomId);
+            return roomIndex >= 0 ? `room-${stamp}-${roomIndex}` : undefined;
+          })()
+        : undefined,
       definitionId: undefined,
       position: { ...camera.position },
       optics: { ...camera.optics },
@@ -531,6 +563,12 @@ export function duplicateFloor(source: FloorPlan, name: string, index: number): 
     coverageRequirements: (source.coverageRequirements ?? []).map((requirement, order) => ({
       ...requirement,
       id: `cover-${stamp}-${order}`,
+      sourceRoomId: requirement.sourceRoomId
+        ? (() => {
+          const index = (source.rooms ?? []).findIndex((room) => room.id === requirement.sourceRoomId);
+          return index >= 0 ? `room-${stamp}-${index}` : undefined;
+        })()
+        : undefined,
       polygon: requirement.polygon.map((point) => ({ ...point })),
       satisfied: undefined
     })),

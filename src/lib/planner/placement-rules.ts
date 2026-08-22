@@ -60,14 +60,44 @@ const DEFAULT_SENSOR_WIDTH_MM = 5.12;
 
 /** Above this ceiling height the camera stops following the ceiling and stays at 3 m. */
 const INDOOR_HEIGHT_CAP_M = 3;
+/** Wall-mounted cameras stay visibly below the top edge instead of sitting on it. */
+const WALL_TOP_CLEARANCE_M = 0.25;
+/** A pole mount is a short outdoor riser above the wall/parapet, not a floor stand. */
+export const OUTDOOR_POLE_EXTENSION_M = 0.45;
 /** Face work needs the lens low enough to see under a cap brim. */
 const FACE_HEIGHT_CAP_M = 2.8;
-/** Enough clearance that nobody walks into the housing. */
-const MIN_MOUNT_HEIGHT_M = 2.2;
+export function wallSafeMountHeight(wallHeightM: number): number {
+  const safeWallHeight = Math.max(0.5, wallHeightM);
+  const height = safeWallHeight <= INDOOR_HEIGHT_CAP_M
+    ? Math.max(0.5, safeWallHeight - WALL_TOP_CLEARANCE_M)
+    : INDOOR_HEIGHT_CAP_M;
+  return Math.round(height * 100) / 100;
+}
 
-const OUTDOOR_HEIGHT_M = 3.5;
-const OUTDOOR_PTZ_HEIGHT_M = 5;
-const PERIMETER_HEIGHT_M = 4;
+function pointToWallDistance(point: Vec2, wall: FloorPlan["walls"][number]): number {
+  const dx = wall.b.x - wall.a.x;
+  const dz = wall.b.z - wall.a.z;
+  const lengthSquared = dx * dx + dz * dz;
+  if (lengthSquared <= 1e-9) return Math.hypot(point.x - wall.a.x, point.z - wall.a.z);
+  const t = Math.max(0, Math.min(1, ((point.x - wall.a.x) * dx + (point.z - wall.a.z) * dz) / lengthSquared));
+  return Math.hypot(point.x - (wall.a.x + dx * t), point.z - (wall.a.z + dz * t));
+}
+
+/** Applies the height rule against the actual closest wall at a placed camera. */
+export function constrainCameraMountHeight(
+  floor: FloorPlan,
+  position: Vec2,
+  requestedHeightM: number,
+  mountKind?: MountKind
+): number {
+  const nearestWall = floor.walls.reduce<FloorPlan["walls"][number] | null>((nearest, wall) => {
+    if (!nearest) return wall;
+    return pointToWallDistance(position, wall) < pointToWallDistance(position, nearest) ? wall : nearest;
+  }, null);
+  const structuralHeightM = nearestWall?.heightM ?? floor.heightM;
+  if (mountKind === "pole") return Math.round((structuralHeightM + OUTDOOR_POLE_EXTENSION_M) * 100) / 100;
+  return Math.min(requestedHeightM, wallSafeMountHeight(structuralHeightM));
+}
 
 /** The two lenses that cover the overwhelming majority of indoor positions. */
 const INDOOR_LENSES = [2.8, 4];
@@ -157,7 +187,7 @@ const isPlateGoal = (goal: SurveillanceTask) => goal === "plate-capture" || goal
 function chooseMountHeight(
   section: SectionType,
   context: RoomContext,
-  housing: CameraHousing
+  mountKind: MountKind
 ): { heightM: number; reasons: string[] } {
   const reasons: string[] = [];
   const indoor = section.environment === "indoor-room"
@@ -165,30 +195,24 @@ function chooseMountHeight(
     || (section.environment === "parking" && !context.openAbove);
 
   let height: number;
-  if (indoor) {
-    if (context.ceilingHeightM <= INDOOR_HEIGHT_CAP_M) {
-      height = Math.max(MIN_MOUNT_HEIGHT_M, context.ceilingHeightM - 0.2);
-      reasons.push(`ارتفاع سقف ${context.ceilingHeightM.toFixed(1)} متر است، پس دوربین ۲۰ سانت زیر سقف نصب می‌شود`);
-    } else {
-      height = INDOOR_HEIGHT_CAP_M;
-      reasons.push("سقف بلندتر از ۳ متر است؛ دوربین روی ۳ متر می‌ماند تا زاویه دید بیش از حد رو به پایین نشود");
-    }
-    if (isFaceGoal(section.goal) && height > FACE_HEIGHT_CAP_M) {
-      height = FACE_HEIGHT_CAP_M;
-      reasons.push("هدف این فضا ثبت چهره است، پس ارتفاع به ۲٫۸ متر کاهش می‌یابد");
-    }
-  } else if (housing === "ptz") {
-    height = OUTDOOR_PTZ_HEIGHT_M;
-    reasons.push("اسپیددام روی ارتفاع بیشتر نصب می‌شود تا دامنه چرخش آن مفید باشد");
-  } else if (section.environment === "perimeter") {
-    height = PERIMETER_HEIGHT_M;
-    reasons.push("خط پیرامونی: ارتفاع ۴ متر هم دید کافی می‌دهد و هم از دسترس خارج است");
+  if (mountKind === "pole") {
+    height = context.ceilingHeightM + OUTDOOR_POLE_EXTENSION_M;
+    reasons.push("پایه فقط در فضای باز و به‌صورت رایزر ۴۵ سانتی‌متری بالاتر از تراز دیوار استفاده می‌شود");
   } else {
-    height = OUTDOOR_HEIGHT_M;
-    reasons.push("فضای باز: ارتفاع متعارف نصب روی دیوار ۳ تا ۴ متر است");
+    height = wallSafeMountHeight(context.ceilingHeightM);
+    if (context.ceilingHeightM <= INDOOR_HEIGHT_CAP_M) {
+      reasons.push(`ارتفاع دیوار ${context.ceilingHeightM.toFixed(1)} متر است، پس دوربین ۲۵ سانت پایین‌تر نصب می‌شود`);
+    } else {
+      reasons.push("دیوار بلندتر از ۳ متر است؛ ارتفاع نصب روی ۳ متر محدود می‌شود");
+    }
   }
 
-  return { heightM: Math.round(height * 10) / 10, reasons };
+  if (indoor && isFaceGoal(section.goal) && height > FACE_HEIGHT_CAP_M) {
+    height = FACE_HEIGHT_CAP_M;
+    reasons.push("هدف این فضا ثبت چهره است، پس ارتفاع به ۲٫۸ متر کاهش می‌یابد");
+  }
+
+  return { heightM: Math.round(height * 100) / 100, reasons };
 }
 
 /**
@@ -221,11 +245,11 @@ function chooseMount(section: SectionType, context: RoomContext): {
   if (section.environment === "indoor-corridor") {
     return {
       mountKind: "wall-edge",
-      fallbacks: ["corner", "ceiling"],
+      fallbacks: ["corner"],
       reason: "در راهرو دوربین روی دیوار انتهایی و در راستای محور راهرو می‌نشیند"
     };
   }
-  const fallbacks: MountKind[] = context.openAbove ? ["wall-edge"] : ["wall-edge", "ceiling"];
+  const fallbacks: MountKind[] = ["wall-edge"];
   return {
     mountKind: "corner",
     fallbacks,
@@ -311,7 +335,7 @@ export function recipeFor(section: SectionType, context: RoomContext): Placement
 
   const housing = chooseHousing(section, context);
   const mount = chooseMount(section, context);
-  const height = chooseMountHeight(section, context, housing.housing);
+  const height = chooseMountHeight(section, context, mount.mountKind);
   const lens = chooseLens(section, context);
   const cameras = cameraCountFor(section);
 

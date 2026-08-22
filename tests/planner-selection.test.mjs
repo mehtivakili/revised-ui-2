@@ -8,10 +8,12 @@ import {
   obstacleCorners
 } from "@/src/lib/planner/geometry";
 import {
+  copySelection,
   deleteSelection,
   describeElement,
   elementsInRect,
   mergeSelection,
+  pasteSelection,
   summariseSelection
 } from "@/src/lib/planner/selection";
 import { defaultCameraOptics, isSelected, soleSelection, toggleSelection } from "@/src/domain/planner/types";
@@ -176,6 +178,68 @@ describe("bulk delete", () => {
     const source = floor();
     deleteSelection(source, [{ kind: "camera", id: "c-near" }]);
     assert.equal(source.cameras.length, 2, "delete must return a new floor");
+  });
+});
+
+describe("clipboard editing", () => {
+  test("copying a wall carries its attached door and remaps the host", () => {
+    const source = floor();
+    const clipboard = copySelection(source, [{ kind: "wall", id: "w-top" }]);
+    assert.ok(clipboard);
+    assert.equal(clipboard.walls.length, 1);
+    assert.equal(clipboard.doors.length, 1);
+    assert.deepEqual(clipboard.anchor, { x: 5, z: 0 });
+
+    const pasted = pasteSelection(source, clipboard, { x: 1, z: 2 });
+    const newWall = pasted.floor.walls.at(-1);
+    const newDoor = pasted.floor.doors.at(-1);
+    assert.notEqual(newWall.id, "w-top");
+    assert.equal(newDoor.wallId, newWall.id);
+    assert.deepEqual(newWall.a, { x: 1, z: 2 });
+    assert.deepEqual(newWall.b, { x: 11, z: 2 });
+    assert.deepEqual(pasted.selection, [{ kind: "wall", id: newWall.id }]);
+  });
+
+  test("copying a door alone keeps it on the original wall and gives it a fresh id", () => {
+    const source = floor();
+    const clipboard = copySelection(source, [{ kind: "door", id: "d1" }]);
+    const pasted = pasteSelection(source, clipboard, { x: 1, z: 0 });
+    const newDoor = pasted.floor.doors.at(-1);
+    assert.equal(newDoor.wallId, "w-top");
+    assert.notEqual(newDoor.id, "d1");
+    const distanceM = Math.abs(newDoor.offset - source.doors[0].offset) * 10;
+    assert.ok(distanceM >= 1 - 1e-9, "the pasted opening keeps its required clearance");
+    assert.deepEqual(pasted.selection, [{ kind: "door", id: newDoor.id }]);
+  });
+
+  test("a door pasted at the pointer attaches to the nearest wall", () => {
+    const source = floor();
+    const clipboard = copySelection(source, [{ kind: "door", id: "d1" }]);
+    const pointer = { x: 10, z: 3 };
+    const delta = { x: pointer.x - clipboard.anchor.x, z: pointer.z - clipboard.anchor.z };
+    const pasted = pasteSelection(source, clipboard, delta, pointer);
+    const newDoor = pasted.floor.doors.at(-1);
+    assert.equal(newDoor.wallId, "w-right");
+    assert.ok(Math.abs(newDoor.offset - 0.5) < 1e-9);
+  });
+
+  test("pasting an obstacle offsets it without mutating the source", () => {
+    const source = floor();
+    const clipboard = copySelection(source, [{ kind: "obstacle", id: "o-near" }]);
+    const pasted = pasteSelection(source, clipboard, { x: 0.5, z: 1 });
+    const copy = pasted.floor.obstacles.at(-1);
+    assert.deepEqual(copy.center, { x: 2.5, z: 3 });
+    assert.notEqual(copy.id, "o-near");
+    assert.deepEqual(source.obstacles[0].center, { x: 2, z: 2 });
+  });
+
+  test("selection anchor lets an obstacle paste exactly under the pointer", () => {
+    const source = floor();
+    const clipboard = copySelection(source, [{ kind: "obstacle", id: "o-near" }]);
+    const pointer = { x: 7, z: 4 };
+    const delta = { x: pointer.x - clipboard.anchor.x, z: pointer.z - clipboard.anchor.z };
+    const pasted = pasteSelection(source, clipboard, delta, pointer);
+    assert.deepEqual(pasted.floor.obstacles.at(-1).center, pointer);
   });
 });
 

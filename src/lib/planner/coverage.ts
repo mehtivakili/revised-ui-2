@@ -1,5 +1,5 @@
 import type { SurveillanceTask } from "@/src/domain/catalog/types";
-import type { FloorPlan, PlanCamera, Vec2 } from "@/src/domain/planner/types";
+import type { FloorPlan, PlanCamera, PlanRoom, Vec2 } from "@/src/domain/planner/types";
 import {
   boundsOf,
   castRay,
@@ -104,6 +104,49 @@ export function cameraFovDeg(camera: PlanCamera): number {
 export function ppmAtDistance(horizontalPixels: number, fovDeg: number, distanceM: number): number {
   const width = sceneWidthAtDistanceM(distanceM, fovDeg);
   return width > 0 ? horizontalPixels / width : 0;
+}
+
+const taskCoveragePpm: Record<SurveillanceTask, number> = {
+  monitor: 62,
+  "face-capture": 125,
+  "face-identify": 250,
+  "plate-capture": 200,
+  anpr: 200
+};
+
+/** Audits a room at its declared quality target, not merely by camera presence. */
+export function roomCoverageForGoal(
+  floor: FloorPlan,
+  room: PlanRoom,
+  goal: SurveillanceTask
+): { coveredPercent: number; hasCoverage: boolean } {
+  const bounds = boundsOf(room.polygon);
+  if (!bounds) return { coveredPercent: 0, hasCoverage: false };
+  const occluders = collectOccluders(floor.walls, floor.obstacles, floor.doors);
+  const coverages = floor.cameras.map((camera) => ({ camera, coverage: computeCameraCoverage(camera, occluders, 36) }));
+  let total = 0;
+  let covered = 0;
+  let hasCoverage = false;
+  const steps = 6;
+  for (let ix = 0; ix < steps; ix += 1) {
+    for (let iz = 0; iz < steps; iz += 1) {
+      const point = {
+        x: bounds.minX + ((ix + 0.5) / steps) * (bounds.maxX - bounds.minX),
+        z: bounds.minZ + ((iz + 0.5) / steps) * (bounds.maxZ - bounds.minZ)
+      };
+      if (!pointInPolygon(point, room.polygon)) continue;
+      total += 1;
+      let best = 0;
+      for (const { camera, coverage } of coverages) {
+        if (!pointInPolygon(point, coverage.polygon)) continue;
+        const ppm = ppmAtDistance(coverage.horizontalPixels, coverage.fovDeg, Math.max(0.5, distance(camera.position, point)));
+        best = Math.max(best, ppm);
+      }
+      if (best >= 25) hasCoverage = true;
+      if (best >= taskCoveragePpm[goal]) covered += 1;
+    }
+  }
+  return { coveredPercent: total ? (covered / total) * 100 : 0, hasCoverage };
 }
 
 /**

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Building2, Check, CircleDot, EyeOff, Minus, Search, Split, SquareDashed } from "lucide-react";
+import { Building2, Check, EyeOff, Minus, Search, Split, SquareDashed } from "lucide-react";
 import type { CustomSectionRecord, FloorPlan, PlanRoom } from "@/src/domain/planner/types";
 import {
   findVenueType,
@@ -15,6 +15,7 @@ import {
   type VenueType
 } from "@/src/domain/planner/venues";
 import { detectRooms, type OpenRegion } from "@/src/lib/planner/rooms";
+import { roomCoverageForGoal } from "@/src/lib/planner/coverage";
 import { formatFa } from "@/src/lib/chatbot/persian";
 
 /**
@@ -28,19 +29,20 @@ import { formatFa } from "@/src/lib/chatbot/persian";
 export type SectionStatus = "missing" | "unassigned" | "placed" | "covered" | "dismissed";
 
 const statusLabels: Record<SectionStatus, string> = {
-  missing: "تعریف نشده",
-  unassigned: "فضا هست، دوربین ندارد",
-  placed: "دوربین دارد",
-  covered: "پوشش کامل",
+  missing: "انتخاب نشده",
+  unassigned: "مشخص شده — دوربین ندارد",
+  placed: "مشخص شده — دوربین دارد",
+  covered: "مشخص شده — پوشش کامل",
   dismissed: "در این پروژه ندارم"
 };
+
+const specifiedStatuses = new Set<SectionStatus>(["unassigned", "placed", "covered"]);
 
 /**
  * How complete each expected space is.
  *
- * `covered` needs both a room of that type and a camera standing inside it, which is why
- * this walks the cameras rather than trusting a count: a camera list that says four says
- * nothing about whether the till is one of them.
+ * `covered` means at least 95% of the room samples reach the section's required PPM.
+ * Merely putting a camera in the room is reported as `placed`, never as complete coverage.
  */
 export function sectionStatuses(
   floors: FloorPlan[],
@@ -49,6 +51,9 @@ export function sectionStatuses(
 ): Map<string, SectionStatus> {
   const statuses = new Map<string, SectionStatus>();
   const rooms = floors.flatMap((floor) => (floor.rooms ?? []).map((room) => ({ floor, room })));
+  const requirements = floors.flatMap((floor) =>
+    (floor.coverageRequirements ?? []).map((requirement) => ({ floor, requirement }))
+  );
 
   for (const section of sections) {
     if (dismissed.includes(section.id)) {
@@ -56,14 +61,27 @@ export function sectionStatuses(
       continue;
     }
     const matching = rooms.filter((entry) => entry.room.sectionTypeId === section.id);
-    if (matching.length === 0) {
+    const matchingRequirements = requirements.filter((entry) => entry.requirement.sectionTypeId === section.id);
+    if (matching.length === 0 && matchingRequirements.length === 0) {
       statuses.set(section.id, "missing");
       continue;
     }
+    const audits = matching.map((entry) => roomCoverageForGoal(entry.floor, entry.room, section.goal));
+    const fullyCovered = audits.some((audit) => audit.coveredPercent >= 95);
+    const hasAnyCoverage = audits.some((audit) => audit.hasCoverage);
     const hasCamera = matching.some((entry) =>
       entry.floor.cameras.some((camera) => pointInRoom(camera.position, entry.room))
     );
-    statuses.set(section.id, hasCamera ? "covered" : "unassigned");
+    const requirementCovered = matchingRequirements.some((entry) => entry.requirement.satisfied === true);
+    const requirementHasCamera = matchingRequirements.some((entry) =>
+      entry.floor.cameras.some((camera) => camera.requirementId === entry.requirement.id)
+    );
+    statuses.set(
+      section.id,
+      fullyCovered || requirementCovered
+        ? "covered"
+        : hasAnyCoverage || hasCamera || requirementHasCamera ? "placed" : "unassigned"
+    );
   }
   return statuses;
 }
@@ -89,7 +107,8 @@ export function VenuePanel({
   onVenueChange,
   onDismissSection,
   onResolveOpenRegion,
-  onFocusSection
+  onFocusSection,
+  compact = false
 }: {
   floor: FloorPlan;
   floors: FloorPlan[];
@@ -100,6 +119,7 @@ export function VenuePanel({
   onDismissSection: (sectionId: string, dismissed: boolean) => void;
   onResolveOpenRegion: (region: OpenRegion, choice: "inferred" | "enclosing") => void;
   onFocusSection: (sectionId: string) => void;
+  compact?: boolean;
 }) {
   const custom = customSectionTypes as unknown as SectionType[];
   const venue = findVenueType(venueTypeId);
@@ -115,30 +135,35 @@ export function VenuePanel({
   const openRegions = useMemo(() => {
     const assignedWallIds = new Set((floor.rooms ?? []).flatMap((room) => room.wallIds ?? []));
     return detectRooms(floor).openRegions.filter(
-      (region) => !region.wallIds.every((wallId) => assignedWallIds.has(wallId))
+      (region) => region.isRectangleGap
+        && Boolean(region.inferred)
+        && !region.wallIds.every((wallId) => assignedWallIds.has(wallId))
     );
   }, [floor]);
 
   const completion = useMemo(() => {
     const graded = sections.filter((section) => statuses.get(section.id) !== "dismissed");
     if (graded.length === 0) return 0;
-    const done = graded.filter((section) => statuses.get(section.id) === "covered").length;
+    // This is a space-definition checklist, not a camera-coverage score. As soon as a
+    // room receives this section type, the item is complete; coverage remains visible
+    // in the secondary status text.
+    const done = graded.filter((section) => specifiedStatuses.has(statuses.get(section.id) ?? "missing")).length;
     return Math.round((done / graded.length) * 100);
   }, [sections, statuses]);
 
   return (
-    <div className="plan-venue-panel">
-      <section className="plan-venue-card">
+    <div className={compact ? "plan-venue-panel is-compact" : "plan-venue-panel"}>
+      {!compact ? <section className="plan-venue-card">
         <h3><Building2 size={15} aria-hidden="true" /> کاربری پروژه</h3>
         <VenuePicker value={venueTypeId} onPick={(picked) => onVenueChange(picked.id)} />
         {venue && <p className="plan-venue-blurb">{venue.blurb}</p>}
-      </section>
+      </section> : null}
 
       {openRegions.length > 0 && (
         <section className="plan-venue-card plan-open-regions">
-          <h3><Split size={15} aria-hidden="true" /> مرزهای باز</h3>
+          <h3><Split size={15} aria-hidden="true" /> پیشنهاد تکمیل فضا</h3>
           <p className="plan-venue-note">
-            این دیوارها فضای بسته‌ای نمی‌سازند. یکی از دو گزینه را انتخاب کنید تا فضا ساخته شود.
+            سه ضلع یک فضای مستطیلی دیده شده است. اگر قصد ساخت اتاق داشتید، ضلع چهارم را اضافه کنید؛ در غیر این صورت نیازی به اقدامی نیست.
           </p>
           {openRegions.map((region) => (
             <div key={region.id} className="plan-open-region">
@@ -150,15 +175,10 @@ export function VenuePanel({
                 {region.inferred && (
                   <button type="button" onClick={() => onResolveOpenRegion(region, "inferred")}>
                     <SquareDashed size={13} aria-hidden="true" />
-                    بستن ضلع باقی‌مانده
+                    افزودن ضلع چهارم
                     <small>{formatFa(Math.round(region.inferred.areaM2))} م²</small>
                   </button>
                 )}
-                <button type="button" onClick={() => onResolveOpenRegion(region, "enclosing")}>
-                  <CircleDot size={13} aria-hidden="true" />
-                  محدوده بزرگ‌تر
-                  <small>{formatFa(Math.round(region.enclosing.areaM2))} م²</small>
-                </button>
               </div>
             </div>
           ))}
@@ -168,7 +188,7 @@ export function VenuePanel({
       {venueTypeId && (
         <section className="plan-venue-card plan-priority-card">
           <h3>
-            <Check size={15} aria-hidden="true" /> اولویت‌های این کاربری
+            <Check size={15} aria-hidden="true" /> {compact ? "چک‌لیست فضاهای پروژه" : "اولویت‌های این کاربری"}
             <span className="plan-priority-progress">{formatFa(completion)}٪</span>
           </h3>
           {(["critical", "important", "optional"] as SectionPriority[]).map((priority) => {
@@ -179,11 +199,17 @@ export function VenuePanel({
                 <h4 className={`priority-${priority}`}>{sectionPriorityLabels[priority]}</h4>
                 {group.map((section) => {
                   const status = statuses.get(section.id) ?? "missing";
+                  const isSpecified = specifiedStatuses.has(status);
+                  const isRequiredMissing = status === "missing" && priority !== "optional";
+                  const visibleStatus = isRequiredMissing ? "هنوز مشخص نشده" : statusLabels[status];
                   return (
-                    <div key={section.id} className={`plan-priority-item status-${status}`}>
+                    <div
+                      key={section.id}
+                      className={`plan-priority-item status-${status}${isRequiredMissing ? " is-required-missing" : ""}`}
+                    >
                       <button type="button" className="plan-priority-label" onClick={() => onFocusSection(section.id)}>
                         <span className="plan-priority-mark" aria-hidden="true">
-                          {status === "covered" ? <Check size={12} /> : status === "dismissed" ? <Minus size={12} /> : null}
+                          {isSpecified ? <Check size={12} /> : status === "dismissed" ? <Minus size={12} /> : null}
                         </span>
                         <span>{section.label}</span>
                       </button>
@@ -195,7 +221,7 @@ export function VenuePanel({
                       >
                         <EyeOff size={12} aria-hidden="true" />
                       </button>
-                      <span className="plan-priority-status">{statusLabels[status]}</span>
+                      <span className="plan-priority-status">{visibleStatus}</span>
                     </div>
                   );
                 })}

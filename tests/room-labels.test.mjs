@@ -20,8 +20,8 @@ const labelFor = (room) => collectRoomLabels(floorWith([room]), resolve)[0];
 describe("room badges", () => {
   test("a space with no type says so, and is marked as the problem it is", () => {
     const label = labelFor({ id: "r1", polygon: square, boundarySource: "detected" });
-    assert.equal(label.text, "بدون نوع");
-    assert.equal(label.subtext, undefined);
+    assert.equal(label.text, "بدون فضا");
+    assert.equal(label.subtext, "نوع کاربری مشخص نشده");
     assert.equal(label.kind, "room-unassigned");
   });
 
@@ -93,6 +93,16 @@ describe("must-cover badges", () => {
     assert.equal(labels[0].text, "گاوصندوق");
     assert.equal(labels[0].subtext, "پوشش اجباری");
     assert.equal(labels[0].kind, "room-requirement");
+  });
+
+  test("a required sub-area shows the checklist item it represents", () => {
+    const labels = collectRoomLabels(
+      floorWith([], [{
+        id: "c2", polygon: square, label: "صندوق کوچک", origin: "user", sectionTypeId: "shop.checkout"
+      }]),
+      resolve
+    );
+    assert.ok(labels[0].subtext.includes("صندوق فروش"));
   });
 });
 

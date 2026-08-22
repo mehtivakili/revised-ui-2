@@ -10,7 +10,8 @@ import {
   polygonArea
 } from "../src/lib/planner/geometry.ts";
 import {
-  optimiseCameraPlacement
+  optimiseCameraPlacement,
+  resetCameraPlacements
 } from "../src/lib/planner/smart-placement.ts";
 
 const walls = [
@@ -107,11 +108,11 @@ test("largest wall loop keeps the exterior boundary when partitions exist", () =
   assert.equal(polygonArea(loop), 240);
 });
 
-test("an architectural door is treated as an opening in visibility rays", () => {
+test("an architectural door stays closed in DORI visibility rays", () => {
   const blocked = collectOccluders(walls, floor.obstacles);
   const withDoor = collectOccluders(walls, floor.obstacles, floor.doors);
   assert.equal(castRay({ x: 0, z: 0 }, Math.PI / 2, 20, blocked), 6);
-  assert.equal(castRay({ x: 0, z: 0 }, Math.PI / 2, 20, withDoor), 20);
+  assert.equal(castRay({ x: 0, z: 0 }, Math.PI / 2, 20, withDoor), 6);
 });
 
 test("PTZ patrol covers around the mount while a fixed bullet keeps its heading", () => {
@@ -151,4 +152,31 @@ test("smart placement preserves existing cameras and fills blind areas", () => {
     assert.ok(pointInPolygon(camera.position, boundary));
     assert.ok(Number.isFinite(camera.yawDeg));
   }
+});
+
+test("reset placement removes every camera but preserves the plan and clears stale verdicts", () => {
+  const sourceFloor = {
+    ...floor,
+    coverageRequirements: [{
+      id: "required-1",
+      polygon: [{ x: 1, z: 1 }, { x: 3, z: 1 }, { x: 3, z: 3 }, { x: 1, z: 3 }],
+      label: "صندوق",
+      origin: "user",
+      satisfied: true
+    }]
+  };
+  const plan = {
+    floors: [sourceFloor, { ...sourceFloor, id: "upper", cameras: [{ ...sourceFloor.cameras[0], id: "upper-camera" }] }],
+    activeFloorId: sourceFloor.id,
+    gridSizeM: 1,
+    snapM: 1,
+    defaults: { ...defaultPlanDefaults }
+  };
+
+  const reset = resetCameraPlacements(plan);
+
+  assert.deepEqual(reset.floors.map((item) => item.cameras.length), [0, 0]);
+  assert.equal(reset.floors[0].coverageRequirements[0].satisfied, undefined);
+  assert.equal(reset.floors[0].walls, sourceFloor.walls, "architecture is not rebuilt or deleted");
+  assert.equal(plan.floors[0].cameras.length, 1, "reset does not mutate the undo snapshot");
 });

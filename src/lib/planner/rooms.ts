@@ -17,6 +17,12 @@ import { distance, pointInPolygon, polygonArea } from "@/src/lib/planner/geometr
 
 /** Endpoints closer than this are the same corner. Matches the wall-loop tracer. */
 const JOIN_TOLERANCE_M = 0.06;
+/**
+ * A wall centreline can stop slightly short while the rendered wall caps still touch.
+ * Room topology treats that small visual gap as a T-junction, but never mutates the
+ * stored geometry. Keeping this below one third of a metre avoids bridging real doors.
+ */
+const PLANAR_JUNCTION_TOLERANCE_M = 0.3;
 /** Faces below this are drawing noise — a sliver between two nearly collinear walls. */
 const MIN_ROOM_AREA_M2 = 0.75;
 /** How far past the open walls the enclosing fallback reaches. */
@@ -61,8 +67,16 @@ export type RoomDetection = {
 
 /* ── Geometry helpers ──────────────────────────────────────────────── */
 
-const pointKey = (point: Vec2) =>
-  `${Math.round(point.x / JOIN_TOLERANCE_M)}:${Math.round(point.z / JOIN_TOLERANCE_M)}`;
+/** Distance-based node registration avoids rounding cells splitting two close points. */
+function pointRegistrar(toleranceM: number) {
+  const nodes: Vec2[] = [];
+  return (point: Vec2) => {
+    const existing = nodes.findIndex((node) => distance(node, point) <= toleranceM);
+    if (existing >= 0) return `node:${existing}`;
+    nodes.push(point);
+    return `node:${nodes.length - 1}`;
+  };
+}
 
 const angleOf = (from: Vec2, to: Vec2) => Math.atan2(to.z - from.z, to.x - from.x);
 
@@ -143,7 +157,131 @@ function isSimplePolygon(polygon: Vec2[]): boolean {
 
 /* ── Face enumeration ──────────────────────────────────────────────── */
 
-type DirectedEdge = { wallId: string; fromKey: string; toKey: string; from: Vec2; to: Vec2 };
+type DetectionWall = {
+  /** Unique id for this planar fragment; a stored wall can produce several fragments. */
+  id: string;
+  /** Stored walls represented by the fragment (more than one for coincident walls). */
+  sourceWallIds: string[];
+  a: Vec2;
+  b: Vec2;
+};
+
+type DirectedEdge = {
+  wallId: string;
+  sourceWallIds: string[];
+  fromKey: string;
+  toKey: string;
+  from: Vec2;
+  to: Vec2;
+};
+
+const cross = (a: Vec2, b: Vec2) => a.x * b.z - a.z * b.x;
+
+/** Returns the position of `point` along a segment when it lies on that segment. */
+function parameterOnSegment(point: Vec2, a: Vec2, b: Vec2): number | null {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const lengthSquared = dx * dx + dz * dz;
+  if (lengthSquared < 1e-12) return null;
+
+  const t = ((point.x - a.x) * dx + (point.z - a.z) * dz) / lengthSquared;
+  const parameterTolerance = PLANAR_JUNCTION_TOLERANCE_M / Math.sqrt(lengthSquared);
+  if (t < -parameterTolerance || t > 1 + parameterTolerance) return null;
+  const clamped = Math.max(0, Math.min(1, t));
+  const projection = { x: a.x + dx * clamped, z: a.z + dz * clamped };
+  return distance(point, projection) <= PLANAR_JUNCTION_TOLERANCE_M ? clamped : null;
+}
+
+/**
+ * Converts the stored wall soup into a planar graph used only for room detection.
+ *
+ * A rectangle drawn from the middle of an existing wall creates T-junctions, while a
+ * rectangle drawn along an existing wall can also create a coincident sub-segment.
+ * Neither case is represented by stored wall endpoints. Splitting here makes those
+ * junctions explicit without changing wall ids (and therefore without invalidating
+ * doors and windows attached to the stored walls).
+ */
+function planarizeWalls(walls: PlanWall[]): DetectionWall[] {
+  const splitParameters = walls.map(() => new Set<number>([0, 1]));
+
+  for (let firstIndex = 0; firstIndex < walls.length; firstIndex += 1) {
+    const first = walls[firstIndex];
+    const firstVector = { x: first.b.x - first.a.x, z: first.b.z - first.a.z };
+    if (distance(first.a, first.b) < JOIN_TOLERANCE_M) continue;
+
+    for (let secondIndex = firstIndex + 1; secondIndex < walls.length; secondIndex += 1) {
+      const second = walls[secondIndex];
+      const secondVector = { x: second.b.x - second.a.x, z: second.b.z - second.a.z };
+      if (distance(second.a, second.b) < JOIN_TOLERANCE_M) continue;
+
+      // Endpoints on another segment cover T-junctions and collinear overlaps.
+      for (const endpoint of [second.a, second.b]) {
+        const t = parameterOnSegment(endpoint, first.a, first.b);
+        if (t !== null) splitParameters[firstIndex].add(t);
+      }
+      for (const endpoint of [first.a, first.b]) {
+        const t = parameterOnSegment(endpoint, second.a, second.b);
+        if (t !== null) splitParameters[secondIndex].add(t);
+      }
+
+      // Non-parallel crossings have no endpoint at the intersection, so add it to both.
+      const denominator = cross(firstVector, secondVector);
+      if (Math.abs(denominator) > 1e-10) {
+        const offset = { x: second.a.x - first.a.x, z: second.a.z - first.a.z };
+        const firstT = cross(offset, secondVector) / denominator;
+        const secondT = cross(offset, firstVector) / denominator;
+        const firstTolerance = PLANAR_JUNCTION_TOLERANCE_M / distance(first.a, first.b);
+        const secondTolerance = PLANAR_JUNCTION_TOLERANCE_M / distance(second.a, second.b);
+        if (
+          firstT >= -firstTolerance && firstT <= 1 + firstTolerance
+          && secondT >= -secondTolerance && secondT <= 1 + secondTolerance
+        ) {
+          splitParameters[firstIndex].add(Math.max(0, Math.min(1, firstT)));
+          splitParameters[secondIndex].add(Math.max(0, Math.min(1, secondT)));
+        }
+      }
+    }
+  }
+
+  // Coincident fragments are one graph edge. Keep all source ids so reconciliation can
+  // still account for every stored wall and avoid reporting the duplicate as an opening.
+  const fragments = new Map<string, DetectionWall>();
+  const fragmentPointKey = pointRegistrar(PLANAR_JUNCTION_TOLERANCE_M);
+  walls.forEach((wall, wallIndex) => {
+    const parameters = [...splitParameters[wallIndex]].sort((a, b) => a - b);
+    for (let index = 0; index < parameters.length - 1; index += 1) {
+      const start = parameters[index];
+      const end = parameters[index + 1];
+      const a = {
+        x: wall.a.x + (wall.b.x - wall.a.x) * start,
+        z: wall.a.z + (wall.b.z - wall.a.z) * start
+      };
+      const b = {
+        x: wall.a.x + (wall.b.x - wall.a.x) * end,
+        z: wall.a.z + (wall.b.z - wall.a.z) * end
+      };
+      if (distance(a, b) < JOIN_TOLERANCE_M) continue;
+
+      const aKey = fragmentPointKey(a);
+      const bKey = fragmentPointKey(b);
+      if (aKey === bKey) continue;
+      const geometryKey = aKey < bKey ? `${aKey}|${bKey}` : `${bKey}|${aKey}`;
+      const existing = fragments.get(geometryKey);
+      if (existing) {
+        if (!existing.sourceWallIds.includes(wall.id)) existing.sourceWallIds.push(wall.id);
+      } else {
+        fragments.set(geometryKey, {
+          id: `fragment:${geometryKey}`,
+          sourceWallIds: [wall.id],
+          a,
+          b
+        });
+      }
+    }
+  });
+
+  return [...fragments.values()];
+}
 
 /**
  * Walks every face of the wall graph.
@@ -153,19 +291,24 @@ type DirectedEdge = { wallId: string; fromKey: string; toKey: string; from: Vec2
  * into the interior. Spurs and dead ends are visited in both directions and collapse to
  * zero area, so the area filter drops them without a special case.
  */
-function enumerateFaces(walls: PlanWall[]): { polygon: Vec2[]; wallIds: string[] }[] {
+function enumerateFaces(walls: DetectionWall[]): { polygon: Vec2[]; wallIds: string[] }[] {
   const outgoing = new Map<string, DirectedEdge[]>();
   const points = new Map<string, Vec2>();
+  const graphPointKey = pointRegistrar(PLANAR_JUNCTION_TOLERANCE_M);
 
   for (const wall of walls) {
     if (distance(wall.a, wall.b) < JOIN_TOLERANCE_M) continue;
-    const aKey = pointKey(wall.a);
-    const bKey = pointKey(wall.b);
+    const aKey = graphPointKey(wall.a);
+    const bKey = graphPointKey(wall.b);
     if (aKey === bKey) continue;
     points.set(aKey, wall.a);
     points.set(bKey, wall.b);
-    outgoing.set(aKey, [...(outgoing.get(aKey) ?? []), { wallId: wall.id, fromKey: aKey, toKey: bKey, from: wall.a, to: wall.b }]);
-    outgoing.set(bKey, [...(outgoing.get(bKey) ?? []), { wallId: wall.id, fromKey: bKey, toKey: aKey, from: wall.b, to: wall.a }]);
+    outgoing.set(aKey, [...(outgoing.get(aKey) ?? []), {
+      wallId: wall.id, sourceWallIds: wall.sourceWallIds, fromKey: aKey, toKey: bKey, from: wall.a, to: wall.b
+    }]);
+    outgoing.set(bKey, [...(outgoing.get(bKey) ?? []), {
+      wallId: wall.id, sourceWallIds: wall.sourceWallIds, fromKey: bKey, toKey: aKey, from: wall.b, to: wall.a
+    }]);
   }
 
   const visited = new Set<string>();
@@ -185,7 +328,7 @@ function enumerateFaces(walls: PlanWall[]): { polygon: Vec2[]; wallIds: string[]
       while (guard++ < limit) {
         visited.add(edgeKey(current));
         polygon.push(current.from);
-        wallIds.push(current.wallId);
+        wallIds.push(...current.sourceWallIds);
 
         const candidates = outgoing.get(current.toKey) ?? [];
         if (candidates.length === 0) break;
@@ -341,7 +484,7 @@ function enclosingCandidate(chain: WallChain, index: number): RoomCandidate {
 
 export function detectRooms(floor: FloorPlan): RoomDetection {
   const walls = floor.walls ?? [];
-  const faces = enumerateFaces(walls);
+  const faces = enumerateFaces(planarizeWalls(walls));
   const closed: RoomCandidate[] = [];
   const usedWallIds = new Set<string>();
 
@@ -350,12 +493,13 @@ export function detectRooms(floor: FloorPlan): RoomDetection {
     if (signedArea(face.polygon) <= 0) continue;
     const areaM2 = roomAreaM2(face.polygon);
     if (areaM2 < MIN_ROOM_AREA_M2) continue;
-    for (const wallId of face.wallIds) usedWallIds.add(wallId);
+    const wallIds = [...new Set(face.wallIds)];
+    for (const wallId of wallIds) usedWallIds.add(wallId);
     closed.push({
-      key: `closed:${face.wallIds.slice().sort().join(",")}`,
+      key: `closed:${wallIds.slice().sort().join(",")}`,
       polygon: face.polygon,
       boundarySource: "detected",
-      wallIds: face.wallIds,
+      wallIds,
       impliedEdgeIndices: [],
       areaM2
     });
@@ -366,6 +510,13 @@ export function detectRooms(floor: FloorPlan): RoomDetection {
 
   buildChains(looseWalls).forEach((chain, index) => {
     if (chain.wallIds.length < 2) return;
+    // A loose chain entirely inside an already-closed room is an internal partition or
+    // furnishing boundary, not a broken room perimeter. Offering to "close" it creates
+    // a false warning even though the surrounding space is already valid.
+    const containedByClosedRoom = closed.some((room) =>
+      chain.points.every((point) => pointInPolygon(point, room.polygon))
+    );
+    if (containedByClosedRoom) return;
     const isRectangleGap = isThreeSidedRectangle(chain.points);
 
     let inferred: RoomCandidate | null = null;
@@ -522,7 +673,8 @@ export function reconcileRooms(floor: FloorPlan, options: ReconcileOptions = {})
       boundarySource: candidate.boundarySource,
       wallIds: candidate.wallIds,
       impliedEdgeIndices: candidate.impliedEdgeIndices.length ? candidate.impliedEdgeIndices : undefined,
-      manual: bestRoom?.manual
+      manual: bestRoom?.manual,
+      overrides: bestRoom?.overrides
     } satisfies PlanRoom;
   });
 

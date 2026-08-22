@@ -5,13 +5,22 @@ import type {
   PlanCamera,
   PlanCameraDefinition,
   PlanObstacle,
+  PlanRoom,
   Vec2
 } from "@/src/domain/planner/types";
-import { findSectionType, type SectionType } from "@/src/domain/planner/venues";
+import { defaultCameraOptics } from "@/src/domain/planner/types";
+import { findSectionType, sectionsForVenue, type SectionType } from "@/src/domain/planner/venues";
 import { computeCameraCoverage, ppmAtDistance } from "@/src/lib/planner/coverage";
+import {
+  constrainCameraMountHeight,
+  recipeFor,
+  roomContext,
+  type MountKind
+} from "@/src/lib/planner/placement-rules";
 import {
   boundsOf,
   collectOccluders,
+  convexHull,
   distance,
   largestClosedWallLoop,
   obstacleCorners,
@@ -30,7 +39,7 @@ type Candidate = {
   position: Vec2;
   yawDeg: number;
   facesDoor: boolean;
-  mounting: "wall" | "ceiling" | "central";
+  mounting: "corner" | "wall" | "ceiling" | "central" | "pole";
 };
 
 type FloorContext = {
@@ -53,6 +62,8 @@ export type SmartPlacementFloorReport = {
 };
 
 export type SmartPlacementReport = {
+  /** False means hard validation or must-cover constraints rejected the proposed layout. */
+  accepted: boolean;
   placed: number;
   requested: number;
   coverageBeforePercent: number;
@@ -60,6 +71,7 @@ export type SmartPlacementReport = {
   floorReports: SmartPlacementFloorReport[];
   /** Must-cover areas the solution failed to satisfy, named so they can be found. */
   unmetRequirements: string[];
+  validationErrors: string[];
   warnings: string[];
 };
 
@@ -67,6 +79,25 @@ export type SmartPlacementResult = {
   plan: BuildingPlan;
   report: SmartPlacementReport;
 };
+
+/**
+ * Starts camera placement over without touching the architectural/programme work.
+ * Requirement verdicts are derived from cameras, so they must be cleared with them or
+ * the checklist would keep showing stale green coverage after every device is gone.
+ */
+export function resetCameraPlacements(plan: BuildingPlan): BuildingPlan {
+  return {
+    ...plan,
+    floors: plan.floors.map((floor) => ({
+      ...floor,
+      cameras: [],
+      coverageRequirements: (floor.coverageRequirements ?? []).map((requirement) => ({
+        ...requirement,
+        satisfied: undefined
+      }))
+    }))
+  };
+}
 
 const taskPpm: Record<SurveillanceTask, number> = {
   monitor: 62,
@@ -100,7 +131,164 @@ const priorityWeight: Record<string, number> = {
 /** A must-cover area outranks every priority — it is a constraint, not a preference. */
 const REQUIREMENT_WEIGHT = 9;
 
-type RoomZone = { polygon: Vec2[]; weight: number; forbidden: boolean; areaM2: number };
+type RoomZone = { roomId: string; polygon: Vec2[]; weight: number; forbidden: boolean; areaM2: number };
+
+/** Checks the semantic prerequisites that make a rule-based layout trustworthy. */
+export function validateSmartPlacementPlan(plan: BuildingPlan): string[] {
+  const errors: string[] = [];
+  const custom = (plan.customSectionTypes ?? []) as unknown as SectionType[];
+  const resolve = (id?: string) => findSectionType(id, custom);
+
+  if (!plan.venueTypeId) errors.push("ابتدا کاربری پروژه را انتخاب کنید.");
+  if (!plan.floors.some((floor) => largestClosedWallLoop(floor.walls) || (floor.rooms ?? []).some((room) => room.polygon.length >= 3))) {
+    errors.push("هیچ فضای بسته یا ناحیه ترسیم‌شده‌ای برای تحلیل وجود ندارد.");
+  }
+
+  const unassigned = plan.floors.flatMap((floor) =>
+    (floor.rooms ?? []).filter((room) => !room.sectionTypeId).map((room) => `${floor.name}: ${room.name || "فضای بدون نوع"}`)
+  );
+  if (unassigned.length) errors.push(`نوع این فضاها مشخص نشده است: ${unassigned.join("، ")}.`);
+
+  if (plan.venueTypeId) {
+    const dismissed = new Set(plan.dismissedSectionIds ?? []);
+    const declared = new Set(plan.floors.flatMap((floor) => [
+      ...(floor.rooms ?? []).map((room) => room.sectionTypeId),
+      ...(floor.coverageRequirements ?? []).map((requirement) => requirement.sectionTypeId)
+    ]));
+    const missingCritical = sectionsForVenue(plan.venueTypeId, custom)
+      .filter((section) => section.priority === "critical" && !dismissed.has(section.id) && !declared.has(section.id));
+    if (missingCritical.length) {
+      errors.push(`بخش‌های حیاتی زیر نه تعریف شده‌اند و نه «در این پروژه ندارم» خورده‌اند: ${missingCritical.map((item) => item.label).join("، ")}.`);
+    }
+  }
+
+  for (const floor of plan.floors) {
+    const forbidden = (floor.rooms ?? []).filter((room) => resolve(room.sectionTypeId)?.forbidden);
+    for (const camera of floor.cameras) {
+      const room = forbidden.find((item) => pointInPolygon(camera.position, item.polygon));
+      if (room) errors.push(`دوربین «${camera.name}» داخل فضای ممنوع «${room.name || resolve(room.sectionTypeId)?.label || room.id}» قرار دارد.`);
+    }
+  }
+  return errors;
+}
+
+function effectiveRoomRecipe(room: PlanRoom, floor: FloorPlan, section: SectionType) {
+  const base = recipeFor(section, roomContext(room, floor));
+  if (!base) return null;
+  return {
+    ...base,
+    housing: room.overrides?.housing ?? base.housing,
+    mountKind: room.overrides?.mountKind ?? base.mountKind,
+    mountHeightM: room.overrides?.mountHeightM ?? base.mountHeightM,
+    focalMm: room.overrides?.focalMm ?? base.focalMm,
+    goal: room.overrides?.goal ?? base.goal,
+    cameraCount: Math.max(1, Math.round(room.overrides?.cameraCount ?? base.cameraCount))
+  };
+}
+
+/** Turns every declared space into concrete camera requests consumed by the optimiser. */
+export function definitionsFromRooms(plan: BuildingPlan): PlanCameraDefinition[] {
+  const custom = (plan.customSectionTypes ?? []) as unknown as SectionType[];
+  const definitions: PlanCameraDefinition[] = [];
+  for (const floor of plan.floors) {
+    for (const room of floor.rooms ?? []) {
+      const section = findSectionType(room.sectionTypeId, custom);
+      if (!section) continue;
+      const recipe = effectiveRoomRecipe(room, floor, section);
+      if (!recipe) continue;
+      const existing = floor.cameras.filter((camera) =>
+        camera.roomId === room.id || (!camera.roomId && pointInPolygon(camera.position, room.polygon))
+      ).length;
+      for (let index = existing; index < recipe.cameraCount; index += 1) {
+        const overview = recipe.cameraCount > 1 && index === recipe.cameraCount - 1;
+        const goal = overview ? "monitor" : recipe.goal;
+        const focalMm = overview ? Math.min(4, recipe.focalMm) : recipe.focalMm;
+        definitions.push({
+          id: `rule:${floor.id}:${room.id}:${index}`,
+          zoneId: room.id,
+          groupName: room.name || section.label,
+          name: `${room.name || section.label} — ${overview ? "دید کلی" : "نمای هدف"}`,
+          housing: recipe.housing,
+          outdoor: section.environment === "outdoor" || section.environment === "perimeter" || (section.environment === "parking" && room.manual?.openAbove),
+          goal,
+          optics: {
+            ...defaultCameraOptics,
+            focalMm,
+            mountHeightM: recipe.mountHeightM,
+            maxRangeM: Math.max(12, Math.min(60, roomContext(room, floor).spanM * 1.35))
+          },
+          features: {
+            microphone: false,
+            colorNightVision: false,
+            weatherproof: section.environment === "outdoor" || section.environment === "perimeter"
+          },
+          roomId: room.id,
+          sectionTypeId: section.id,
+          mountKind: recipe.mountKind,
+          mountFallbacks: recipe.mountFallbacks,
+          placementReasons: [
+            ...recipe.reasons,
+            ...(overview ? ["این دوربین عضو دوم جفت ورودی/گیت و برای دید کلی صحنه است."] : [])
+          ],
+          requiredFeatures: recipe.requiredFeatures
+        });
+      }
+    }
+
+    for (const requirement of floor.coverageRequirements ?? []) {
+      if (!requirement.sectionTypeId || requirement.sourceRoomId) continue;
+      const section = findSectionType(requirement.sectionTypeId, custom);
+      if (!section) continue;
+      const zone: PlanRoom = {
+        id: requirement.id,
+        polygon: requirement.polygon,
+        sectionTypeId: section.id,
+        name: requirement.label,
+        ceilingHeightM: floor.heightM,
+        boundarySource: "drawn",
+        manual: {
+          openAbove: section.environment === "outdoor" || section.environment === "perimeter"
+        }
+      };
+      const recipe = recipeFor(section, roomContext(zone, floor));
+      if (!recipe) continue;
+      const existing = floor.cameras.filter((camera) => camera.requirementId === requirement.id).length;
+      for (let index = existing; index < recipe.cameraCount; index += 1) {
+        const overview = recipe.cameraCount > 1 && index === recipe.cameraCount - 1;
+        definitions.push({
+          id: `rule:${floor.id}:requirement:${requirement.id}:${index}`,
+          zoneId: requirement.id,
+          groupName: requirement.label || section.label,
+          name: `${requirement.label || section.label} — ${overview ? "دید کلی" : "نمای هدف"}`,
+          housing: recipe.housing,
+          outdoor: section.environment === "outdoor" || section.environment === "perimeter",
+          goal: overview ? "monitor" : recipe.goal,
+          optics: {
+            ...defaultCameraOptics,
+            focalMm: overview ? Math.min(4, recipe.focalMm) : recipe.focalMm,
+            mountHeightM: recipe.mountHeightM,
+            maxRangeM: Math.max(12, Math.min(60, roomContext(zone, floor).spanM * 1.35))
+          },
+          features: {
+            microphone: false,
+            colorNightVision: false,
+            weatherproof: section.environment === "outdoor" || section.environment === "perimeter"
+          },
+          requirementId: requirement.id,
+          sectionTypeId: section.id,
+          mountKind: recipe.mountKind,
+          mountFallbacks: recipe.mountFallbacks,
+          placementReasons: [
+            ...recipe.reasons,
+            `این دوربین برای ناحیه اجباری «${requirement.label}» تعریف شده است.`
+          ],
+          requiredFeatures: recipe.requiredFeatures
+        });
+      }
+    }
+  }
+  return definitions;
+}
 
 /**
  * Reads the floor's rooms into weighting zones.
@@ -113,6 +301,7 @@ function roomZones(floor: FloorPlan, resolve: (id?: string) => SectionType | nul
     .map((room) => {
       const section = resolve(room.sectionTypeId);
       return {
+        roomId: room.id,
         polygon: room.polygon,
         // An unassigned room is not yet a statement about anything, so it stays neutral
         // rather than being treated as low priority and quietly starved of cameras.
@@ -126,6 +315,36 @@ function roomZones(floor: FloorPlan, resolve: (id?: string) => SectionType | nul
 
 function zoneAt(zones: RoomZone[], point: Vec2): RoomZone | null {
   return zones.find((zone) => pointInPolygon(point, zone.polygon)) ?? null;
+}
+
+function withRoomRequirements(floor: FloorPlan): FloorPlan {
+  const existing = floor.coverageRequirements ?? [];
+  const rooms = floor.rooms ?? [];
+  const roomsById = new Map(rooms.map((room) => [room.id, room]));
+  const syncedExisting = existing
+    .filter((requirement) => !requirement.sourceRoomId || roomsById.get(requirement.sourceRoomId)?.manual?.mustCover)
+    .map((requirement) => {
+      const source = requirement.sourceRoomId ? roomsById.get(requirement.sourceRoomId) : null;
+      return source
+        ? {
+          ...requirement,
+          polygon: source.polygon.map((point) => ({ ...point })),
+          sectionTypeId: source.sectionTypeId
+        }
+        : requirement;
+    });
+  const known = new Set(syncedExisting.map((item) => item.id));
+  const roomAreas = rooms
+    .filter((room) => room.manual?.mustCover && !known.has(`cover-room-${room.id}`))
+    .map((room) => ({
+      id: `cover-room-${room.id}`,
+      polygon: room.polygon.map((point) => ({ ...point })),
+      label: `پوشش کامل ${room.name || "فضای انتخاب‌شده"}`,
+      origin: "user" as const,
+      sectionTypeId: room.sectionTypeId,
+      sourceRoomId: room.id
+    }));
+  return { ...floor, coverageRequirements: [...syncedExisting, ...roomAreas] };
 }
 
 function pointInsideObstacle(point: Vec2, obstacle: PlanObstacle, clearanceM = 0.3) {
@@ -223,7 +442,12 @@ function requirementSamples(floor: FloorPlan): SamplePoint[] {
   return samples;
 }
 
-function buildCandidates(floor: FloorPlan, boundary: Vec2[], forbiddenAreas: Vec2[][]): Candidate[] {
+function buildCandidates(
+  floor: FloorPlan,
+  boundary: Vec2[],
+  forbiddenAreas: Vec2[][],
+  resolve: (id?: string) => SectionType | null
+): Candidate[] {
   const candidates: Candidate[] = [];
   const seen = new Set<string>();
   const push = (candidate: Candidate) => {
@@ -257,6 +481,57 @@ function buildCandidates(floor: FloorPlan, boundary: Vec2[], forbiddenAreas: Vec
         });
       }
     }
+  }
+
+  // Room-aware candidates make the rule engine's corner/wall/ceiling/pole choice real,
+  // rather than leaving it as a label in the inspector.
+  for (const room of floor.rooms ?? []) {
+    if (room.polygon.length < 3) continue;
+    const section = resolve(room.sectionTypeId);
+    const permitsPole = section?.environment === "outdoor"
+      || section?.environment === "perimeter"
+      || (section?.environment === "parking" && Boolean(room.manual?.openAbove));
+    const centre = room.polygon.reduce(
+      (sum, point) => ({ x: sum.x + point.x / room.polygon.length, z: sum.z + point.z / room.polygon.length }),
+      { x: 0, z: 0 }
+    );
+    room.polygon.forEach((vertex, index) => {
+      const dx = centre.x - vertex.x;
+      const dz = centre.z - vertex.z;
+      const span = Math.max(0.01, Math.hypot(dx, dz));
+      const corner = { x: vertex.x + (dx / span) * 0.45, z: vertex.z + (dz / span) * 0.45 };
+      push({
+        position: corner,
+        yawDeg: (Math.atan2(centre.z - corner.z, centre.x - corner.x) * 180) / Math.PI,
+        facesDoor: false,
+        mounting: "corner"
+      });
+      if (permitsPole) {
+        push({
+          position: corner,
+          yawDeg: (Math.atan2(centre.z - corner.z, centre.x - corner.x) * 180) / Math.PI,
+          facesDoor: false,
+          mounting: "pole"
+        });
+      }
+
+      const next = room.polygon[(index + 1) % room.polygon.length];
+      const midpoint = { x: (vertex.x + next.x) / 2, z: (vertex.z + next.z) / 2 };
+      const mx = centre.x - midpoint.x;
+      const mz = centre.z - midpoint.z;
+      const mspan = Math.max(0.01, Math.hypot(mx, mz));
+      const wallPoint = { x: midpoint.x + (mx / mspan) * 0.42, z: midpoint.z + (mz / mspan) * 0.42 };
+      push({
+        position: wallPoint,
+        yawDeg: (Math.atan2(centre.z - wallPoint.z, centre.x - wallPoint.x) * 180) / Math.PI,
+        facesDoor: false,
+        mounting: "wall"
+      });
+    });
+    for (const yawDeg of [0, 45, 90, 135, 180, 225, 270, 315]) {
+      push({ position: centre, yawDeg, facesDoor: false, mounting: "ceiling" });
+    }
+    push({ position: centre, yawDeg: 0, facesDoor: false, mounting: "central" });
   }
 
   // Purpose-built candidates look back at entrances from useful face/plate distances.
@@ -308,7 +583,7 @@ function buildCandidates(floor: FloorPlan, boundary: Vec2[], forbiddenAreas: Vec
     return Array.from({ length: limit }, (_, index) => items[Math.floor(index * stride)]);
   };
   return [
-    ...takeEvenly(candidates.filter((candidate) => candidate.mounting === "wall"), 90),
+    ...takeEvenly(candidates.filter((candidate) => candidate.mounting === "wall" || candidate.mounting === "corner" || candidate.mounting === "pole"), 110),
     ...takeEvenly(candidates.filter((candidate) => candidate.mounting === "ceiling"), 72),
     ...candidates.filter((candidate) => candidate.mounting === "central")
   ];
@@ -324,14 +599,31 @@ function cameraFromDefinition(
     definitionId: definition.id,
     zoneId: definition.zoneId,
     groupName: definition.groupName,
+    roomId: definition.roomId,
+    requirementId: definition.requirementId,
+    sectionTypeId: definition.sectionTypeId,
+    mountKind: definition.mountKind,
+    placementReasons: definition.placementReasons ? [...definition.placementReasons] : undefined,
+    requiredFeatures: definition.requiredFeatures ? [...definition.requiredFeatures] : undefined,
     name: definition.name,
     housing: definition.housing,
+    outdoor: definition.outdoor,
     features: { ...definition.features },
     position: { ...candidate.position },
     yawDeg: candidate.yawDeg,
     goal: definition.goal,
     optics: { ...definition.optics }
   };
+}
+
+/** Keeps the final device below its actual supporting wall, not merely the floor default. */
+function constrainMountHeight(camera: PlanCamera, floor: FloorPlan): void {
+  camera.optics.mountHeightM = constrainCameraMountHeight(
+    floor,
+    camera.position,
+    camera.optics.mountHeightM,
+    camera.mountKind
+  );
 }
 
 function sampleWeight(sample: SamplePoint, goal: SurveillanceTask) {
@@ -380,15 +672,19 @@ function contextForFloor(
   floor: FloorPlan,
   resolve: (id?: string) => SectionType | null
 ): FloorContext | null {
-  const boundary = largestClosedWallLoop(floor.walls);
-  if (!boundary) return null;
-  const zones = roomZones(floor, resolve);
+  const normalisedFloor = withRoomRequirements(floor);
+  const semanticPoints = (normalisedFloor.rooms ?? []).flatMap((room) => room.polygon);
+  const closedBoundary = largestClosedWallLoop(normalisedFloor.walls);
+  const boundaryPoints = [...(closedBoundary ?? []), ...semanticPoints];
+  const boundary = boundaryPoints.length >= 3 ? convexHull(boundaryPoints) : null;
+  if (!boundary || boundary.length < 3) return null;
+  const zones = roomZones(normalisedFloor, resolve);
   const forbiddenAreas = zones.filter((zone) => zone.forbidden).map((zone) => zone.polygon);
-  const samples = buildSamples(floor, boundary, zones);
-  const candidates = buildCandidates(floor, boundary, forbiddenAreas);
+  const samples = buildSamples(normalisedFloor, boundary, zones);
+  const candidates = buildCandidates(normalisedFloor, boundary, forbiddenAreas, resolve);
   if (!samples.length || !candidates.length) return null;
-  const occluders = collectOccluders(floor.walls, floor.obstacles, floor.doors);
-  const existingCoverages = floor.cameras.map((camera) => ({
+  const occluders = collectOccluders(normalisedFloor.walls, normalisedFloor.obstacles, normalisedFloor.doors);
+  const existingCoverages = normalisedFloor.cameras.map((camera) => ({
     camera,
     coverage: computeCameraCoverage(camera, occluders, 28)
   }));
@@ -399,7 +695,7 @@ function contextForFloor(
     }
     return best;
   });
-  return { floor, boundary, samples, candidates, currentPpm, initialPpm: [...currentPpm], forbiddenAreas };
+  return { floor: normalisedFloor, boundary, samples, candidates, currentPpm, initialPpm: [...currentPpm], forbiddenAreas };
 }
 
 /**
@@ -428,14 +724,38 @@ function auditRequirements(context: FloorContext): Map<string, boolean> {
  */
 export function optimiseCameraPlacement(
   plan: BuildingPlan,
-  definitions: PlanCameraDefinition[]
+  definitions: PlanCameraDefinition[] = [],
+  options: { enforceSemanticValidation?: boolean } = {}
 ): SmartPlacementResult {
+  const validationErrors = options.enforceSemanticValidation ? validateSmartPlacementPlan(plan) : [];
+  if (validationErrors.length) {
+    return {
+      plan,
+      report: {
+        accepted: false,
+        placed: 0,
+        requested: 0,
+        coverageBeforePercent: 0,
+        coverageAfterPercent: 0,
+        floorReports: [],
+        unmetRequirements: [],
+        validationErrors,
+        warnings: validationErrors
+      }
+    };
+  }
   const placedIds = new Set(
     plan.floors.flatMap((floor) =>
       floor.cameras.map((camera) => camera.definitionId).filter((id): id is string => Boolean(id))
     )
   );
-  const unplaced = definitions
+  const generated = definitionsFromRooms(plan);
+  const generatedIds = new Set(generated.map((definition) => definition.id));
+  const allDefinitions = [
+    ...generated,
+    ...definitions.filter((definition) => !generatedIds.has(definition.id))
+  ];
+  const unplaced = allDefinitions
     .filter((definition) => !placedIds.has(definition.id))
     .sort((first, second) => taskPpm[second.goal] - taskPpm[first.goal]);
   // Custom section types live on the project, so the resolver has to be built here
@@ -461,16 +781,38 @@ export function optimiseCameraPlacement(
     for (const context of contexts) {
       const occluders = collectOccluders(context.floor.walls, context.floor.obstacles, context.floor.doors);
       const floorCameraCount = context.floor.cameras.length + (additions.get(context.floor.id)?.length ?? 0);
+      const targetRoom = definition.roomId
+        ? (context.floor.rooms ?? []).find((room) => room.id === definition.roomId)
+        : null;
+      const targetRequirement = definition.requirementId
+        ? (context.floor.coverageRequirements ?? []).find((requirement) => requirement.id === definition.requirementId)
+        : null;
+      if (definition.roomId && !targetRoom) continue;
+      if (definition.requirementId && !targetRequirement) continue;
       for (const candidate of context.candidates) {
-        const compatibleMount = definition.housing === "bullet"
-          ? candidate.mounting === "wall"
-          : definition.housing === "dome"
-            ? candidate.mounting === "ceiling"
-            : definition.housing === "ptz"
-              ? candidate.mounting === "central"
-              : candidate.mounting !== "central";
+        if (targetRoom && !pointInPolygon(candidate.position, targetRoom.polygon)) continue;
+        const candidateMount: MountKind = candidate.mounting === "wall"
+          ? "wall-edge"
+          : candidate.mounting === "central"
+            ? "ceiling"
+            : candidate.mounting;
+        const mountOrder = definition.mountKind
+          ? [definition.mountKind, ...(definition.mountFallbacks ?? [])]
+          : [];
+        const mountIndex = mountOrder.indexOf(candidateMount);
+        const compatibleMount = targetRoom || targetRequirement
+          ? mountIndex >= 0
+          : definition.housing === "bullet"
+            ? candidate.mounting === "wall" || candidate.mounting === "corner" || candidate.mounting === "pole"
+            : definition.housing === "dome"
+              ? candidate.mounting === "ceiling"
+              : definition.housing === "ptz"
+                ? candidate.mounting === "central"
+                : candidate.mounting !== "central" && candidate.mounting !== "pole";
         if (!compatibleMount) continue;
         const camera = cameraFromDefinition(definition, context.floor.id, candidate);
+        camera.mountKind = candidateMount;
+        constrainMountHeight(camera, context.floor);
         const tooClose = [
           ...context.floor.cameras,
           ...(additions.get(context.floor.id) ?? [])
@@ -486,12 +828,15 @@ export function optimiseCameraPlacement(
         for (let index = 0; index < context.samples.length; index += 1) {
           if (ppm[index] < 25) continue;
           const sample = context.samples[index];
+          if (targetRoom && sample.kind !== "requirement" && !pointInPolygon(sample.point, targetRoom.polygon)) continue;
+          if (targetRequirement && sample.requirementId !== targetRequirement.id) continue;
           const quality = Math.min(1.4, ppm[index] / threshold);
           const isBlindAtTaskLevel = context.currentPpm[index] < threshold;
           const novelty = isBlindAtTaskLevel ? 1 : 0.09;
           const verticalFit = verticalGeometryFactor(camera, sample.point);
           score += sampleWeight(sample, definition.goal) * quality * novelty * verticalFit;
         }
+        if (targetRoom || targetRequirement) score *= Math.max(0.55, 1 - mountIndex * 0.16);
         if (candidate.facesDoor && definition.goal !== "monitor") score *= 1.18;
         if (definition.housing === "dome" && candidate.mounting === "ceiling") score *= 1.08;
         if (definition.housing === "ptz" && candidate.mounting === "central") {
@@ -523,15 +868,18 @@ export function optimiseCameraPlacement(
   }
   const unmetRequirements: string[] = [];
 
-  const nextFloors = plan.floors.map((floor) => ({
-    ...floor,
-    cameras: [...floor.cameras, ...(additions.get(floor.id) ?? [])],
-    coverageRequirements: (floor.coverageRequirements ?? []).map((requirement) => {
-      const satisfied = requirementVerdicts.get(requirement.id);
-      if (satisfied === false) unmetRequirements.push(requirement.label);
-      return satisfied === undefined ? requirement : { ...requirement, satisfied };
-    })
-  }));
+  const nextFloors = plan.floors.map((floor) => {
+    const contextFloor = contexts.find((context) => context.floor.id === floor.id)?.floor ?? withRoomRequirements(floor);
+    return {
+      ...contextFloor,
+      cameras: [...floor.cameras, ...(additions.get(floor.id) ?? [])],
+      coverageRequirements: (contextFloor.coverageRequirements ?? []).map((requirement) => {
+        const satisfied = requirementVerdicts.get(requirement.id);
+        if (satisfied === false) unmetRequirements.push(requirement.label);
+        return satisfied === undefined ? requirement : { ...requirement, satisfied };
+      })
+    };
+  });
   const after = weightedCoveredPercent(contexts, false);
   const floorReports = contexts.map((context) => {
     const totalWeight = context.samples.reduce((sum, sample) => sum + sample.baseWeight, 0);
@@ -548,7 +896,7 @@ export function optimiseCameraPlacement(
   });
 
   if (!contexts.length) warnings.push("هیچ طبقه‌ای با محیط بسته و قابل تحلیل پیدا نشد.");
-  const placed = [...additions.values()].reduce((sum, cameras) => sum + cameras.length, 0);
+  const proposedPlaced = [...additions.values()].reduce((sum, cameras) => sum + cameras.length, 0);
   const hasSpecialistCamera = unplaced.some((definition) =>
     definition.goal === "anpr"
     || definition.goal === "plate-capture"
@@ -564,21 +912,28 @@ export function optimiseCameraPlacement(
       `این نواحی اجباری پوشش داده نشدند: ${unmetRequirements.join("، ")}. دوربین بیشتری اضافه کنید یا محل ناحیه را بازبینی کنید.`
     );
   }
-  if (placed > 0 && after < 70) {
+  if (proposedPlaced > 0 && after < 70) {
     warnings.push(`پوشش برآوردی ${Math.round(after)}٪ است؛ نقاط کور باقی‌مانده را در لایه DORI بازبینی کنید.`);
   }
   if ([...additions.values()].some((cameras) => cameras.some((camera) => camera.housing === "ptz"))) {
     warnings.push("پوشش PTZ بالقوه و مبتنی بر گشت است؛ برای نقاط حیاتی از دوربین ثابت پشتیبان استفاده کنید.");
   }
+  const accepted = contexts.length > 0 && unmetRequirements.length === 0;
+  const rejectedFloors = nextFloors.map((nextFloor) => {
+    const original = plan.floors.find((floor) => floor.id === nextFloor.id)!;
+    return { ...nextFloor, cameras: original.cameras };
+  });
   return {
-    plan: { ...plan, floors: nextFloors },
+    plan: { ...plan, floors: accepted ? nextFloors : rejectedFloors },
     report: {
-      placed,
+      accepted,
+      placed: accepted ? proposedPlaced : 0,
       requested: unplaced.length,
       coverageBeforePercent: before,
-      coverageAfterPercent: after,
-      floorReports,
+      coverageAfterPercent: accepted ? after : before,
+      floorReports: accepted ? floorReports : floorReports.map((floor) => ({ ...floor, placed: 0, coverageAfterPercent: floor.coverageBeforePercent })),
       unmetRequirements,
+      validationErrors,
       warnings
     }
   };
