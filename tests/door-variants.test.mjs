@@ -83,6 +83,11 @@ describe("camera mounting support", () => {
     assert.equal(marker("corner").getObjectByName("camera-pole-support"), undefined);
   });
 
+  test("a wall-mounted bullet stays below a three metre wall", () => {
+    const bounds = new THREE.Box3().setFromObject(marker("wall-edge"));
+    assert.ok(bounds.max.y < 3, `camera top ${bounds.max.y}m must stay below the wall top`);
+  });
+
   test("an explicit outdoor pole is only a 45 centimetre riser", () => {
     const support = marker("pole").getObjectByName("camera-pole-support");
     assert.ok(support?.isMesh);

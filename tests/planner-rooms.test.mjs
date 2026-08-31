@@ -6,6 +6,7 @@ import {
   reconcileRooms,
   roomAreaM2,
   roomAtPoint,
+  roomsAtPoint,
   unassignedRooms
 } from "@/src/lib/planner/rooms";
 import { createFloor } from "@/src/domain/planner/types";
@@ -235,6 +236,34 @@ describe("room reconciliation", () => {
     assert.ok(rooms.some((room) => room.id === "manual-1"), "the drawn room is left alone");
   });
 
+  test("a hand-drawn copy of a detected room replaces the duplicate unassigned outline", () => {
+    const drawn = {
+      id: "manual-overlap",
+      polygon: [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 6 }, { x: 0, z: 6 }],
+      sectionTypeId: "residential.play",
+      boundarySource: "drawn"
+    };
+    const rooms = reconcileRooms(floorWith(singleRoom, [drawn]));
+
+    assert.equal(rooms.length, 1, "one physical outline must produce one room");
+    assert.equal(rooms[0].id, drawn.id, "the user's explicit room is retained");
+    assert.equal(rooms[0].sectionTypeId, "residential.play");
+    assert.equal(unassignedRooms({ ...floorWith(singleRoom), rooms }).length, 0);
+  });
+
+  test("a smaller declared sub-space inside a room is not mistaken for a duplicate", () => {
+    const subSpace = {
+      id: "manual-sub-space",
+      polygon: [{ x: 1, z: 1 }, { x: 4, z: 1 }, { x: 4, z: 3 }, { x: 1, z: 3 }],
+      sectionTypeId: "shop.checkout",
+      boundarySource: "drawn"
+    };
+    const rooms = reconcileRooms(floorWith(singleRoom, [subSpace]));
+
+    assert.equal(rooms.length, 2, "a real sub-space and its containing room both remain");
+    assert.ok(rooms.some((room) => room.id === subSpace.id));
+  });
+
   test("rooms without a type are the ones that render red", () => {
     const floor = floorWith(singleRoom);
     const rooms = reconcileRooms(floor);
@@ -268,6 +297,19 @@ describe("room lookup", () => {
     assert.equal(roomAtPoint(floor, { x: 7, z: 7 })?.id, "inner");
     assert.equal(roomAtPoint(floor, { x: 17, z: 17 })?.id, "outer");
     assert.equal(roomAtPoint(floor, { x: 50, z: 50 }), null);
+  });
+
+  test("all nested rooms are returned from inner to outer for click cycling", () => {
+    const outer = {
+      id: "outer", polygon: [{ x: 0, z: 0 }, { x: 20, z: 0 }, { x: 20, z: 20 }, { x: 0, z: 20 }], boundarySource: "drawn"
+    };
+    const middle = {
+      id: "middle", polygon: [{ x: 3, z: 3 }, { x: 14, z: 3 }, { x: 14, z: 14 }, { x: 3, z: 14 }], boundarySource: "drawn"
+    };
+    const inner = {
+      id: "inner", polygon: [{ x: 5, z: 5 }, { x: 9, z: 5 }, { x: 9, z: 9 }, { x: 5, z: 9 }], boundarySource: "drawn"
+    };
+    assert.deepEqual(roomsAtPoint(floorWith([], [outer, inner, middle]), { x: 7, z: 7 }).map((room) => room.id), ["inner", "middle", "outer"]);
   });
 });
 

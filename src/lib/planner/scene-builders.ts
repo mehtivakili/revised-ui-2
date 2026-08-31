@@ -1527,6 +1527,12 @@ export function buildCameraMarker(
     metalness: 0.7
   });
   const heading = new THREE.Group();
+  // The marker used to be over a metre long and almost half a metre high. Besides
+  // looking unlike a CCTV camera, that oversized shell crossed the wall top even when
+  // its optical centre correctly sat 25 cm below it. Keep it legible, but within a
+  // realistic visual envelope around the calculated mounting point.
+  heading.name = "camera-visual-body";
+  heading.scale.setScalar(0.5);
   heading.position.y = mountHeightM;
   heading.rotation.y = -yawRad;
 

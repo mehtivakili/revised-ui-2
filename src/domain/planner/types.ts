@@ -343,6 +343,7 @@ export type RoomPlacementOverrides = {
   housing?: CameraHousing;
   mountKind?: "corner" | "wall-edge" | "ceiling" | "pole";
   mountHeightM?: number;
+  megapixel?: number;
   focalMm?: number;
   goal?: SurveillanceTask;
   cameraCount?: number;

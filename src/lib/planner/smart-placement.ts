@@ -11,6 +11,7 @@ import type {
 import { defaultCameraOptics } from "@/src/domain/planner/types";
 import { findSectionType, sectionsForVenue, type SectionType } from "@/src/domain/planner/venues";
 import { computeCameraCoverage, ppmAtDistance } from "@/src/lib/planner/coverage";
+import { roomAreaM2 } from "@/src/lib/planner/rooms";
 import {
   constrainCameraMountHeight,
   recipeFor,
@@ -145,7 +146,12 @@ export function validateSmartPlacementPlan(plan: BuildingPlan): string[] {
   }
 
   const unassigned = plan.floors.flatMap((floor) =>
-    (floor.rooms ?? []).filter((room) => !room.sectionTypeId).map((room) => `${floor.name}: ${room.name || "فضای بدون نوع"}`)
+    (floor.rooms ?? [])
+      .filter((room) => !room.sectionTypeId)
+      .map((room, index) => {
+        const fallback = `فضای ${index + 1} (${Math.round(roomAreaM2(room.polygon))} متر مربع)`;
+        return `${floor.name}: ${room.name?.trim() || fallback}`;
+      })
   );
   if (unassigned.length) errors.push(`نوع این فضاها مشخص نشده است: ${unassigned.join("، ")}.`);
 
@@ -180,6 +186,7 @@ function effectiveRoomRecipe(room: PlanRoom, floor: FloorPlan, section: SectionT
     housing: room.overrides?.housing ?? base.housing,
     mountKind: room.overrides?.mountKind ?? base.mountKind,
     mountHeightM: room.overrides?.mountHeightM ?? base.mountHeightM,
+    megapixel: room.overrides?.megapixel ?? base.megapixel,
     focalMm: room.overrides?.focalMm ?? base.focalMm,
     goal: room.overrides?.goal ?? base.goal,
     cameraCount: Math.max(1, Math.round(room.overrides?.cameraCount ?? base.cameraCount))
@@ -213,6 +220,7 @@ export function definitionsFromRooms(plan: BuildingPlan): PlanCameraDefinition[]
           goal,
           optics: {
             ...defaultCameraOptics,
+            megapixel: recipe.megapixel,
             focalMm,
             mountHeightM: recipe.mountHeightM,
             maxRangeM: Math.max(12, Math.min(60, roomContext(room, floor).spanM * 1.35))
@@ -265,6 +273,7 @@ export function definitionsFromRooms(plan: BuildingPlan): PlanCameraDefinition[]
           goal: overview ? "monitor" : recipe.goal,
           optics: {
             ...defaultCameraOptics,
+            megapixel: recipe.megapixel,
             focalMm: overview ? Math.min(4, recipe.focalMm) : recipe.focalMm,
             mountHeightM: recipe.mountHeightM,
             maxRangeM: Math.max(12, Math.min(60, roomContext(zone, floor).spanM * 1.35))

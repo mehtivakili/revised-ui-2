@@ -20,7 +20,12 @@ import {
   type WallDrawMode,
   type Vec2
 } from "@/src/domain/planner/types";
-import { elementsInRect, mergeSelection } from "@/src/lib/planner/selection";
+import {
+  elementsInRect,
+  mergeSelection,
+  resolveRoomAwarePick,
+  type RoomAwarePlanPick
+} from "@/src/lib/planner/selection";
 import { findSectionType } from "@/src/domain/planner/venues";
 import { isCardinalAngle, snapRotationAngle } from "@/src/lib/planner/rotation";
 import { constrainCameraMountHeight } from "@/src/lib/planner/placement-rules";
@@ -200,6 +205,8 @@ export type PlanCanvasProps = {
   onDropPreset?: (presetId: string, position: Vec2) => void;
   onPlaceBackdrop?: (center: Vec2) => void;
   onCancelBackdropPlacement?: () => void;
+  /** Clears the selected item and retires the active drawing/placement tool. */
+  onCancelInteraction?: () => void;
 };
 
 type DragState =
@@ -233,6 +240,8 @@ export function PlanCanvas(props: PlanCanvasProps) {
   const bundleRef = useRef<Bundle | null>(null);
   const draftRef = useRef<{ kind: "wall" | "obstacle" | "measure" | "room" | "coverage"; start: Vec2 } | null>(null);
   const dragRef = useRef<DragState>(null);
+  const rightPointerRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const roomClickCycleRef = useRef<{ clientX: number; clientY: number; at: number } | null>(null);
 
   const latest = useRef(props);
   useEffect(() => { latest.current = props; });
@@ -589,6 +598,12 @@ export function PlanCanvas(props: PlanCanvasProps) {
 
   /* ── Interaction ─────────────────────────────────────────────────── */
   const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button === 2) {
+      // A short right click is Cancel; a right-button drag remains available for
+      // OrbitControls panning in both the plan and perspective views.
+      rightPointerRef.current = { x: event.clientX, y: event.clientY, moved: false };
+      return;
+    }
     if (event.button === 1) {
       // OrbitControls owns middle-button drags; preventing the browser default avoids
       // the auto-scroll cursor while preserving the control's pointer sequence.
@@ -607,7 +622,25 @@ export function PlanCanvas(props: PlanCanvasProps) {
       return;
     }
     const snapped = snapPoint(point, current.snapM);
-    const picked = pickAt(event.clientX, event.clientY);
+    const rawPicked = pickAt(event.clientX, event.clientY);
+    const previousRoomClick = roomClickCycleRef.current;
+    const now = performance.now();
+    const repeatsRoomClick = Boolean(
+      previousRoomClick
+      && now - previousRoomClick.at <= 1600
+      && Math.hypot(event.clientX - previousRoomClick.clientX, event.clientY - previousRoomClick.clientY) <= 9
+    );
+    const selectedRoom = repeatsRoomClick ? soleSelection(current.selection) : null;
+    const picked: RoomAwarePlanPick | null = current.tool === "select" && current.viewMode === "top"
+      ? resolveRoomAwarePick(current.floor, point, rawPicked, {
+        preferForeground: event.altKey,
+        cycleFromRoomId: selectedRoom?.kind === "room" ? selectedRoom.id : undefined
+      })
+      : rawPicked;
+    const pickedRoomThroughContent = rawPicked?.kind === "obstacle" && picked?.kind === "room";
+    roomClickCycleRef.current = picked?.kind === "room"
+      ? { clientX: event.clientX, clientY: event.clientY, at: now }
+      : null;
     const activeDraft = draftRef.current;
     const pickedWallForDrawing = current.tool === "wall" && picked?.kind === "wall"
       ? current.floor.walls.find((wall) => wall.id === picked.id)
@@ -727,6 +760,11 @@ export function PlanCanvas(props: PlanCanvasProps) {
       // Dragging one of several selected items keeps the group, so a multi-selection can
       // be nudged without collapsing back to a single element.
       if (!alreadySelected) onSelect([ref]);
+      if (picked.kind === "room" && (picked.roomLayerCount ?? 0) > 1) {
+        onHint(`محدوده هم‌پوشان ${picked.roomLayer} از ${picked.roomLayerCount} انتخاب شد؛ برای انتخاب محدوده بعدی دوباره همین‌جا کلیک کنید`);
+      } else if (pickedRoomThroughContent) {
+        onHint("فضای زیر تجهیزات انتخاب شد؛ برای انتخاب خود تجهیز کلید Alt را نگه دارید و کلیک کنید");
+      }
 
       if (picked.kind === "camera" || picked.kind === "obstacle" || picked.kind === "door") {
         dragRef.current = {
@@ -739,7 +777,15 @@ export function PlanCanvas(props: PlanCanvasProps) {
         const polygon = picked.kind === "room"
           ? (current.floor.rooms ?? []).find((item) => item.id === picked.id)?.polygon
           : (current.floor.coverageRequirements ?? []).find((item) => item.id === picked.id)?.polygon;
-        if (polygon) {
+        const room = picked.kind === "room"
+          ? (current.floor.rooms ?? []).find((item) => item.id === picked.id)
+          : null;
+        // Wall-detected rooms belong to their walls and should never detach because the
+        // pointer moved a pixel during a click. Manual rooms and requirements remain
+        // draggable, except when room-assist deliberately picked through furniture.
+        const canMovePolygon = picked.kind === "requirement"
+          || (room?.boundarySource === "drawn" && !pickedRoomThroughContent);
+        if (polygon && canMovePolygon) {
           dragRef.current = {
             kind: "move-polygon",
             owner: picked.kind,
@@ -985,6 +1031,13 @@ export function PlanCanvas(props: PlanCanvasProps) {
   }, [onFloorChange, onHint, onSelect, pickAt, planPointAt, setControlsEnabled]);
 
   const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const rightPointer = rightPointerRef.current;
+    if (rightPointer && (event.buttons & 2) !== 0) {
+      const dx = event.clientX - rightPointer.x;
+      const dy = event.clientY - rightPointer.y;
+      if (dx * dx + dy * dy > 25) rightPointer.moved = true;
+    }
+
     const bundle = bundleRef.current;
     const current = latest.current;
     if (!bundle || current.readOnly) return;
@@ -1313,6 +1366,26 @@ export function PlanCanvas(props: PlanCanvasProps) {
     onHint(null);
   }, [onHint]);
 
+  const cancelCurrentInteraction = useCallback(() => {
+    const current = latest.current;
+    dragRef.current = null;
+    setControlsEnabled(true);
+    cancelDraft();
+    current.onCancelInteraction?.();
+    if (current.pendingBackdrop) current.onCancelBackdropPlacement?.();
+  }, [cancelDraft, setControlsEnabled]);
+
+  const finishPointerInteraction = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 2) {
+      endDrag(event);
+      return;
+    }
+
+    const rightPointer = rightPointerRef.current;
+    rightPointerRef.current = null;
+    if (!rightPointer?.moved) cancelCurrentInteraction();
+  }, [cancelCurrentInteraction, endDrag]);
+
   useEffect(() => {
     if (draftRef.current) cancelDraft();
   }, [tool, cancelDraft]);
@@ -1356,16 +1429,17 @@ export function PlanCanvas(props: PlanCanvasProps) {
         onDrop={handleCanvasDrop}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
+        onPointerUp={finishPointerInteraction}
+        onPointerCancel={(event) => {
+          rightPointerRef.current = null;
+          endDrag(event);
+        }}
         onPointerLeave={endDrag}
         onAuxClick={(event) => { if (event.button === 1) event.preventDefault(); }}
         onContextMenu={(event) => {
-          // Always suppressed: the right button is the pan gesture, and a browser menu
-          // appearing mid-drag would abandon it.
+          // Cancellation is finalized on pointer-up so a right-button pan can be
+          // distinguished from a click. The native menu is never useful on the canvas.
           event.preventDefault();
-          if (latest.current.pendingBackdrop) latest.current.onCancelBackdropPlacement?.();
-          else if (draftRef.current) cancelDraft();
         }}
       />
       <div ref={labelHostRef} className="plan-dimension-layer" aria-hidden="true" />

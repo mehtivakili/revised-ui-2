@@ -3,7 +3,8 @@
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Bookmark, BriefcaseBusiness, Cable, Check, ChevronLeft, CircleAlert, CircleParking, Factory, FileDown, Fuel, Gem, GraduationCap, HeartPulse, Hotel, House, Info, Landmark, LoaderCircle, LockKeyhole, Mic, Moon, PencilRuler, Rocket, RotateCcw, Save, Search, ShieldCheck, ShoppingCart, Sparkles, Sprout, SquareStack, Store, Trash2, UtensilsCrossed, X } from "lucide-react";
+import type { CSSProperties } from "react";
+import { Anchor, ArrowLeft, ArrowRight, Bookmark, BriefcaseBusiness, Bus, BusFront, Cable, CarFront, Check, ChevronLeft, CircleAlert, CircleParking, Droplets, Factory, FileDown, Flame, FolderOpen, Fuel, Gem, GraduationCap, HardHat, HeartPulse, Hotel, House, Info, Landmark, LoaderCircle, LockKeyhole, Mic, Milestone, MonitorCog, Moon, PencilRuler, Pickaxe, Plane, Presentation, Rocket, RotateCcw, Save, Search, Server, ShieldCheck, Ship, ShoppingBag, ShoppingCart, Siren, Sparkles, Sprout, SquareStack, Store, SunMedium, TowerControl, TrafficCone, TrainFront, Trash2, UtensilsCrossed, Volleyball, Warehouse, Waves, Waypoints, X, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ProjectBrief, ProjectCameraTemplate, ProjectZone, RecommendationPlan, RecommendationResult } from "@/src/domain/catalog/types";
 import { createEmptyPlan, type BuildingPlan } from "@/src/domain/planner/types";
@@ -13,10 +14,32 @@ import { PlanResultMaps } from "@/src/components/planner/PlanResultMaps";
 import { CameraTemplateEditor } from "@/src/components/smart/CameraTemplateEditor";
 import { CameraStreamEditor } from "@/src/components/smart/CameraStreamEditor";
 import { defaultCameraTemplates, zonesFromPlan, zonesFromTemplates } from "@/src/lib/planner/camera-templates";
+import { recommendCameraSelection, type CameraSelectionAnalysis } from "@/src/lib/planner/camera-selection";
 import { createSamplePlan, type SamplePlanId } from "@/src/lib/planner/sample-plans";
 import { venueTypes, type VenueType, type VenueTypeId } from "@/src/domain/planner/venues";
+import { ProjectGallery, VenueComposition } from "@/src/components/smart/ProjectGallery";
+import {
+  createProject as createStoredProject,
+  fetchProject,
+  saveProject as saveStoredProject,
+  type ProjectListItem,
+  type ProjectPayload
+} from "@/src/lib/projects/client";
+import { useRouter } from "next/navigation";
 
 const formatFaCount = (value: number) => new Intl.NumberFormat("fa-IR").format(value);
+
+/**
+ * A readable name for a project the user never named.
+ *
+ * Uses the venue label and the date rather than "پروژه بدون نام", because a gallery of
+ * identically-named rows is worse than no name at all.
+ */
+function defaultProjectName(venueTypeId?: string): string {
+  const venue = venueTypes.find((item) => item.id === venueTypeId);
+  const stamp = new Date().toLocaleDateString("fa-IR");
+  return venue ? `${venue.label} — ${stamp}` : `پروژه ${stamp}`;
+}
 
 /**
  * The designer pulls in three.js and only renders on demand, so it is split out of the
@@ -44,6 +67,49 @@ const initialBrief: ProjectBrief = {
 
 const projectTypes = [["shop", "فروشگاه"], ["office", "اداری"], ["factory", "کارخانه"], ["parking", "پارکینگ"], ["residential", "مسکونی"]] as const;
 const taskOptions = Object.entries(TASK_LABELS) as Array<[ProjectZone["goal"], string]>;
+
+/**
+ * A stable, individual accent for every venue card.
+ *
+ * The golden-angle step keeps neighbouring catalogue entries visually distinct while
+ * deriving the same colour from the venue order on every render (including searches).
+ */
+const venueCardAccents = new Map<VenueTypeId, string>(
+  venueTypes.map((venue, index) => [
+    venue.id,
+    `hsl(${Math.round((207 + index * 137.508) % 360)} 82% 62%)`
+  ])
+);
+
+type VenueCategoryId = "living-retail" | "public" | "transport" | "industrial" | "energy";
+
+const venueCategories: Array<{ id: VenueCategoryId; label: string; venueIds: VenueTypeId[] }> = [
+  {
+    id: "living-retail",
+    label: "مسکونی و تجاری",
+    venueIds: ["residential", "apartment", "hotel", "shop", "supermarket", "jewellery", "restaurant", "mall", "car-showroom"]
+  },
+  {
+    id: "public",
+    label: "اداری و عمومی",
+    venueIds: ["office", "school", "hospital", "conference", "sports-complex", "control-room", "data-centre"]
+  },
+  {
+    id: "transport",
+    label: "شهری و حمل‌ونقل",
+    venueIds: ["parking", "urban-road", "highway", "bus-station", "transit-fleet", "safe-city", "airport", "port", "railway"]
+  },
+  {
+    id: "industrial",
+    label: "صنعتی و تولیدی",
+    venueIds: ["industrial", "construction", "warehouse", "mine", "farm"]
+  },
+  {
+    id: "energy",
+    label: "انرژی و زیرساخت",
+    venueIds: ["fuel", "substation", "pipeline", "transmission-line", "onshore-oil", "offshore-oil", "solar-farm", "hydro-plant", "water-plant"]
+  }
+];
 
 /**
  * Device types for a preset scenario.
@@ -230,6 +296,21 @@ const samplePresets: WizardPreset[] = [
   }
 ];
 
+/** Venue programme paired with each fully drawn sample plan. */
+const sampleVenueTypes: Record<SamplePlanId, VenueTypeId> = {
+  "luxury-villa": "residential",
+  "modern-office": "office",
+  "retail-gallery": "shop",
+  "factory-campus": "industrial",
+  "residential-parking": "apartment",
+  "kourosh-mall": "mall",
+  "mega-mall": "mall",
+  "general-hospital": "hospital",
+  "police-station": "office",
+  "barracks-campus": "industrial",
+  "school-campus": "school"
+};
+
 const allPresets = [...presets, ...samplePresets];
 
 type VenueExperience = {
@@ -253,7 +334,34 @@ const venueExperiences: Record<VenueTypeId, VenueExperience> = {
   hotel: { icon: Hotel, shortLabel: "هتل و اقامتگاه", projectType: "shop", defaults: { siteAreaM2: 2500, floors: 6, entrances: 3, archiveDays: 45 } },
   fuel: { icon: Fuel, shortLabel: "جایگاه سوخت", projectType: "factory", defaults: { siteAreaM2: 1800, floors: 1, entrances: 3, archiveDays: 45, lowLightPriority: true } },
   apartment: { icon: Landmark, shortLabel: "مجتمع و برج", projectType: "residential", defaults: { siteAreaM2: 3000, floors: 8, entrances: 2, archiveDays: 30 } },
-  farm: { icon: Sprout, shortLabel: "باغ و مزرعه", projectType: "factory", defaults: { siteAreaM2: 8000, floors: 1, entrances: 3, archiveDays: 45, lowLightPriority: true } }
+  farm: { icon: Sprout, shortLabel: "باغ و مزرعه", projectType: "factory", defaults: { siteAreaM2: 8000, floors: 1, entrances: 3, archiveDays: 45, lowLightPriority: true } },
+
+  /* ── Venues added from the customer project list ─────────────────── */
+  "urban-road": { icon: TrafficCone, shortLabel: "جاده و معبر شهری", projectType: "factory", defaults: { siteAreaM2: 5000, floors: 1, entrances: 4, archiveDays: 30, lowLightPriority: true } },
+  highway: { icon: Milestone, shortLabel: "بزرگراه و آزادراه", projectType: "factory", defaults: { siteAreaM2: 20000, floors: 1, entrances: 4, archiveDays: 30, lowLightPriority: true } },
+  construction: { icon: HardHat, shortLabel: "کارگاه ساختمانی", projectType: "factory", defaults: { siteAreaM2: 3500, floors: 2, entrances: 2, archiveDays: 45, redundancyRequired: true } },
+  conference: { icon: Presentation, shortLabel: "سالن کنفرانس", projectType: "office", defaults: { siteAreaM2: 900, floors: 1, entrances: 3, archiveDays: 30 } },
+  "car-showroom": { icon: CarFront, shortLabel: "نمایشگاه خودرو", projectType: "shop", defaults: { siteAreaM2: 1200, floors: 1, entrances: 2, archiveDays: 45 } },
+  "bus-station": { icon: BusFront, shortLabel: "ایستگاه و پایانه", projectType: "office", defaults: { siteAreaM2: 2500, floors: 1, entrances: 4, archiveDays: 30, lowLightPriority: true } },
+  "transit-fleet": { icon: Bus, shortLabel: "ناوگان اتوبوس", projectType: "office", defaults: { siteAreaM2: 60, floors: 1, entrances: 2, archiveDays: 21, lowLightPriority: true } },
+  "control-room": { icon: MonitorCog, shortLabel: "مرکز مانیتورینگ", projectType: "office", defaults: { siteAreaM2: 250, floors: 1, entrances: 1, archiveDays: 90, redundancyRequired: true } },
+  substation: { icon: Zap, shortLabel: "پست برق", projectType: "factory", defaults: { siteAreaM2: 4000, floors: 1, entrances: 2, archiveDays: 60, redundancyRequired: true } },
+  warehouse: { icon: Warehouse, shortLabel: "انبار و لجستیک", projectType: "factory", defaults: { siteAreaM2: 6000, floors: 1, entrances: 3, archiveDays: 60 } },
+  mall: { icon: ShoppingBag, shortLabel: "مرکز خرید", projectType: "shop", defaults: { siteAreaM2: 12000, floors: 4, entrances: 6, archiveDays: 45 } },
+  pipeline: { icon: Waypoints, shortLabel: "خط لوله", projectType: "factory", defaults: { siteAreaM2: 30000, floors: 1, entrances: 2, archiveDays: 60, redundancyRequired: true } },
+  "transmission-line": { icon: TowerControl, shortLabel: "خطوط انتقال برق", projectType: "factory", defaults: { siteAreaM2: 25000, floors: 1, entrances: 1, archiveDays: 60, lowLightPriority: true } },
+  "onshore-oil": { icon: Flame, shortLabel: "میدان نفتی خشکی", projectType: "factory", defaults: { siteAreaM2: 20000, floors: 1, entrances: 3, archiveDays: 90, redundancyRequired: true } },
+  "offshore-oil": { icon: Anchor, shortLabel: "سکوی نفتی دریایی", projectType: "factory", defaults: { siteAreaM2: 6000, floors: 3, entrances: 2, archiveDays: 90, redundancyRequired: true } },
+  "solar-farm": { icon: SunMedium, shortLabel: "مزرعه خورشیدی", projectType: "factory", defaults: { siteAreaM2: 40000, floors: 1, entrances: 2, archiveDays: 45 } },
+  "hydro-plant": { icon: Waves, shortLabel: "نیروگاه برق‌آبی", projectType: "factory", defaults: { siteAreaM2: 15000, floors: 2, entrances: 2, archiveDays: 90, redundancyRequired: true } },
+  "safe-city": { icon: Siren, shortLabel: "شهر ایمن", projectType: "office", defaults: { siteAreaM2: 50000, floors: 1, entrances: 8, archiveDays: 60, lowLightPriority: true } },
+  "sports-complex": { icon: Volleyball, shortLabel: "مجتمع ورزشی", projectType: "office", defaults: { siteAreaM2: 9000, floors: 2, entrances: 6, archiveDays: 45 } },
+  "data-centre": { icon: Server, shortLabel: "مرکز داده", projectType: "office", defaults: { siteAreaM2: 1500, floors: 1, entrances: 2, archiveDays: 90, redundancyRequired: true } },
+  airport: { icon: Plane, shortLabel: "فرودگاه و ترمینال", projectType: "office", defaults: { siteAreaM2: 30000, floors: 3, entrances: 8, archiveDays: 90, redundancyRequired: true } },
+  port: { icon: Ship, shortLabel: "بندر و اسکله", projectType: "factory", defaults: { siteAreaM2: 40000, floors: 1, entrances: 4, archiveDays: 60, redundancyRequired: true } },
+  railway: { icon: TrainFront, shortLabel: "راه‌آهن و مترو", projectType: "office", defaults: { siteAreaM2: 8000, floors: 2, entrances: 5, archiveDays: 60, lowLightPriority: true } },
+  mine: { icon: Pickaxe, shortLabel: "معدن", projectType: "factory", defaults: { siteAreaM2: 35000, floors: 1, entrances: 2, archiveDays: 60, lowLightPriority: true } },
+  "water-plant": { icon: Droplets, shortLabel: "تصفیه‌خانه آب", projectType: "factory", defaults: { siteAreaM2: 12000, floors: 1, entrances: 2, archiveDays: 60 } }
 };
 
 function migrateSavedZone(zone: Partial<ProjectZone>, index: number): ProjectZone {
@@ -280,9 +388,22 @@ export function ProjectWizard() {
   const [savedMessage, setSavedMessage] = useState("");
   const [hasSavedDefaults, setHasSavedDefaults] = useState(false);
   const [siteMode, setSiteMode] = useState<"manual" | "designer">("designer");
-  const [buildingPlan, setBuildingPlan] = useState<BuildingPlan>(() => ({ ...createEmptyPlan(), venueTypeId: "shop" }));
+  const [buildingPlan, setBuildingPlan] = useState<BuildingPlan>(() => createEmptyPlan());
   const [designFocusActive, setDesignFocusActive] = useState(false);
   const [venueQuery, setVenueQuery] = useState("");
+  const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
+  const [cameraSelectionAnalysis, setCameraSelectionAnalysis] = useState<CameraSelectionAnalysis | null>(null);
+
+  /* ── Saved-project state ──────────────────────────────────────────── */
+  const router = useRouter();
+  /** Set once the design has a row in the database; null while it is unsaved. */
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState("");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState("");
+  /** Bumped to make the gallery refetch after a save. */
+  const [galleryToken, setGalleryToken] = useState(0);
+  const dirtyRef = useRef(false);
   // Memoised: the `?? []` fallback would otherwise be a fresh array every render and
   // invalidate every hook downstream of it.
   const cameraTemplates = useMemo(() => brief.cameraTemplates ?? [], [brief.cameraTemplates]);
@@ -309,7 +430,10 @@ export function ProjectWizard() {
   }, []);
 
   useEffect(() => {
-    if (!designFocusActive && !cameraFocusActive) return;
+    // The project gateway is a focused, viewport-sized experience too. Locking the
+    // document here removes the outer page scrollbar; the catalogue keeps its own
+    // bounded scrollbar so every project type remains reachable.
+    if (step !== 1 && !designFocusActive && !cameraFocusActive) return;
     const bodyOverflow = document.body.style.overflow;
     const rootOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = "hidden";
@@ -318,7 +442,7 @@ export function ProjectWizard() {
       document.body.style.overflow = bodyOverflow;
       document.documentElement.style.overflow = rootOverflow;
     };
-  }, [designFocusActive, cameraFocusActive]);
+  }, [step, designFocusActive, cameraFocusActive]);
 
   useEffect(() => {
     if (previousStepRef.current === step) return;
@@ -333,7 +457,9 @@ export function ProjectWizard() {
 
   const progress = useMemo(() => `${Math.round((Math.min(step, 6) / 6) * 100)}%`, [step]);
   const update = <K extends keyof ProjectBrief>(key: K, value: ProjectBrief[K]) => setBrief((current) => ({ ...current, [key]: value }));
-  const selectedVenueId = (buildingPlan.venueTypeId as VenueTypeId | undefined) ?? "shop";
+  // Null until the user picks one. Everything downstream that needs a venue is gated on
+  // this, so an unchosen project cannot silently inherit a shop's defaults.
+  const selectedVenueId = (buildingPlan.venueTypeId as VenueTypeId | undefined) ?? null;
   const selectedVenue = venueTypes.find((venue) => venue.id === selectedVenueId) ?? venueTypes[1]!;
   const filteredVenues = useMemo(() => {
     const query = venueQuery.trim().toLocaleLowerCase("fa");
@@ -343,11 +469,90 @@ export function ProjectWizard() {
 
   const selectVenue = useCallback((venueId: VenueTypeId) => {
     const experience = venueExperiences[venueId];
+    setSelectedSampleId(null);
     setBrief((current) => ({ ...current, ...experience.defaults, projectType: experience.projectType }));
     setBuildingPlan((current) => ({ ...current, venueTypeId: venueId }));
   }, []);
 
+  /**
+   * Everything worth keeping, in the shape the API expects.
+   *
+   * Read from refs rather than closed-over state where the autosave timer is concerned,
+   * so a save fired by the timer always writes the newest values rather than whatever
+   * they were when the timer was armed.
+   */
+  const buildPayload = useCallback((): ProjectPayload => ({
+    name: projectName.trim() || defaultProjectName(buildingPlan.venueTypeId),
+    venueTypeId: buildingPlan.venueTypeId ?? null,
+    status: result ? "complete" : "draft",
+    brief,
+    plan: buildingPlan,
+    templates: brief.cameraTemplates ?? [],
+    quantities: {},
+    result: result ?? undefined
+  }), [brief, buildingPlan, projectName, result]);
+
+  const persistProject = useCallback(async () => {
+    setSaveState("saving");
+    setSaveError("");
+    try {
+      const payload = buildPayload();
+      const saved = projectId
+        ? await saveStoredProject(projectId, payload)
+        : await createStoredProject(payload);
+      setProjectId(saved.id);
+      setProjectName(saved.name);
+      dirtyRef.current = false;
+      setSaveState("saved");
+      setGalleryToken((token) => token + 1);
+      return saved;
+    } catch (cause) {
+      setSaveState("error");
+      setSaveError(cause instanceof Error ? cause.message : "ذخیره پروژه انجام نشد.");
+      return null;
+    }
+  }, [buildPayload, projectId]);
+
+  /*
+   * Autosave.
+   *
+   * Only ever updates a project that already exists — the first save stays a deliberate
+   * act, so a half-started design does not litter the gallery. Drawing a floor plan is
+   * hours of work and losing it to a closed tab is the failure worth engineering against.
+   */
+  useEffect(() => {
+    if (!projectId || !dirtyRef.current) return;
+    const timer = window.setTimeout(() => { void persistProject(); }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [projectId, persistProject, brief, buildingPlan, result]);
+
+  useEffect(() => { dirtyRef.current = true; }, [brief, buildingPlan, result]);
+
+  /** Loads a saved design back into the wizard and drops the user straight into it. */
+  const openSavedProject = useCallback(async (item: ProjectListItem) => {
+    try {
+      const project = await fetchProject(item.id);
+      setProjectId(project.id);
+      setProjectName(project.name);
+      setBrief((current) => ({ ...current, ...(project.brief as Partial<ProjectBrief>) }));
+      setBuildingPlan(project.plan);
+      setResult((project.result as RecommendationResult | null) ?? null);
+      setSiteMode("designer");
+      setDesignFocusActive(false);
+      setSaveState("saved");
+      dirtyRef.current = false;
+      setStep(1);
+    } catch {
+      setSaveError("باز کردن پروژه انجام نشد.");
+    }
+  }, []);
+
+  const viewSavedProject = useCallback((item: ProjectListItem) => {
+    router.push(`/projects/${item.id}`);
+  }, [router]);
+
   const startFocusedDesign = useCallback(() => {
+    if (!selectedVenueId) return;
     selectVenue(selectedVenueId);
     setSiteMode("designer");
     setDesignFocusActive(true);
@@ -378,6 +583,25 @@ export function ProjectWizard() {
       goal: distinctGoals.size === 1 && templates[0] ? templates[0].goal : "mixed"
     }));
   }, []);
+
+  const selectCamerasAutomatically = useCallback(() => {
+    const analysis = recommendCameraSelection(buildingPlan, brief);
+    setCameraSelectionAnalysis(analysis);
+    setBuildingPlan(analysis.plan);
+    setTemplates(analysis.templates);
+    setBrief((current) => ({ ...current, cameraSelectionMode: "automatic" }));
+  }, [brief, buildingPlan, setTemplates]);
+
+  const goToPreviousStage = useCallback(() => {
+    if (step === 2 && siteMode === "designer") {
+      // The focused map editor is the real first stage. Keeping step=1 underneath it
+      // also means its Cancel action correctly returns to project-type selection.
+      setStep(1);
+      setDesignFocusActive(true);
+      return;
+    }
+    setStep((value) => Math.max(1, value - 1));
+  }, [siteMode, step]);
 
   /**
    * Freezes the current camera picture into the shape the recommendation engine reads.
@@ -442,7 +666,9 @@ export function ProjectWizard() {
       goal: distinctGoals.size === 1 ? templates[0].goal : "mixed"
     }));
     if (preset.planId) {
-      setBuildingPlan(createSamplePlan(preset.planId));
+      const venueTypeId = sampleVenueTypes[preset.planId];
+      setBuildingPlan({ ...createSamplePlan(preset.planId), venueTypeId });
+      setSelectedSampleId(preset.id);
       setSiteMode("designer");
       setSavedMessage(`نمونه «${preset.title}» روی طراح بارگذاری شد؛ همه اجزا قابل ویرایش‌اند.`);
     }
@@ -506,6 +732,12 @@ export function ProjectWizard() {
       onQueryChange={setVenueQuery}
       onSelect={selectVenue}
       onStart={startFocusedDesign}
+      onOpenProject={openSavedProject}
+      onViewProject={viewSavedProject}
+      galleryToken={galleryToken}
+      samples={samplePresets}
+      selectedSampleId={selectedSampleId}
+      onApplySample={applyPreset}
     />
   );
 
@@ -517,6 +749,28 @@ export function ProjectWizard() {
     <div className="wizard-progress-head">
       <div><span>مرحله {step} از ۶</span><strong>{stepTitles[step - 1]}</strong></div>
       <div className="wizard-persistence">
+        <label className="wizard-project-name">
+          <FolderOpen size={14} aria-hidden="true" />
+          <input
+            type="text"
+            value={projectName}
+            placeholder={defaultProjectName(buildingPlan.venueTypeId)}
+            onChange={(event) => setProjectName(event.target.value)}
+            aria-label="نام پروژه"
+          />
+        </label>
+        <button
+          type="button"
+          className="wizard-project-save"
+          onClick={() => { void persistProject(); }}
+          disabled={saveState === "saving"}
+        >
+          {saveState === "saving"
+            ? <><LoaderCircle className="is-spinning" size={14} />در حال ذخیره…</>
+            : <><Save size={14} />{projectId ? "ذخیره تغییرات" : "ذخیره پروژه"}</>}
+        </button>
+        {saveState === "saved" && <span className="wizard-save-state is-ok"><Check size={13} />ذخیره شد</span>}
+        {saveState === "error" && <span className="wizard-save-state is-error" title={saveError}><CircleAlert size={13} />ذخیره نشد</span>}
         {hasSavedDefaults && <button type="button" onClick={loadDefaults}><Bookmark size={14} />بارگذاری پیش‌فرض</button>}
         <button type="button" onClick={saveDefaults}><Save size={14} />ذخیره پیش‌فرض</button>
         <button type="button" onClick={resetDefaults} aria-label="بازنشانی"><RotateCcw size={14} /></button>
@@ -577,6 +831,60 @@ export function ProjectWizard() {
           <h1>چه دستگاه‌هایی لازم دارید؟</h1>
           <p>به‌جای تقسیم پروژه به ناحیه‌ها، فقط چند نوع دستگاه با تعداد تقریبی تعریف کنید. در مرحله بعد همین‌ها را هرجای نقشه که خواستید قرار می‌دهید.</p>
         </div>
+        <div className="camera-selection-modes" role="radiogroup" aria-label="روش انتخاب دوربین‌ها">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={(brief.cameraSelectionMode ?? "manual") === "manual"}
+            className={(brief.cameraSelectionMode ?? "manual") === "manual" ? "camera-selection-mode selected" : "camera-selection-mode"}
+            onClick={() => setBrief((current) => ({ ...current, cameraSelectionMode: "manual" }))}
+          >
+            <PencilRuler size={21} aria-hidden="true" />
+            <span><strong>انتخاب دستی</strong><small>تعداد، رزولوشن، لنز، بدنه و امکانات هر نوع دوربین را خودتان تنظیم کنید.</small></span>
+            {(brief.cameraSelectionMode ?? "manual") === "manual" ? <Check size={18} aria-hidden="true" /> : null}
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={brief.cameraSelectionMode === "automatic"}
+            className={brief.cameraSelectionMode === "automatic" ? "camera-selection-mode is-smart selected" : "camera-selection-mode is-smart"}
+            onClick={selectCamerasAutomatically}
+          >
+            <Sparkles size={21} aria-hidden="true" />
+            <span><strong>انتخاب هوشمند خودکار</strong><small>فضاها، ابعاد، هدف نظارتی، محیط بیرونی، نور شب و تراکم پیکسلی لازم تحلیل می‌شود.</small></span>
+            {brief.cameraSelectionMode === "automatic" ? <Check size={18} aria-hidden="true" /> : null}
+          </button>
+        </div>
+
+        {brief.cameraSelectionMode === "automatic" ? (
+          <section className="camera-auto-analysis" aria-live="polite">
+            <div className="camera-auto-analysis-head">
+              <div>
+                <span><Sparkles size={16} aria-hidden="true" /> پیشنهاد مهندسی قابل ویرایش</span>
+                <strong>
+                  {cameraSelectionAnalysis
+                    ? `${formatFaCount(cameraSelectionAnalysis.totalCameras)} دوربین در ${formatFaCount(cameraSelectionAnalysis.templates.length)} گروه پیشنهاد شد`
+                    : "برای ساخت پیشنهاد، نقشه و نوع فضاها تحلیل می‌شوند"}
+                </strong>
+              </div>
+              <button type="button" onClick={selectCamerasAutomatically}>
+                <RotateCcw size={15} aria-hidden="true" /> تحلیل دوباره نقشه
+              </button>
+            </div>
+            {cameraSelectionAnalysis ? (
+              <>
+                <div className="camera-auto-metrics">
+                  <span><b>{formatFaCount(cameraSelectionAnalysis.analysedSpaces)}</b> فضای تحلیل‌شده</span>
+                  <span><b>{formatFaCount(cameraSelectionAnalysis.totalCameras)}</b> دوربین پیشنهادی</span>
+                  <span><b>{formatFaCount(cameraSelectionAnalysis.excludedSpaces)}</b> فضای حریم خصوصی</span>
+                </div>
+                <ul>{cameraSelectionAnalysis.notes.map((note) => <li key={note}>{note}</li>)}</ul>
+              </>
+            ) : null}
+            <p>نتیجه زیر نهایی و قفل‌شده نیست؛ می‌توانید هر تعداد، مگاپیکسل یا لنز را قبل از مرحله جانمایی تغییر دهید.</p>
+          </section>
+        ) : null}
+
         <CameraTemplateEditor templates={cameraTemplates} onChange={setTemplates} />
       </div>
     </div>}
@@ -670,7 +978,7 @@ export function ProjectWizard() {
 
     {error && <p className="wizard-error"><CircleAlert size={17} />{error}</p>}
     <div className="wizard-actions">
-      <button className="secondary-action" disabled={step === 1 || loading} onClick={() => setStep((value) => Math.max(1, value - 1))}><ArrowRight size={17} />مرحله قبل</button>
+      <button className="secondary-action" disabled={step === 1 || loading} onClick={goToPreviousStage}><ArrowRight size={17} />مرحله قبل</button>
       {step === 3 && siteMode === "designer" && placement.placed === 0
         ? <span className="wizard-block-note"><CircleAlert size={15} />حداقل یک دوربین را روی نقشه قرار دهید</span>
         : null}
@@ -687,15 +995,87 @@ function ProjectTypeGateway({
   query,
   onQueryChange,
   onSelect,
-  onStart
+  onStart,
+  onOpenProject,
+  onViewProject,
+  galleryToken,
+  samples,
+  selectedSampleId,
+  onApplySample
 }: {
   venues: VenueType[];
-  selectedVenueId: VenueTypeId;
+  selectedVenueId: VenueTypeId | null;
   query: string;
   onQueryChange: (value: string) => void;
   onSelect: (venueId: VenueTypeId) => void;
   onStart: () => void;
+  onOpenProject: (project: ProjectListItem) => void;
+  onViewProject: (project: ProjectListItem) => void;
+  galleryToken: number;
+  samples: WizardPreset[];
+  selectedSampleId: string | null;
+  onApplySample: (preset: WizardPreset) => void;
 }) {
+  /*
+   * Hover previews the composition, clicking commits it.
+   *
+   * Keeping them separate means running the mouse across the grid explains each venue
+   * without changing what the user has chosen — the panel falls back to the selection
+   * the moment the pointer leaves.
+   */
+  const [venuePreview, setVenuePreview] = useState<{
+    venueId: VenueTypeId;
+    left: number;
+    bottom: number;
+  } | null>(null);
+  const venuePreviewTimerRef = useRef<number | null>(null);
+  const venuePointerRef = useRef<{ venueId: VenueTypeId; clientX: number; clientY: number } | null>(null);
+  const venueGroups = useMemo(() => venueCategories
+    .map((category) => ({
+      ...category,
+      venues: category.venueIds
+        .map((venueId) => venues.find((venue) => venue.id === venueId))
+        .filter((venue): venue is VenueType => Boolean(venue))
+    }))
+    .filter((category) => category.venues.length > 0), [venues]);
+
+  const showVenuePreview = (venueId: VenueTypeId, clientX: number, clientY: number) => {
+    const popupWidth = 560;
+    const popupHeight = Math.min(300, window.innerHeight - 32);
+    const edge = 16;
+    const rightSide = clientX + 18;
+    const left = Math.max(edge, Math.min(rightSide, window.innerWidth - popupWidth - edge));
+    // Anchor the bottom edge a little above the pointer. Near the top edge there is not
+    // enough room above it, so the popup is kept inside the viewport instead.
+    const desiredBottom = window.innerHeight - clientY + 14;
+    const bottom = Math.max(edge, Math.min(desiredBottom, window.innerHeight - popupHeight - edge));
+    setVenuePreview({ venueId, left, bottom });
+  };
+
+  const cancelVenuePreview = () => {
+    if (venuePreviewTimerRef.current !== null) {
+      window.clearTimeout(venuePreviewTimerRef.current);
+      venuePreviewTimerRef.current = null;
+    }
+    venuePointerRef.current = null;
+    setVenuePreview(null);
+  };
+
+  const scheduleVenuePreview = (venueId: VenueTypeId, clientX: number, clientY: number) => {
+    cancelVenuePreview();
+    venuePointerRef.current = { venueId, clientX, clientY };
+    venuePreviewTimerRef.current = window.setTimeout(() => {
+      const pointer = venuePointerRef.current;
+      venuePreviewTimerRef.current = null;
+      if (!pointer || pointer.venueId !== venueId) return;
+      showVenuePreview(venueId, pointer.clientX, pointer.clientY);
+    }, 1000);
+  };
+
+  useEffect(() => () => {
+    if (venuePreviewTimerRef.current !== null) window.clearTimeout(venuePreviewTimerRef.current);
+  }, []);
+
   return (
     <section className="project-type-gateway" dir="rtl">
       <header className="project-gateway-header">
@@ -703,6 +1083,11 @@ function ProjectTypeGateway({
           <span><ShieldCheck size={25} aria-hidden="true" /></span>
           <div><strong>طراحی هوشمند پروژه</strong><small>جانمایی دقیق، متناسب با کاربری واقعی محیط</small></div>
         </div>
+        <label className="project-venue-search">
+          <Search size={18} aria-hidden="true" />
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="جست‌وجوی نوع پروژه؛ مثل مدرسه، فروشگاه یا کارخانه" />
+          {query && <button type="button" onClick={() => onQueryChange("")} aria-label="پاک کردن جست‌وجو"><X size={16} /></button>}
+        </label>
         <div className="project-gateway-steps" aria-label="مراحل شروع پروژه">
           <span className="is-active"><b>۱</b>نوع پروژه</span>
           <i aria-hidden="true" />
@@ -713,47 +1098,117 @@ function ProjectTypeGateway({
       </header>
 
       <div className="project-gateway-content">
-        <div className="project-gateway-intro">
-          <p>مرحله اول از سه مرحله</p>
-          <h1>چه فضایی را طراحی می‌کنید؟</h1>
-          <span>نوع پروژه را انتخاب کنید تا تنظیمات، فضاهای پیشنهادی و پیش‌فرض‌های طراحی به‌صورت خودکار آماده شوند.</span>
+        <ProjectGallery
+          onOpen={onOpenProject}
+          onView={onViewProject}
+          reloadToken={galleryToken}
+        />
+
+        <div
+          className="project-venue-grid"
+          aria-live="polite"
+          onMouseLeave={cancelVenuePreview}
+        >
+          <details className="project-samples-panel">
+            <summary>
+              <span className="project-samples-summary-icon"><Sparkles size={18} aria-hidden="true" /></span>
+              <span><strong>نمونه‌های طراحی آماده</strong><small>پلان‌های کامل و قابل ویرایش برای شروع سریع</small></span>
+              <em>{formatFaCount(samples.length)} نمونه</em>
+              <ChevronLeft className="project-samples-chevron" size={18} aria-hidden="true" />
+            </summary>
+            <div className="project-samples-grid">
+              {samples.map((sample, index) => {
+                const venueId = sample.planId ? sampleVenueTypes[sample.planId] : undefined;
+                const venue = venueId ? venueTypes.find((item) => item.id === venueId) : undefined;
+                const selected = sample.id === selectedSampleId;
+                return (
+                  <button
+                    type="button"
+                    key={sample.id}
+                    className={`project-sample-card${selected ? " is-selected" : ""}`}
+                    style={{ "--sample-accent": `hsl(${(205 + index * 47) % 360} 82% 62%)` } as CSSProperties}
+                    onClick={() => onApplySample(sample)}
+                    aria-pressed={selected}
+                  >
+                    <span className="project-sample-card-icon"><SquareStack size={20} aria-hidden="true" /></span>
+                    <span className="project-sample-card-copy">
+                      <strong>{sample.title}</strong>
+                      <small>{sample.description}</small>
+                      <em>{venue?.label ?? "پروژه آماده"} · {formatFaCount(sample.brief.floors ?? 1)} طبقه</em>
+                    </span>
+                    {selected ? <span className="project-sample-card-check"><Check size={13} aria-hidden="true" /></span> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </details>
+
+          {venueGroups.map((category) => (
+            <section key={category.id} className={`project-venue-section category-${category.id}`}>
+              <header className="project-venue-section-head">
+                <strong>{category.label}</strong>
+                <span>{formatFaCount(category.venues.length)} نوع پروژه</span>
+              </header>
+              <div className="project-venue-section-grid">
+                {category.venues.map((venue) => {
+                  const experience = venueExperiences[venue.id];
+                  const Icon = experience.icon;
+                  const selected = venue.id === selectedVenueId;
+                  return (
+                    <button
+                      type="button"
+                      key={venue.id}
+                      className={`project-venue-card venue-${venue.id}${selected ? " is-selected" : ""}`}
+                      style={{ "--venue-accent": venueCardAccents.get(venue.id) } as CSSProperties}
+                      onClick={() => onSelect(venue.id)}
+                      onMouseEnter={(event) => scheduleVenuePreview(venue.id, event.clientX, event.clientY)}
+                      onMouseMove={(event) => {
+                        venuePointerRef.current = { venueId: venue.id, clientX: event.clientX, clientY: event.clientY };
+                        if (venuePreview?.venueId === venue.id) showVenuePreview(venue.id, event.clientX, event.clientY);
+                      }}
+                      onMouseLeave={cancelVenuePreview}
+                      onFocus={(event) => {
+                        cancelVenuePreview();
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        showVenuePreview(venue.id, rect.right, rect.top + rect.height / 2);
+                      }}
+                      onBlur={cancelVenuePreview}
+                      aria-pressed={selected}
+                    >
+                      <span className="project-venue-icon"><Icon size={28} strokeWidth={1.8} aria-hidden="true" /></span>
+                      <span className="project-venue-copy"><strong>{experience.shortLabel}</strong><small>{venue.blurb}</small></span>
+                      {selected && <span className="project-venue-check"><Check size={14} aria-hidden="true" /></span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+          {!venueGroups.length && <div className="project-venue-empty"><Search size={24} /><strong>نوع پروژه‌ای پیدا نشد</strong><span>عبارت جست‌وجو را تغییر دهید.</span></div>}
         </div>
 
-        <label className="project-venue-search">
-          <Search size={18} aria-hidden="true" />
-          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="جست‌وجوی نوع پروژه؛ مثل مدرسه، فروشگاه یا کارخانه" />
-          {query && <button type="button" onClick={() => onQueryChange("")} aria-label="پاک کردن جست‌وجو"><X size={16} /></button>}
-        </label>
-
-        <div className="project-venue-grid" aria-live="polite">
-          {venues.map((venue) => {
-            const experience = venueExperiences[venue.id];
-            const Icon = experience.icon;
-            const selected = venue.id === selectedVenueId;
-            return (
-              <button
-                type="button"
-                key={venue.id}
-                className={`project-venue-card venue-${venue.id}${selected ? " is-selected" : ""}`}
-                onClick={() => onSelect(venue.id)}
-                aria-pressed={selected}
-              >
-                <span className="project-venue-icon"><Icon size={28} strokeWidth={1.8} aria-hidden="true" /></span>
-                <span className="project-venue-copy"><strong>{experience.shortLabel}</strong><small>{venue.blurb}</small></span>
-                {selected && <span className="project-venue-check"><Check size={14} aria-hidden="true" /></span>}
-              </button>
-            );
-          })}
-        </div>
-
-        {!venues.length && <div className="project-venue-empty"><Search size={24} /><strong>نوع پروژه‌ای پیدا نشد</strong><span>عبارت دیگری را امتحان کنید.</span></div>}
+        {venuePreview && (
+          <aside
+            className="project-venue-popover"
+            style={{ left: venuePreview.left, bottom: venuePreview.bottom }}
+            aria-live="polite"
+          >
+            <VenueComposition venueId={venuePreview.venueId} />
+          </aside>
+        )}
       </div>
 
       <footer className="project-gateway-footer">
         <div className="project-gateway-help"><Info size={17} /><span>پس از ورود به طراحی، صفحه قفل می‌شود تا تمام تمرکز روی نقشه باشد.</span></div>
         <div>
           <button type="button" className="project-gateway-cancel" onClick={() => window.history.back()}>لغو</button>
-          <button type="button" className="project-gateway-start" onClick={onStart}>شروع طراحی<Rocket size={18} /><ArrowLeft size={17} /></button>
+          <button
+            type="button"
+            className="project-gateway-start"
+            onClick={onStart}
+            disabled={!selectedVenueId}
+            title={selectedVenueId ? undefined : "ابتدا نوع پروژه را انتخاب کنید"}
+          >شروع طراحی<Rocket size={18} /><ArrowLeft size={17} /></button>
         </div>
       </footer>
     </section>

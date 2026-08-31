@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>طرح ذخیره و مدیریت پروژه‌های کاربر</title>
+<style>
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("../public/fonts/Vazirmatn-VariableFont_wght.ttf") format("truetype");
+  font-weight: 100 900; font-display: block;
+}
+@page { size: A4; margin: 8mm 8mm 8mm; }
+:root {
+  --ink:#16222c; --muted:#55697a; --faint:#8ba0af; --line:#d6e3ec;
+  --accent:#0f5f99; --accent-soft:#eaf4fb;
+  --amber:#9a6407; --amber-soft:#fdf6e6;
+  --danger:#a32b20; --danger-soft:#fdf0ee;
+  --green:#146b47; --green-soft:#e8f6f0;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Vazirmatn,Tahoma,sans-serif;font-size:8.6pt;line-height:1.6;color:var(--ink)}
+
+.masthead{display:flex;align-items:flex-end;justify-content:space-between;gap:5mm;
+  padding-bottom:1.8mm;margin-bottom:2.5mm;border-bottom:2.2px solid var(--accent)}
+.masthead h1{margin:0;font-size:13pt;font-weight:900;line-height:1.2}
+.masthead .eyebrow{color:var(--accent);font-size:7.4pt;font-weight:800;margin-bottom:.5mm}
+.masthead .sub{color:var(--muted);font-size:7.4pt;max-width:112mm;margin:.8mm 0 0}
+.masthead .stats{text-align:left;color:var(--faint);font-size:6.6pt;white-space:nowrap;line-height:1.6}
+
+h2{margin:4mm 0 1.8mm;padding-bottom:.9mm;font-size:11.8pt;font-weight:900;color:var(--accent);
+  border-bottom:1.3px solid var(--accent);break-after:avoid}
+h3{margin:3mm 0 1.1mm;font-size:9.4pt;font-weight:800;break-after:avoid}
+h4{margin:2.4mm 0 1mm;font-size:8.7pt;font-weight:800;color:var(--muted);break-after:avoid}
+p{margin:0 0 1.1mm}
+ul,ol{margin:0 0 1.4mm;padding-inline-start:4mm}
+li{margin-bottom:.3mm}
+strong{font-weight:800}
+.lead{color:var(--muted);font-size:8pt;margin-bottom:.9mm}
+
+table{width:100%;border-collapse:collapse;margin:1mm 0 1.8mm;font-size:7.8pt;break-inside:avoid}
+thead{background:var(--accent);color:#fff}
+th{padding:1.1mm 1.5mm;text-align:right;font-weight:700;font-size:7.7pt}
+td{padding:1mm 1.5mm;border-bottom:.5px solid var(--line);vertical-align:top;line-height:1.45}
+tbody tr:nth-child(even){background:#f7fafd}
+td.num,th.num{direction:ltr;text-align:center;white-space:nowrap;font-weight:700}
+.term{background:#eef4f8;color:var(--accent);padding:.1mm .9mm;border-radius:.8mm;font-weight:800;white-space:nowrap}
+
+.box{padding:1.3mm 1.9mm;border-radius:1.2mm;margin:1mm 0 1.6mm;break-inside:avoid;
+  border-right:2.2px solid;font-size:7.9pt;line-height:1.55}
+.box p:last-child{margin-bottom:0}
+.box b{font-weight:800}
+.tip{background:var(--accent-soft);border-color:var(--accent)} .tip b{color:var(--accent)}
+.warn{background:var(--amber-soft);border-color:var(--amber)} .warn b{color:var(--amber)}
+.crit{background:var(--danger-soft);border-color:var(--danger)} .crit b{color:var(--danger)}
+.ok{background:var(--green-soft);border-color:var(--green)} .ok b{color:var(--green)}
+
+.p1,.p2,.p3{padding:.1mm 1.2mm;border-radius:8px;font-size:6.9pt;font-weight:800;white-space:nowrap}
+.p1{background:#fde8e5;color:var(--danger)}
+.p2{background:#fdf1dc;color:var(--amber)}
+.p3{background:#e7f1f8;color:var(--accent)}
+.no{color:var(--danger);font-weight:800;font-size:6.9pt}
+
+.two-col{display:flex;gap:5mm;align-items:flex-start}
+.two-col>div{flex:1 1 0;min-width:0}
+.venues{display:flex;gap:4.5mm;align-items:flex-start}
+.vcol{flex:1 1 0;min-width:0}
+.venue{break-inside:avoid;margin-bottom:2mm}
+.venue h3{margin:0 0 .9mm;font-size:8.4pt}
+.venue table{font-size:7pt;margin:0}
+.venue th,.venue td{padding:.7mm 1.1mm}
+
+.phases{display:flex;flex-wrap:wrap;gap:1.5mm;align-items:flex-start}
+.phase{flex:1 1 30%;min-width:0;border:.8px solid var(--line);border-radius:1.5mm;padding:1.5mm 2mm;break-inside:avoid}
+.phase h4{margin:0 0 .8mm;color:var(--accent);font-size:8.4pt}
+.phase .meta{color:var(--faint);font-size:6.9pt;float:left}
+
+.q{border-right:2.2px solid var(--amber);background:var(--amber-soft);padding:1.3mm 1.9mm;
+  margin-bottom:1.3mm;border-radius:1.2mm;break-inside:avoid;font-size:7.9pt;line-height:1.55}
+.q b{color:var(--amber);display:block;margin-bottom:.3mm}
+
+.footer-note{margin-top:2.5mm;padding-top:1.2mm;border-top:.5px solid var(--line);
+  color:var(--faint);font-size:6.9pt;line-height:1.55}
+</style>
+
+</head>
+<body>
+<div class="masthead">
+  <div>
+    <div class="eyebrow">همیار دوربین · طرح فنی برای تأیید</div>
+    <h1>ذخیره، بازیابی و مدیریت پروژه‌های کاربر</h1>
+    <p class="sub">پایگاه داده کامل طرح، گالری پروژه‌های پیشین در گام اول، حالت مشاهده و ویرایش، و گسترش فهرست کاربری‌ها به ۳۹ نوع</p>
+  </div>
+  <div class="stats">نسخه ۱٫۰ — پیشنهاد<br />۶ فاز اجرایی<br />نیازمند تأیید شما</div>
+</div>
+
+<!-- ═══ 1 ═══ -->
+<section>
+<h2>۱. خلاصه و دامنه</h2>
+<div class="two-col">
+<div>
+<p>
+امروز هر بار که صفحه بسته می‌شود، تمام کار طراحی از بین می‌رود. هیچ پروژه‌ای ذخیره نمی‌شود،
+هیچ فهرستی از کارهای قبلی وجود ندارد و هیچ راهی برای بازکردن دوباره یک طرح نیست.
+این طرح چهار چیز اضافه می‌کند:
+</p>
+<ol>
+  <li><strong>ذخیره کامل پروژه</strong> در پایگاه داده، به تفکیک کاربر — شامل هندسه، فضاها، دوربین‌ها، قیدها و نتیجه محاسبه.</li>
+  <li><strong>گالری پروژه‌های پیشین</strong> در همان گام اول، پیش از انتخاب نوع پروژه.</li>
+  <li><strong>حالت مشاهده و حالت ویرایش</strong>؛ ویرایش جایگزین همان پروژه می‌شود، نه یک کپی تازه.</li>
+  <li><strong>گسترش فهرست کاربری‌ها</strong> از ۱۴ به ۳۹ نوع، بر پایه فهرستی که دادید.</li>
+</ol>
+
+<div class="box crit"><b>مهم‌ترین ریسک فنی:</b> تصویر پس‌زمینه نقشه به‌صورت Base64 داخل خود طرح ذخیره می‌شود. یک پلان ۲ مگابایتی به حدود ۲٫۷ مگابایت متن تبدیل می‌شود و با چند طبقه، حجم یک پروژه از ۱۰ مگابایت هم می‌گذرد. بخش ۵ راه‌حل را توضیح می‌دهد.</div>
+</div>
+<div>
+<h4>وضعیت فعلی — آنچه هست و آنچه نیست</h4>
+<table>
+  <thead><tr><th style="width:34mm">موضوع</th><th>وضعیت</th></tr></thead>
+  <tbody>
+    <tr><td>گام انتخاب کاربری</td><td><b>وجود دارد</b> — کامپوننت <span class="term">ProjectTypeGateway</span> با جست‌وجو و کارت‌های کاربری</td></tr>
+    <tr><td>جدول نسخه‌های محاسبه</td><td><b>وجود دارد ولی مرده است</b> — <span class="term">project_calculation_versions</span> ساخته شده اما هیچ‌جای برنامه آن را صدا نمی‌زند</td></tr>
+    <tr><td>ذخیره طرح</td><td>وجود ندارد</td></tr>
+    <tr><td>فهرست پروژه‌ها</td><td>وجود ندارد</td></tr>
+    <tr><td>مشاهده و ویرایش</td><td>وجود ندارد</td></tr>
+    <tr><td>ذخیره پیش‌فرض‌ها</td><td>فقط در حافظه مرورگر، نه پایگاه داده و نه به تفکیک کاربر</td></tr>
+    <tr><td>احراز هویت</td><td>وجود دارد — نشست کوکی‌محور با شناسه کاربر</td></tr>
+    <tr><td>پایگاه داده</td><td>PostgreSQL، جدول‌ها با <span class="term">CREATE TABLE IF NOT EXISTS</span> در زمان اجرا ساخته می‌شوند</td></tr>
+  </tbody>
+</table>
+<div class="box warn"><b>درباره جدول موجود:</b> <span class="term">project_calculation_versions</span> برای «نسخه‌های محاسبه» طراحی شده؛ فقط افزودنی است، نام ندارد، به‌روزرسانی و حذف ندارد و برای طرح قابل ویرایش ساخته نشده. جایگزین می‌شود، نه گسترش.</div>
+</div>
+</div>
+</section>
+
+<!-- ═══ 2 ═══ -->
+<section>
+<h2>۲. مدل داده</h2>
+<p class="lead">سه جدول تازه. کلید همه‌چیز، جدا نگه‌داشتن تصویرهای سنگین از ردیف اصلی است تا فهرست‌کردن پروژه‌ها سریع بماند.</p>
+
+<div class="two-col">
+<div>
+<h4>۲٫۱ جدول <span class="term">projects</span></h4>
+<table>
+  <thead><tr><th style="width:32mm">ستون</th><th>کاربرد</th></tr></thead>
+  <tbody>
+    <tr><td>id</td><td>شناسه یکتا (UUID)</td></tr>
+    <tr><td>user_id</td><td>مالک پروژه؛ هر کاربر فقط پروژه‌های خودش را می‌بیند</td></tr>
+    <tr><td>name</td><td>نام پروژه، قابل ویرایش</td></tr>
+    <tr><td>venue_type_id</td><td>کاربری انتخاب‌شده</td></tr>
+    <tr><td>status</td><td>پیش‌نویس یا تکمیل‌شده</td></tr>
+    <tr><td>brief</td><td>اطلاعات پروژه: متراژ، طبقات، روز آرشیو، بودجه و…</td></tr>
+    <tr><td>plan</td><td><b>قلب پروژه</b> — دیوار، در، پنجره، مانع، فضا، دوربین، ناحیه اجباری، طبقات</td></tr>
+    <tr><td>templates</td><td>انواع دوربین تعریف‌شده در پروژه</td></tr>
+    <tr><td>quantities</td><td>تعداد اقلام انتخاب‌شده</td></tr>
+    <tr><td>result</td><td>آخرین خروجی محاسبه (می‌تواند خالی باشد)</td></tr>
+    <tr><td>summary</td><td>خلاصه از پیش محاسبه‌شده برای فهرست: مساحت، تعداد طبقه، تعداد دوربین، درصد پوشش</td></tr>
+    <tr><td>created_at / updated_at</td><td>زمان ساخت و آخرین ویرایش</td></tr>
+  </tbody>
+</table>
+<div class="box tip"><b>چرا ستون <span class="term">summary</span>؟</b> بدون آن، نمایش فهرست ده پروژه یعنی خواندن و باز کردن ده طرح کامل چندمگابایتی فقط برای شمردن دوربین‌ها. خلاصه هنگام ذخیره یک بار حساب و کنار پروژه نگه داشته می‌شود.</div>
+</div>
+<div>
+<h4>۲٫۲ جدول <span class="term">project_assets</span></h4>
+<table>
+  <thead><tr><th style="width:30mm">ستون</th><th>کاربرد</th></tr></thead>
+  <tbody>
+    <tr><td>id</td><td>شناسه فایل</td></tr>
+    <tr><td>project_id</td><td>با حذف پروژه، فایل‌ها هم حذف می‌شوند</td></tr>
+    <tr><td>floor_id</td><td>تصویر پس‌زمینه به کدام طبقه تعلق دارد</td></tr>
+    <tr><td>mime / width_px / height_px</td><td>نوع و ابعاد اصلی تصویر</td></tr>
+    <tr><td>bytes</td><td>خود فایل به‌صورت باینری، نه Base64</td></tr>
+  </tbody>
+</table>
+<p class="lead">
+تصویر از داخل طرح بیرون کشیده و در این جدول ذخیره می‌شود؛ در طرح فقط شناسه فایل می‌ماند.
+ذخیره باینری در برابر Base64 حدود ۲۵٪ حجم کمتر دارد و مهم‌تر از آن، ردیف اصلی پروژه سبک می‌ماند.
+</p>
+
+<h4>۲٫۳ جدول <span class="term">project_revisions</span> <span class="p3">اختیاری</span></h4>
+<p class="lead">
+شما خواستید ویرایش جایگزین نسخه قبلی شود و همین کار انجام می‌شود. اما نگه‌داشتن پنج نسخه آخر
+به‌صورت خودکار، بیمه ارزانی است در برابر خطای کاربر: اگر کسی نیم‌ساعت کار را با یک اشتباه از بین ببرد،
+بازگشت ممکن است. اگر نمی‌خواهید، این جدول حذف می‌شود.
+</p>
+
+<div class="box ok"><b>جداسازی کاربران:</b> همه پرس‌وجوها با <span class="term">user_id</span> از نشست فیلتر می‌شوند، نه با شناسه‌ای که از سمت مرورگر می‌آید. بدون این، هر کاربر می‌توانست با تغییر شناسه در آدرس، پروژه دیگری را باز کند.</div>
+
+<h4>۲٫۴ اثر بر ساختار فعلی</h4>
+<table>
+  <thead><tr><th style="width:30mm">جای تغییر</th><th>تغییر</th></tr></thead>
+  <tbody>
+    <tr><td>ویزارد</td><td>شناسه پروژه فعال و وضعیت ذخیره را نگه می‌دارد</td></tr>
+    <tr><td>تصویر پس‌زمینه</td><td>به‌جای Base64، شناسه فایل نگه داشته می‌شود</td></tr>
+    <tr><td>جدول قدیمی نسخه‌ها</td><td>حذف یا رها؛ هیچ‌جا استفاده نمی‌شود</td></tr>
+  </tbody>
+</table>
+</div>
+</div>
+</section>
+
+<!-- ═══ 3 ═══ -->
+<section>
+<h2>۳. سرویس‌ها</h2>
+<p class="lead">شش مسیر تازه. همه پشت احراز هویت‌اند و همه با شناسه کاربرِ نشست فیلتر می‌شوند.</p>
+<table>
+  <thead><tr><th style="width:16mm">روش</th><th style="width:38mm">مسیر</th><th>کار</th></tr></thead>
+  <tbody>
+    <tr><td class="num">GET</td><td>/api/projects</td><td>فهرست سبک برای گالری: نام، کاربری، خلاصه، زمان ویرایش. طرح کامل خوانده نمی‌شود.</td></tr>
+    <tr><td class="num">POST</td><td>/api/projects</td><td>ساخت پروژه تازه و برگرداندن شناسه آن</td></tr>
+    <tr><td class="num">GET</td><td>/api/projects/[id]</td><td>بارگذاری کامل برای مشاهده یا ویرایش</td></tr>
+    <tr><td class="num">PUT</td><td>/api/projects/[id]</td><td><b>جایگزینی</b> — همان خواسته شما؛ ویرایش روی همان پروژه می‌نشیند</td></tr>
+    <tr><td class="num">DELETE</td><td>/api/projects/[id]</td><td>حذف پروژه و فایل‌هایش</td></tr>
+    <tr><td class="num">POST</td><td>/api/projects/[id]/duplicate</td><td>ساخت کپی برای شروع یک پروژه مشابه بدون دست‌زدن به اصل</td></tr>
+  </tbody>
+</table>
+
+<div class="two-col">
+<div>
+<div class="box warn"><b>ذخیره خودکار:</b> پیشنهاد می‌کنم ذخیره در پس‌زمینه هر چند ثانیه پس از توقف کاربر انجام شود، نه فقط با فشردن دکمه. طراحی نقشه کاری است که ساعت‌ها طول می‌کشد و از دست رفتنش گران است. دکمه ذخیره دستی هم می‌ماند.</div>
+</div>
+<div>
+<div class="box tip"><b>تعارض ویرایش هم‌زمان:</b> اگر یک پروژه در دو زبانه باز باشد، آخرین ذخیره بقیه را پاک می‌کند. با نگه‌داشتن شماره نسخه در هر ذخیره، سرویس می‌تواند تشخیص دهد و هشدار بدهد به‌جای آنکه بی‌صدا کار را از بین ببرد.</div>
+</div>
+</div>
+</section>
+
+<!-- ═══ 4 ═══ -->
+<section>
+<h2>۴. رابط کاربری</h2>
+
+<div class="two-col">
+<div>
+<h4>۴٫۱ گالری در گام اول</h4>
+<p>
+بالای همان صفحه انتخاب کاربری، بخش تازه‌ای به نام «پروژه‌های من» اضافه می‌شود؛
+<strong>پیش از</strong> کارت‌های کاربری، چون کاربری که برمی‌گردد معمولاً می‌خواهد کار قبلی را ادامه دهد نه پروژه تازه بسازد.
+</p>
+<ul>
+  <li>هر کارت: نام، کاربری، تعداد دوربین، مساحت، تاریخ آخرین ویرایش و تصویر کوچک نقشه.</li>
+  <li>سه کنش روی کارت: <strong>مشاهده</strong>، <strong>ویرایش</strong>، <strong>کپی</strong>؛ حذف با تأیید.</li>
+  <li>فهرست <strong>اسکرول‌شونده</strong> با ارتفاع ثابت، تا کارت‌های کاربری از صفحه بیرون نروند.</li>
+  <li>جست‌وجو و مرتب‌سازی بر اساس تاریخ یا نام.</li>
+  <li>برای کاربر تازه که هیچ پروژه‌ای ندارد، این بخش اصلاً نمایش داده نمی‌شود.</li>
+</ul>
+
+<h4>۴٫۲ فهرست کاربری‌ها</h4>
+<ul>
+  <li>با ۳۹ کاربری، شبکه کارت‌ها هم <strong>اسکرول‌شونده</strong> می‌شود.</li>
+  <li>گروه‌بندی موضوعی: تجاری، صنعتی، حمل‌ونقل، انرژی و زیرساخت، عمومی و شهری.</li>
+  <li><strong>در حالت پیش‌فرض هیچ ترکیبی نمایش داده نمی‌شود.</strong></li>
+  <li>با انتخاب هر کاربری، زیر آن پنل «این پروژه از چه بخش‌هایی تشکیل شده» باز می‌شود: فهرست فضاهای آن کاربری با درجه اولویت و هدف نظارتی هرکدام.</li>
+</ul>
+<div class="box tip"><b>چرا این پنل ارزش دارد:</b> کاربر پیش از شروع می‌بیند طراحی چه چیزهایی را از او خواهد خواست. همان فهرستی است که بعداً چک‌لیست اولویت‌ها می‌شود، فقط زودتر نشان داده می‌شود.</div>
+</div>
+<div>
+<h4>۴٫۳ حالت مشاهده</h4>
+<p>صفحه‌ای فقط‌خواندنی که کل پروژه را بدون خطر تغییر تصادفی نشان می‌دهد:</p>
+<ul>
+  <li>نقشه با تمام فضاها، برچسب‌ها و دوربین‌ها؛ بزرگ‌نمایی و چرخش آزاد، ولی بدون ابزار ویرایش.</li>
+  <li>جدول فضاها: نام، نوع، مساحت، تعداد دوربین، وضعیت پوشش.</li>
+  <li>جدول دوربین‌ها: بدنه، لنز، ارتفاع، هدف، طبقه.</li>
+  <li>چک‌لیست اولویت‌ها با وضعیت هر مورد.</li>
+  <li>خلاصه محاسبه در صورت وجود.</li>
+  <li>دکمه‌های «ویرایش این پروژه» و «کپی».</li>
+</ul>
+
+<h4>۴٫۴ حالت ویرایش</h4>
+<ul>
+  <li>همان ویزارد فعلی، ولی با پروژه بارگذاری‌شده و شناسه آن در دست.</li>
+  <li>نوار بالای صفحه: نام پروژه (قابل ویرایش درجا)، وضعیت ذخیره، دکمه ذخیره.</li>
+  <li>ذخیره روی <strong>همان</strong> پروژه می‌نشیند — نه ساخت رکورد تازه.</li>
+  <li>هشدار هنگام خروج با تغییرات ذخیره‌نشده.</li>
+</ul>
+
+<div class="box crit"><b>یک تصمیم که باید بگیرید:</b> اگر کاربر پروژه‌ای را ویرایش کند و کاربری‌اش را عوض کند، فضاهایی که نوعشان به کاربری قبلی تعلق داشت بی‌اعتبار می‌شوند. پیشنهاد من: نوع فضاها حفظ شود و فقط در چک‌لیست علامت «خارج از کاربری فعلی» بخورند — بی‌صدا پاک‌کردن کار کاربر بدترین گزینه است.</div>
+</div>
+</div>
+</section>
+
+<!-- ═══ 5 ═══ -->
+<section>
+<h2>۵. مسئله تصویر نقشه</h2>
+<div class="two-col">
+<div>
+<p>
+کاربر می‌تواند پلان ساختمان را روی نقشه بارگذاری کند. این تصویر امروز به‌صورت
+<span class="term">data:image/...;base64</span> مستقیم داخل داده طرح می‌نشیند. برای حالت فعلی که
+چیزی ذخیره نمی‌شود مشکلی نداشت؛ با ذخیره در پایگاه داده تبدیل به مسئله می‌شود.
+</p>
+<table>
+  <thead><tr><th style="width:34mm">وضعیت</th><th class="num">حجم در پایگاه داده</th></tr></thead>
+  <tbody>
+    <tr><td>پلان ۲ مگابایتی، یک طبقه</td><td class="num">~۲٫۷ MB</td></tr>
+    <tr><td>چهار طبقه با پلان</td><td class="num">~۱۱ MB</td></tr>
+    <tr><td>فهرست ۱۰ پروژه بدون جداسازی</td><td class="num">~۱۱۰ MB خوانده‌شده فقط برای نمایش فهرست</td></tr>
+  </tbody>
+</table>
+</div>
+<div>
+<h4>راه‌حل</h4>
+<ol>
+  <li>هنگام ذخیره، تصویر از طرح جدا و در جدول <span class="term">project_assets</span> به‌صورت باینری نوشته می‌شود.</li>
+  <li>در طرح فقط شناسه فایل می‌ماند.</li>
+  <li>مسیر <span class="term">/api/projects/[id]/assets/[assetId]</span> تصویر را با هدر کش بلندمدت تحویل می‌دهد.</li>
+  <li>تصویر کوچک پیش‌نمایش هنگام ذخیره ساخته می‌شود تا گالری سریع بماند.</li>
+  <li>سقف حجم برای هر تصویر با پیام روشن، به‌جای خطای مبهم پایگاه داده.</li>
+</ol>
+<div class="box ok"><b>نتیجه:</b> ردیف پروژه چند ده کیلوبایت می‌ماند، فهرست‌گرفتن سریع است و تصویرها فقط وقتی خوانده می‌شوند که نقشه واقعاً باز شود.</div>
+</div>
+</div>
+</section>
+
+<!-- ═══ 6 ═══ -->
+<section>
+<h2>۶. گسترش کاربری‌ها — از ۱۴ به ۳۹</h2>
+<p class="lead">
+۱۴ کاربری فعلی حفظ می‌شوند. ۱۹ مورد از فهرست شما که معادل نداشتند اضافه می‌شوند، به‌همراه ۶ مورد
+که در هیچ‌کدام از دو فهرست نبودند ولی در همین صنعت رایج‌اند. هر کاربری تازه به فضاهای خودش،
+اولویت‌ها، هدف نظارتی و پیش‌فرض‌های متراژ و آرشیو نیاز دارد.
+</p>
+
+<h4>۶٫۱ کاربری‌های فعلی که فهرست شما را پوشش می‌دهند</h4>
+<table>
+  <thead><tr><th style="width:44mm">مورد فهرست شما</th><th>کاربری موجود</th></tr></thead>
+  <tbody>
+    <tr><td>دفتر کار</td><td>دفتر و ساختمان اداری</td></tr>
+    <tr><td>فروشگاه‌ها</td><td>مغازه و فروشگاه کوچک</td></tr>
+    <tr><td>سوپرمارکت</td><td>سوپرمارکت و هایپرمارکت</td></tr>
+    <tr><td>کارخانه‌ها</td><td>کارخانه، انبار، سوله</td></tr>
+    <tr><td>ساختمان</td><td>مجتمع مسکونی و برج</td></tr>
+    <tr><td>کلاس</td><td>مدرسه و مهدکودک (کلاس یکی از فضاهای آن است)</td></tr>
+    <tr><td>هتل‌ها / هتلداری</td><td>هتل و اقامتگاه</td></tr>
+    <tr><td>پمپ بنزین</td><td>پمپ بنزین و جایگاه سوخت</td></tr>
+    <tr><td>پارکینگ</td><td>پارکینگ عمومی</td></tr>
+  </tbody>
+</table>
+
+<h4>۶٫۲ نوزده کاربری تازه از فهرست شما</h4>
+<table>
+  <thead><tr><th style="width:30mm">کاربری</th><th>فضاهای اصلی پیشنهادی</th></tr></thead>
+  <tbody>
+    <tr><td>جاده شهری</td><td>تقاطع، چراغ راهنما، گذرگاه عابر، مسیر تردد، دوربین پلاک‌خوان</td></tr>
+    <tr><td>بزرگراه</td><td>مسیر اصلی، ورودی و خروجی رمپ، شانه راه، تابلو متغیر، پایش سرعت</td></tr>
+    <tr><td>کارگاه ساختمانی</td><td>گیت ورود، انبار مصالح، دپوی تجهیزات، جرثقیل و بالابر، پیرامون سایت، دفتر کارگاه</td></tr>
+    <tr><td>سالن کنفرانس</td><td>ورودی سالن، صحنه و تریبون، فضای نشیمن، پذیرش و ثبت‌نام، اتاق کنترل صدا و تصویر</td></tr>
+    <tr><td>نمایشگاه خودرو</td><td>سالن نمایش، محل تحویل خودرو، دفتر فروش، محوطه پارک، انبار قطعات</td></tr>
+    <tr><td>ایستگاه اتوبوس</td><td>سکوی سوارشدن، باجه بلیت، سرپناه انتظار، مسیر ورود اتوبوس، پیرامون ایستگاه</td></tr>
+    <tr><td>ناوگان اتوبوس</td><td>داخل کابین، درِ ورود مسافر، دید راننده، دید جلو و عقب، محل توقف ناوگان</td></tr>
+    <tr><td>مرکز مانیتورینگ</td><td>دیوار نمایش، میز اپراتور، اتاق سرور، درِ ورود کنترل‌شده، برق اضطراری</td></tr>
+    <tr><td>پست برق</td><td>ترانسفورماتور، تابلو فشار قوی، گیت ورود، پیرامون محوطه، اتاق رله</td></tr>
+    <tr><td>انبار مستقل</td><td>بارانداز، راهروی قفسه، دفتر انبار، گیت خودرو، محوطه پیرامونی</td></tr>
+    <tr><td>مرکز خرید</td><td>ورودی اصلی، راهروی مشترک، پلکان برقی، فودکورت، پارکینگ طبقاتی، اتاق کنترل</td></tr>
+    <tr><td>بازرسی خط لوله</td><td>ایستگاه شیر، مسیر خط لوله، محل نشتی‌سنجی، حصار حریم، ایستگاه پمپاژ</td></tr>
+    <tr><td>خطوط انتقال برق</td><td>پایه دکل، حریم خط، پست تبدیل، مسیر دسترسی سرویس</td></tr>
+    <tr><td>میدان نفتی خشکی</td><td>سرچاه، مخازن ذخیره، مشعل، اتاق کنترل، گیت ورود، پیرامون</td></tr>
+    <tr><td>سکوی نفتی دریایی</td><td>عرشه اصلی، هلی‌پد، اتاق کنترل، محل قایق نجات، مسیر لوله دریایی</td></tr>
+    <tr><td>مزرعه خورشیدی</td><td>آرایه پنل، اینورتر، پست تبدیل، حصار پیرامونی، گیت ورود، اتاق کنترل</td></tr>
+    <tr><td>نیروگاه برق‌آبی</td><td>سد و دریچه، توربین‌خانه، اتاق کنترل، کانال آب، مسیر دسترسی، پیرامون</td></tr>
+    <tr><td>شهر ایمن</td><td>تقاطع شهری، میدان، پارک عمومی، ایستگاه حمل‌ونقل، محل تجمع، مرکز پایش شهری</td></tr>
+    <tr><td>مجتمع ورزشی</td><td>زمین بازی، جایگاه تماشاگر، ورودی و گیت بازرسی، رختکن (ممنوع)، پارکینگ، باجه بلیت</td></tr>
+  </tbody>
+</table>
+
+<h4>۶٫۳ شش کاربری پیشنهادی خارج از فهرست</h4>
+<table>
+  <thead><tr><th style="width:30mm">کاربری</th><th>چرا</th></tr></thead>
+  <tbody>
+    <tr><td>مرکز داده</td><td>راهروی رک، ورودی کنترل‌شده، اتاق برق و UPS — نیازهای بسیار متفاوت با دفتر اداری</td></tr>
+    <tr><td>فرودگاه و ترمینال</td><td>گیت بازرسی، تحویل بار، سالن ترانزیت، باند و اپرون</td></tr>
+    <tr><td>بندر و اسکله</td><td>محوطه کانتینر، گیت خودرو، جرثقیل، خط ساحلی</td></tr>
+    <tr><td>ایستگاه راه‌آهن و مترو</td><td>سکو، لبه خطر، باجه بلیت، پله برقی، تونل</td></tr>
+    <tr><td>معدن</td><td>دهانه معدن، مسیر ماشین‌آلات سنگین، دپوی مواد منفجره، باسکول</td></tr>
+    <tr><td>تصفیه‌خانه آب</td><td>حوضچه، اتاق شیمیایی، ایستگاه پمپاژ، پیرامون</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn"><b>حجم واقعی این بخش:</b> ۲۵ کاربری تازه × حدود ۶ فضا برای هرکدام یعنی نزدیک ۱۵۰ تعریف جدید، و هر تعریف به محیط، اولویت، هدف کیفی و قابلیت لازم نیاز دارد. این بزرگ‌ترین بخش کار از نظر حجم است، هرچند از نظر فنی ساده‌ترین. برای هر کاربری تازه یک آیکون و پیش‌فرض‌های متراژ و آرشیو هم لازم است.</div>
+</section>
+
+<!-- ═══ 7 ═══ -->
+<section>
+<h2>۷. فازبندی اجرا</h2>
+<div class="phases">
+  <div class="phase"><h4>فاز ۱ — پایگاه داده و سرویس‌ها <span class="meta">پایه</span></h4>
+  <p>سه جدول، شش مسیر، جداسازی کاربران، جداسازی تصویر از طرح. بدون تغییر ظاهری.</p></div>
+
+  <div class="phase"><h4>فاز ۲ — ذخیره و بارگذاری <span class="meta">هسته</span></h4>
+  <p>دکمه ذخیره، ذخیره خودکار، بارگذاری پروژه در ویزارد، نگه‌داشتن شناسه پروژه فعال.</p></div>
+
+  <div class="phase"><h4>فاز ۳ — گالری پروژه‌ها <span class="meta">ارزش اصلی</span></h4>
+  <p>بخش «پروژه‌های من» در گام اول، اسکرول، جست‌وجو، کارت با تصویر کوچک، کنش‌های مشاهده و ویرایش و کپی و حذف.</p></div>
+
+  <div class="phase"><h4>فاز ۴ — حالت مشاهده <span class="meta">تجربه کاربری</span></h4>
+  <p>صفحه فقط‌خواندنی با نقشه، جدول فضاها و دوربین‌ها، چک‌لیست و خلاصه محاسبه.</p></div>
+
+  <div class="phase"><h4>فاز ۵ — گسترش کاربری‌ها <span class="meta">حجیم</span></h4>
+  <p>۲۵ کاربری تازه با فضاها، آیکون‌ها و پیش‌فرض‌ها. گروه‌بندی و اسکرول شبکه کارت‌ها.</p></div>
+
+  <div class="phase"><h4>فاز ۶ — پنل ترکیب پروژه <span class="meta">تکمیلی</span></h4>
+  <p>نمایش فضاهای هر کاربری هنگام انتخاب آن، با اولویت و هدف نظارتی.</p></div>
+</div>
+<div class="box ok"><b>ترتیب پیشنهادی:</b> فازهای ۱ تا ۳ با هم یک محصول کامل‌اند — از آن نقطه پروژه‌ها واقعاً ذخیره و بازیابی می‌شوند. فاز ۵ مستقل است و می‌تواند موازی یا بعداً انجام شود.</div>
+</section>
+
+<!-- ═══ 8 ═══ -->
+<section>
+<h2>۸. تصمیم‌هایی که باید بگیرید</h2>
+<div class="two-col">
+<div class="q"><b>۱. ذخیره خودکار یا فقط دستی؟</b>
+پیشنهاد من هر دو است. ذخیره خودکار از دست‌رفتن ساعت‌ها کار جلوگیری می‌کند، ولی یعنی هر تغییری بلافاصله ماندگار می‌شود — از جمله تغییری که کاربر پشیمان شده.</div>
+
+<div class="q"><b>۲. تاریخچه نسخه نگه داشته شود؟</b>
+ویرایش طبق خواسته شما جایگزین می‌شود. نگه‌داشتن پنج نسخه آخر امکان بازگشت می‌دهد ولی جدول و پیچیدگی اضافه می‌کند.</div>
+
+<div class="q"><b>۳. سقف تعداد پروژه هر کاربر؟</b>
+بدون سقف، یک حساب می‌تواند صدها پروژه چندمگابایتی بسازد. آیا محدودیتی بگذاریم، و آیا به نوع اشتراک کاربر وابسته باشد؟</div>
+
+<div class="q"><b>۴. اشتراک‌گذاری پروژه؟</b>
+فعلاً هر پروژه فقط برای مالکش است. آیا لینک فقط‌خواندنی برای نشان‌دادن به مشتری لازم دارید؟ اگر بله، بهتر است از ابتدا در مدل داده دیده شود.</div>
+
+<div class="q"><b>۵. با تغییر کاربری یک پروژه، فضاها چه شوند؟</b>
+پیشنهاد من: حفظ شوند و فقط علامت «خارج از کاربری فعلی» بخورند. گزینه دیگر پاک‌کردن آن‌هاست که کار کاربر را از بین می‌برد.</div>
+
+<div class="q"><b>۶. سقف حجم تصویر پلان؟</b>
+پیشنهاد من ۵ مگابایت برای هر تصویر با فشرده‌سازی خودکار سمت مرورگر. بالاتر از این، هم ذخیره و هم بارگذاری کند می‌شود.</div>
+</div>
+</section>
+
+<p class="footer-note">
+این سند یک <strong>پیشنهاد</strong> است و پیش از هر تغییری در کد نیاز به تأیید شما دارد.
+وضعیت فعلی توضیح‌داده‌شده در بخش ۱ از بررسی مستقیم کد و پایگاه داده استخراج شده است، نه از حافظه.
+پس از تأیید، اجرا فاز به فاز انجام و هر فاز جداگانه قابل بازبینی خواهد بود.
+</p>
+
+</body>
+</html>

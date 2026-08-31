@@ -35,6 +35,7 @@ export type PlacementRecipe = {
   /** Tried in order when the primary mount cannot reach the required coverage. */
   mountFallbacks: MountKind[];
   mountHeightM: number;
+  megapixel: number;
   focalMm: number;
   goal: SurveillanceTask;
   requiredFeatures: CameraFeature[];
@@ -176,6 +177,16 @@ function chooseHousing(section: SectionType, context: RoomContext): {
 
 const isFaceGoal = (goal: SurveillanceTask) => goal === "face-capture" || goal === "face-identify";
 const isPlateGoal = (goal: SurveillanceTask) => goal === "plate-capture" || goal === "anpr";
+
+/** Chooses the lowest useful resolution before lens selection is evaluated. */
+function chooseMegapixel(section: SectionType, context: RoomContext): number {
+  if (isPlateGoal(section.goal)) return 8;
+  if (section.goal === "face-identify") return context.spanM > 12 ? 8 : 5;
+  if (section.goal === "face-capture") return context.spanM > 10 ? 5 : 4;
+  if (context.areaM2 > 600 || context.spanM > 30) return 8;
+  if (context.spanM > 18) return 5;
+  return 4;
+}
 
 /**
  * Mount height.
@@ -336,7 +347,8 @@ export function recipeFor(section: SectionType, context: RoomContext): Placement
   const housing = chooseHousing(section, context);
   const mount = chooseMount(section, context);
   const height = chooseMountHeight(section, context, mount.mountKind);
-  const lens = chooseLens(section, context);
+  const megapixel = chooseMegapixel(section, context);
+  const lens = chooseLens(section, { ...context, megapixel });
   const cameras = cameraCountFor(section);
 
   const reasons = [
@@ -358,6 +370,7 @@ export function recipeFor(section: SectionType, context: RoomContext): Placement
     mountKind: mount.mountKind,
     mountFallbacks: mount.fallbacks,
     mountHeightM: height.heightM,
+    megapixel,
     focalMm: lens.focalMm,
     goal: section.goal,
     requiredFeatures: section.requiredFeatures,

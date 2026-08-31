@@ -316,6 +316,8 @@ export type ProjectBrief = {
   reservePercent: number;
   /** Device types defined once and reused; the planning source for camera selection. */
   cameraTemplates?: ProjectCameraTemplate[];
+  /** Whether stage two was authored manually or generated from the designed spaces. */
+  cameraSelectionMode?: "manual" | "automatic";
   zones?: ProjectZone[];
 };
 

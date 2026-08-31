@@ -592,6 +592,15 @@ export function overlapRatio(a: Vec2[], b: Vec2[]): number {
 
 /** Below this two outlines are different spaces, not the same space edited. */
 const MATCH_THRESHOLD = 0.35;
+/**
+ * A hand-drawn outline and a wall-detected outline this similar describe the same room.
+ * The threshold is intentionally high: a checkout sub-area inside a sales hall must
+ * remain a separate space, while a rectangle traced over the room walls must not leave
+ * an invisible second room behind that still says "unassigned".
+ */
+const DUPLICATE_ROOM_THRESHOLD = 0.8;
+/** Duplicate graph faces need an even closer match before one is discarded. */
+const DUPLICATE_CANDIDATE_THRESHOLD = 0.94;
 
 export type ReconcileOptions = {
   /**
@@ -638,15 +647,48 @@ function inferredOpenChoices(
 export function reconcileRooms(floor: FloorPlan, options: ReconcileOptions = {}): PlanRoom[] {
   const detection = detectRooms(floor);
   const previous = floor.rooms ?? [];
-  const drawn = previous.filter((room) => room.boundarySource === "drawn");
+  const previousDrawn = previous.filter((room) => room.boundarySource === "drawn");
+  const previousDetected = previous.filter((room) => room.boundarySource !== "drawn");
+
+  // A manually traced room wins over an automatically detected copy. If the older
+  // detected copy already carried the user's programme, transfer it before dropping
+  // the duplicate so choosing a type can never appear to have been ignored.
+  const drawn = previousDrawn.map((room) => {
+    const duplicate = previousDetected.find(
+      (candidate) => overlapRatio(room.polygon, candidate.polygon) >= DUPLICATE_ROOM_THRESHOLD
+    );
+    if (!duplicate) return room;
+    return {
+      ...duplicate,
+      ...room,
+      sectionTypeId: room.sectionTypeId ?? duplicate.sectionTypeId,
+      name: room.name ?? duplicate.name,
+      ceilingHeightM: room.ceilingHeightM ?? duplicate.ceilingHeightM,
+      manual: room.manual ?? duplicate.manual,
+      overrides: room.overrides ?? duplicate.overrides,
+      boundarySource: "drawn" as const
+    };
+  });
 
   const remembered = inferredOpenChoices(previous, detection.openRegions);
-  const candidates: RoomCandidate[] = [...detection.closed];
+  const detectedCandidates: RoomCandidate[] = [...detection.closed];
   for (const region of detection.openRegions) {
     const choice = options.openChoices?.[region.id] ?? remembered[region.id];
-    if (choice === "inferred" && region.inferred) candidates.push(region.inferred);
-    else if (choice === "enclosing") candidates.push(region.enclosing);
+    if (choice === "inferred" && region.inferred) detectedCandidates.push(region.inferred);
+    else if (choice === "enclosing") detectedCandidates.push(region.enclosing);
   }
+
+  const candidates = detectedCandidates.filter((candidate, index) => {
+    // Do not recreate the automatic twin of a manual room.
+    if (drawn.some((room) => overlapRatio(room.polygon, candidate.polygon) >= DUPLICATE_ROOM_THRESHOLD)) {
+      return false;
+    }
+    // Defensive de-duplication for coincident graph faces produced by overlapping wall
+    // segments. Physical rooms cannot occupy the same outline at 94% IoU.
+    return !detectedCandidates.slice(0, index).some(
+      (earlier) => overlapRatio(earlier.polygon, candidate.polygon) >= DUPLICATE_CANDIDATE_THRESHOLD
+    );
+  });
 
   const carried = previous.filter((room) => room.boundarySource !== "drawn");
   const claimed = new Set<string>();
@@ -690,11 +732,14 @@ export function unassignedRooms(floor: FloorPlan): PlanRoom[] {
   return (floor.rooms ?? []).filter(isRoomUnassigned);
 }
 
+/** Every room below a point, ordered from the smallest/innermost to the largest. */
+export function roomsAtPoint(floor: FloorPlan, point: Vec2): PlanRoom[] {
+  return (floor.rooms ?? [])
+    .filter((room) => pointInPolygon(point, room.polygon))
+    .sort((first, second) => roomAreaM2(first.polygon) - roomAreaM2(second.polygon));
+}
+
 /** The room a point falls in, innermost first so a room inside a hall wins. */
 export function roomAtPoint(floor: FloorPlan, point: Vec2): PlanRoom | null {
-  const hits = (floor.rooms ?? []).filter((room) => pointInPolygon(point, room.polygon));
-  if (hits.length === 0) return null;
-  return hits.reduce((smallest, room) =>
-    roomAreaM2(room.polygon) < roomAreaM2(smallest.polygon) ? room : smallest
-  );
+  return roomsAtPoint(floor, point)[0] ?? null;
 }

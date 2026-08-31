@@ -24,7 +24,32 @@ export type VenueTypeId =
   | "hotel"
   | "fuel"
   | "apartment"
-  | "farm";
+  | "farm"
+  | "urban-road"
+  | "highway"
+  | "construction"
+  | "conference"
+  | "car-showroom"
+  | "bus-station"
+  | "transit-fleet"
+  | "control-room"
+  | "substation"
+  | "warehouse"
+  | "mall"
+  | "pipeline"
+  | "transmission-line"
+  | "onshore-oil"
+  | "offshore-oil"
+  | "solar-farm"
+  | "hydro-plant"
+  | "safe-city"
+  | "sports-complex"
+  | "data-centre"
+  | "airport"
+  | "port"
+  | "railway"
+  | "mine"
+  | "water-plant";
 
 /**
  * Where a space sits, which is what actually drives housing and mount height.
@@ -200,6 +225,158 @@ export const venueTypes: VenueType[] = [
     label: "باغ، مزرعه، دامداری",
     aliases: ["باغ", "مزرعه", "دامداری", "گلخانه", "مرغداری", "زمین کشاورزی", "باغچه"],
     blurb: "سایت باز و پرت با محیط پیرامونی طولانی"
+  },
+
+  /* ── Added from the customer project list ──────────────────────── */
+  {
+    id: "urban-road",
+    label: "جاده و معبر شهری",
+    aliases: ["جاده", "خیابان", "معبر", "تقاطع", "راه شهری", "road"],
+    blurb: "معبر شهری با تقاطع، گذرگاه عابر و تردد مداوم خودرو"
+  },
+  {
+    id: "highway",
+    label: "بزرگراه و آزادراه",
+    aliases: ["بزرگراه", "اتوبان", "آزادراه", "highway", "جاده برون شهری"],
+    blurb: "مسیر پرسرعت با رمپ ورود و خروج و فواصل طولانی"
+  },
+  {
+    id: "construction",
+    label: "کارگاه ساختمانی",
+    aliases: ["کارگاه", "ساخت و ساز", "پروژه عمرانی", "construction", "کارگاه عمرانی"],
+    blurb: "سایت در حال ساخت با مصالح و تجهیزات گران و پیرامون باز"
+  },
+  {
+    id: "conference",
+    label: "سالن کنفرانس و همایش",
+    aliases: ["کنفرانس", "همایش", "سالن اجتماعات", "سمینار", "آمفی تئاتر"],
+    blurb: "فضای گردهمایی با صحنه، پذیرش و کنترل صدا و تصویر"
+  },
+  {
+    id: "car-showroom",
+    label: "نمایشگاه خودرو",
+    aliases: ["نمایشگاه ماشین", "نمایشگاه خودرو", "اتوگالری", "فروش خودرو"],
+    blurb: "سالن نمایش با خودروهای گران‌قیمت و محوطه تحویل"
+  },
+  {
+    id: "bus-station",
+    label: "ایستگاه اتوبوس و پایانه",
+    aliases: ["ایستگاه اتوبوس", "پایانه", "ترمینال", "توقفگاه اتوبوس"],
+    blurb: "سکوی سوار و پیاده با باجه بلیت و تردد مسافر"
+  },
+  {
+    id: "transit-fleet",
+    label: "ناوگان اتوبوس و خودرو",
+    aliases: ["اتوبوس", "ناوگان", "خودرو حمل و نقل", "کابین", "داخل اتوبوس"],
+    blurb: "دوربین روی وسیله نقلیه؛ داخل کابین و دید مسیر"
+  },
+  {
+    id: "control-room",
+    label: "مرکز مانیتورینگ و کنترل",
+    aliases: ["مانیتورینگ", "اتاق کنترل", "مرکز پایش", "control room", "دیسپاچینگ"],
+    blurb: "مرکز پایش با دیوار نمایش، اپراتور و تجهیزات حیاتی"
+  },
+  {
+    id: "substation",
+    label: "پست برق و تابلو فشار قوی",
+    aliases: ["پست برق", "ترانس", "فشار قوی", "تابلو برق", "دیسپاچینگ برق"],
+    blurb: "تأسیسات برق بدون حضور دائم و با خطر سرقت مس"
+  },
+  {
+    id: "warehouse",
+    label: "انبار مستقل و لجستیک",
+    aliases: ["انبار", "لجستیک", "دپو", "سوله انبار", "مرکز توزیع"],
+    blurb: "انبار قفسه‌بندی با بارانداز و تردد کامیون"
+  },
+  {
+    id: "mall",
+    label: "مرکز خرید و پاساژ",
+    aliases: ["مرکز خرید", "پاساژ", "مال", "mall", "فروشگاه چندطبقه"],
+    blurb: "مجموعه چندطبقه با راهروی مشترک و پارکینگ"
+  },
+  {
+    id: "pipeline",
+    label: "خط لوله و ایستگاه پمپاژ",
+    aliases: ["خط لوله", "پایپ لاین", "پمپاژ", "ایستگاه شیر", "انتقال گاز"],
+    blurb: "مسیر طولانی و پرت با ایستگاه‌های پراکنده"
+  },
+  {
+    id: "transmission-line",
+    label: "خطوط انتقال برق",
+    aliases: ["خط انتقال", "دکل برق", "حریم خط", "برق فشار قوی"],
+    blurb: "دکل و حریم خط در مسیرهای دور از دسترس"
+  },
+  {
+    id: "onshore-oil",
+    label: "میدان نفتی خشکی",
+    aliases: ["میدان نفتی", "سرچاه", "نفت خشکی", "onshore", "پالایش"],
+    blurb: "سایت نفتی با سرچاه، مخزن و ریسک آتش"
+  },
+  {
+    id: "offshore-oil",
+    label: "سکوی نفتی دریایی",
+    aliases: ["سکوی نفتی", "offshore", "پلتفرم", "نفت دریایی", "هلی پد"],
+    blurb: "سکوی دریایی با عرشه، هلی‌پد و شرایط خورنده"
+  },
+  {
+    id: "solar-farm",
+    label: "مزرعه خورشیدی",
+    aliases: ["نیروگاه خورشیدی", "پنل خورشیدی", "سولار", "solar", "فتوولتائیک"],
+    blurb: "آرایه پنل در محوطه باز با پیرامون طولانی"
+  },
+  {
+    id: "hydro-plant",
+    label: "نیروگاه برق‌آبی",
+    aliases: ["برق آبی", "سد", "توربین", "نیروگاه آبی", "hydro"],
+    blurb: "سد و توربین‌خانه با اتاق کنترل و مسیر آب"
+  },
+  {
+    id: "safe-city",
+    label: "شهر ایمن",
+    aliases: ["شهر ایمن", "پایش شهری", "safe city", "دوربین شهری", "پلیس"],
+    blurb: "پایش سطح شهر با تقاطع، میدان و فضای عمومی"
+  },
+  {
+    id: "sports-complex",
+    label: "مجتمع ورزشی و استادیوم",
+    aliases: ["ورزشگاه", "استادیوم", "سالن ورزشی", "باشگاه", "زمین بازی"],
+    blurb: "مجموعه ورزشی با جایگاه تماشاگر و گیت بازرسی"
+  },
+  {
+    id: "data-centre",
+    label: "مرکز داده",
+    aliases: ["دیتاسنتر", "مرکز داده", "data center", "اتاق سرور بزرگ", "کولوکیشن"],
+    blurb: "سالن رک با دسترسی کنترل‌شده و تأسیسات حیاتی"
+  },
+  {
+    id: "airport",
+    label: "فرودگاه و ترمینال هوایی",
+    aliases: ["فرودگاه", "ترمینال", "airport", "گیت پرواز", "باند"],
+    blurb: "ترمینال مسافری با بازرسی، تحویل بار و اپرون"
+  },
+  {
+    id: "port",
+    label: "بندر و اسکله",
+    aliases: ["بندر", "اسکله", "port", "کانتینر", "گمرک"],
+    blurb: "محوطه کانتینری با جرثقیل، گیت و خط ساحلی"
+  },
+  {
+    id: "railway",
+    label: "ایستگاه راه‌آهن و مترو",
+    aliases: ["راه آهن", "مترو", "ایستگاه قطار", "سکوی قطار", "تونل"],
+    blurb: "ایستگاه ریلی با سکو، لبه خطر و تردد بالا"
+  },
+  {
+    id: "mine",
+    label: "معدن",
+    aliases: ["معدن", "استخراج", "mine", "سنگ شکن", "باسکول"],
+    blurb: "سایت استخراج با ماشین‌آلات سنگین و مواد کنترل‌شده"
+  },
+  {
+    id: "water-plant",
+    label: "تصفیه‌خانه آب و فاضلاب",
+    aliases: ["تصفیه خانه", "آب و فاضلاب", "پمپاژ آب", "حوضچه"],
+    blurb: "تأسیسات آبی با حوضچه، اتاق شیمیایی و پیرامون"
   }
 ];
 
@@ -1232,6 +1409,1280 @@ export const sectionTypes: SectionType[] = [
     goal: "face-capture",
     requiredFeatures: [],
     note: "کابل و الکتروموتور هدف رایج سرقت است"
+  },
+
+  /* ── Sections for the venues added from the customer list ──────── */
+  {
+    id: "urban-road.junction",
+    venueIds: ["urban-road", "safe-city"],
+    label: "تقاطع و چهارراه",
+    aliases: ["تقاطع", "چهارراه", "میدان"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "plate-capture",
+    requiredFeatures: [],
+    note: "زاویه افقی زیر ۳۰ درجه نسبت به مسیر حرکت"
+  },
+  {
+    id: "urban-road.crossing",
+    venueIds: ["urban-road", "safe-city"],
+    label: "گذرگاه عابر پیاده",
+    aliases: ["گذرگاه", "خط عابر", "عابر پیاده"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "urban-road.lane",
+    venueIds: ["urban-road", "highway"],
+    label: "مسیر تردد خودرو",
+    aliases: ["مسیر", "لاین", "خط عبور"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "plate-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "urban-road.signal",
+    venueIds: ["urban-road"],
+    label: "چراغ راهنما و تابلو",
+    aliases: ["چراغ راهنما", "تابلو", "علائم"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "urban-road.sidewalk",
+    venueIds: ["urban-road", "safe-city"],
+    label: "پیاده‌رو و حاشیه",
+    aliases: ["پیاده رو", "حاشیه", "کنار خیابان"],
+    environment: "outdoor",
+    priority: "optional",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "highway.ramp",
+    venueIds: ["highway"],
+    label: "رمپ ورود و خروج",
+    aliases: ["رمپ", "ورودی بزرگراه", "خروجی"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "plate-capture",
+    requiredFeatures: ["anpr"]
+  },
+  {
+    id: "highway.mainline",
+    venueIds: ["highway"],
+    label: "مسیر اصلی و لاین‌ها",
+    aliases: ["مسیر اصلی", "باند", "لاین"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "plate-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "highway.shoulder",
+    venueIds: ["highway"],
+    label: "شانه راه و توقفگاه اضطراری",
+    aliases: ["شانه", "توقف اضطراری", "کنار جاده"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "highway.speed",
+    venueIds: ["highway"],
+    label: "نقطه پایش سرعت",
+    aliases: ["سرعت سنج", "پایش سرعت", "دوربین سرعت"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "anpr",
+    requiredFeatures: ["anpr"]
+  },
+  {
+    id: "highway.sign",
+    venueIds: ["highway"],
+    label: "تابلو متغیر و علائم",
+    aliases: ["تابلو متغیر", "علائم", "vms"],
+    environment: "outdoor",
+    priority: "optional",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "construction.gate",
+    venueIds: ["construction"],
+    label: "گیت ورود کارگاه",
+    aliases: ["گیت", "درب کارگاه", "ورودی سایت"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "construction.material",
+    venueIds: ["construction"],
+    label: "انبار مصالح",
+    aliases: ["مصالح", "انبار سیمان", "دپو مصالح"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "construction.equipment",
+    venueIds: ["construction"],
+    label: "دپوی تجهیزات و ابزار",
+    aliases: ["تجهیزات", "ابزار", "دپو"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "construction.crane",
+    venueIds: ["construction"],
+    label: "جرثقیل و بالابر",
+    aliases: ["جرثقیل", "بالابر", "تاور کرین"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "construction.perimeter",
+    venueIds: ["construction"],
+    label: "پیرامون سایت",
+    aliases: ["حصار", "پیرامون", "فنس کارگاه"],
+    environment: "perimeter",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "construction.office",
+    venueIds: ["construction"],
+    label: "دفتر کارگاه",
+    aliases: ["دفتر", "کانکس", "اتاق سرپرست"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "conference.entrance",
+    venueIds: ["conference"],
+    label: "ورودی سالن",
+    aliases: ["ورودی", "درب سالن", "لابی"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "conference.stage",
+    venueIds: ["conference"],
+    label: "صحنه و تریبون",
+    aliases: ["صحنه", "تریبون", "استیج"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "conference.seating",
+    venueIds: ["conference"],
+    label: "فضای نشیمن حضار",
+    aliases: ["صندلی", "سالن", "حضار"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: ["people-count"]
+  },
+  {
+    id: "conference.registration",
+    venueIds: ["conference"],
+    label: "پذیرش و ثبت‌نام",
+    aliases: ["پذیرش", "ثبت نام", "میز ثبت"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "conference.av-room",
+    venueIds: ["conference"],
+    label: "اتاق کنترل صدا و تصویر",
+    aliases: ["اتاق کنترل", "صدا و تصویر", "میکسر"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "car-showroom.floor",
+    venueIds: ["car-showroom"],
+    label: "سالن نمایش خودرو",
+    aliases: ["سالن نمایش", "شوروم", "نمایشگاه"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "car-showroom.delivery",
+    venueIds: ["car-showroom"],
+    label: "محل تحویل خودرو",
+    aliases: ["تحویل خودرو", "تحویل", "خروج خودرو"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "plate-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "car-showroom.sales",
+    venueIds: ["car-showroom"],
+    label: "دفتر فروش و قرارداد",
+    aliases: ["دفتر فروش", "قرارداد", "میز فروش"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "car-showroom.yard",
+    venueIds: ["car-showroom"],
+    label: "محوطه پارک خودرو",
+    aliases: ["محوطه", "پارک", "حیاط نمایشگاه"],
+    environment: "parking",
+    priority: "important",
+    goal: "plate-capture",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "car-showroom.parts",
+    venueIds: ["car-showroom"],
+    label: "انبار قطعات",
+    aliases: ["انبار قطعات", "لوازم یدکی", "قطعات"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "bus-station.platform",
+    venueIds: ["bus-station"],
+    label: "سکوی سوار و پیاده شدن",
+    aliases: ["سکو", "پلتفرم", "محل سوار"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: ["people-count"]
+  },
+  {
+    id: "bus-station.ticket",
+    venueIds: ["bus-station"],
+    label: "باجه بلیت",
+    aliases: ["باجه", "بلیت فروشی", "گیشه"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "bus-station.shelter",
+    venueIds: ["bus-station"],
+    label: "سرپناه انتظار",
+    aliases: ["سرپناه", "انتظار", "نیمکت"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "bus-station.bus-lane",
+    venueIds: ["bus-station"],
+    label: "مسیر ورود اتوبوس",
+    aliases: ["مسیر اتوبوس", "ورود اتوبوس", "لاین"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "plate-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "bus-station.perimeter",
+    venueIds: ["bus-station"],
+    label: "پیرامون ایستگاه",
+    aliases: ["پیرامون", "اطراف ایستگاه"],
+    environment: "perimeter",
+    priority: "optional",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "transit-fleet.cabin",
+    venueIds: ["transit-fleet"],
+    label: "داخل کابین مسافر",
+    aliases: ["کابین", "داخل اتوبوس", "سالن مسافر"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "transit-fleet.door",
+    venueIds: ["transit-fleet"],
+    label: "درِ ورود مسافر",
+    aliases: ["درب", "ورود مسافر", "پله اتوبوس"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: ["people-count"]
+  },
+  {
+    id: "transit-fleet.driver",
+    venueIds: ["transit-fleet"],
+    label: "دید راننده و داشبورد",
+    aliases: ["راننده", "داشبورد", "کابین راننده"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: ["audio"]
+  },
+  {
+    id: "transit-fleet.road-view",
+    venueIds: ["transit-fleet"],
+    label: "دید جلو و عقب مسیر",
+    aliases: ["دید جلو", "دید عقب", "مسیر"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "plate-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "transit-fleet.depot",
+    venueIds: ["transit-fleet"],
+    label: "محل توقف و پارک ناوگان",
+    aliases: ["توقفگاه", "دپو", "پارکینگ ناوگان"],
+    environment: "parking",
+    priority: "important",
+    goal: "plate-capture",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "control-room.video-wall",
+    venueIds: ["control-room"],
+    label: "دیوار نمایش",
+    aliases: ["ویدئو وال", "دیوار نمایش", "مانیتورها"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "control-room.operator",
+    venueIds: ["control-room"],
+    label: "میز اپراتور",
+    aliases: ["اپراتور", "میز کنترل", "کنسول"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: ["continuous-record"]
+  },
+  {
+    id: "control-room.entrance",
+    venueIds: ["control-room"],
+    label: "درِ ورود کنترل‌شده",
+    aliases: ["درب کنترل شده", "اکسس", "کارت خوان"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "control-room.power",
+    venueIds: ["control-room"],
+    label: "برق اضطراری و UPS",
+    aliases: ["یو پی اس", "برق اضطراری", "ژنراتور"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "substation.transformer",
+    venueIds: ["substation"],
+    label: "ترانسفورماتور",
+    aliases: ["ترانس", "ترانسفورماتور"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "substation.switchgear",
+    venueIds: ["substation"],
+    label: "تابلو فشار قوی",
+    aliases: ["تابلو", "فشار قوی", "سوئیچگیر"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "substation.gate",
+    venueIds: ["substation"],
+    label: "گیت ورود پست",
+    aliases: ["گیت", "درب پست", "ورودی"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "substation.relay-room",
+    venueIds: ["substation"],
+    label: "اتاق رله و کنترل",
+    aliases: ["اتاق رله", "کنترل", "حفاظت"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "substation.perimeter",
+    venueIds: ["substation"],
+    label: "پیرامون محوطه پست",
+    aliases: ["حصار", "پیرامون", "دیوار پست"],
+    environment: "perimeter",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle", "thermal"]
+  },
+  {
+    id: "warehouse.dock",
+    venueIds: ["warehouse"],
+    label: "بارانداز و سکوی بار",
+    aliases: ["بارانداز", "سکوی بار", "تخلیه"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "warehouse.aisle",
+    venueIds: ["warehouse"],
+    label: "راهروی قفسه",
+    aliases: ["راهرو", "قفسه", "رک انبار"],
+    environment: "indoor-corridor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "warehouse.office",
+    venueIds: ["warehouse"],
+    label: "دفتر انبار و کنترل موجودی",
+    aliases: ["دفتر انبار", "کنترل موجودی", "باسکول"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "warehouse.vehicle-gate",
+    venueIds: ["warehouse"],
+    label: "گیت خودرو و کامیون",
+    aliases: ["گیت", "کامیون", "درب کامیون"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "plate-capture",
+    requiredFeatures: ["anpr"]
+  },
+  {
+    id: "warehouse.perimeter",
+    venueIds: ["warehouse"],
+    label: "محوطه پیرامونی انبار",
+    aliases: ["پیرامون", "حصار", "محوطه"],
+    environment: "perimeter",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "mall.main-entrance",
+    venueIds: ["mall"],
+    label: "ورودی اصلی مجتمع",
+    aliases: ["ورودی", "درب اصلی", "گیت"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: ["people-count"]
+  },
+  {
+    id: "mall.concourse",
+    venueIds: ["mall"],
+    label: "راهروی مشترک طبقات",
+    aliases: ["راهرو", "پاساژ", "کریدور"],
+    environment: "indoor-corridor",
+    priority: "important",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "mall.escalator",
+    venueIds: ["mall"],
+    label: "پله برقی و آسانسور شیشه‌ای",
+    aliases: ["پله برقی", "اسکالاتور", "آسانسور"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "mall.food-court",
+    venueIds: ["mall"],
+    label: "فودکورت",
+    aliases: ["فودکورت", "رستوران", "غذاخوری"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "mall.parking",
+    venueIds: ["mall"],
+    label: "پارکینگ طبقاتی مجتمع",
+    aliases: ["پارکینگ", "طبقاتی", "پارک"],
+    environment: "parking",
+    priority: "critical",
+    goal: "plate-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "mall.control",
+    venueIds: ["mall"],
+    label: "اتاق کنترل مرکز خرید",
+    aliases: ["اتاق کنترل", "حراست", "مانیتورینگ"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: ["continuous-record"]
+  },
+  {
+    id: "pipeline.valve-station",
+    venueIds: ["pipeline"],
+    label: "ایستگاه شیر",
+    aliases: ["ایستگاه شیر", "شیرآلات", "ولو"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "pipeline.route",
+    venueIds: ["pipeline"],
+    label: "مسیر خط لوله",
+    aliases: ["مسیر لوله", "خط لوله", "حریم"],
+    environment: "perimeter",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle", "thermal"]
+  },
+  {
+    id: "pipeline.pump-station",
+    venueIds: ["pipeline"],
+    label: "ایستگاه پمپاژ",
+    aliases: ["پمپاژ", "پمپ خانه", "بوستر"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "pipeline.leak-point",
+    venueIds: ["pipeline"],
+    label: "نقطه نشتی‌سنجی",
+    aliases: ["نشتی", "نشت یاب", "بازرسی"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: ["thermal"]
+  },
+  {
+    id: "transmission-line.tower",
+    venueIds: ["transmission-line"],
+    label: "پایه دکل",
+    aliases: ["دکل", "پایه", "برج انتقال"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "transmission-line.corridor",
+    venueIds: ["transmission-line"],
+    label: "حریم خط انتقال",
+    aliases: ["حریم", "کریدور", "مسیر خط"],
+    environment: "perimeter",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle", "thermal"]
+  },
+  {
+    id: "transmission-line.step-down",
+    venueIds: ["transmission-line"],
+    label: "پست تبدیل",
+    aliases: ["پست تبدیل", "کاهنده", "ترانس"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "transmission-line.access",
+    venueIds: ["transmission-line"],
+    label: "مسیر دسترسی سرویس",
+    aliases: ["جاده دسترسی", "مسیر سرویس", "راه خاکی"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "plate-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "onshore-oil.wellhead",
+    venueIds: ["onshore-oil"],
+    label: "سرچاه",
+    aliases: ["سرچاه", "چاه نفت", "wellhead"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["thermal"]
+  },
+  {
+    id: "onshore-oil.tanks",
+    venueIds: ["onshore-oil"],
+    label: "مخازن ذخیره",
+    aliases: ["مخزن", "تانک", "ذخیره سازی"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["thermal"]
+  },
+  {
+    id: "onshore-oil.flare",
+    venueIds: ["onshore-oil"],
+    label: "مشعل",
+    aliases: ["مشعل", "فلر", "سوزاننده"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: ["thermal"]
+  },
+  {
+    id: "onshore-oil.control",
+    venueIds: ["onshore-oil"],
+    label: "اتاق کنترل میدان",
+    aliases: ["اتاق کنترل", "کنترل", "دیسپاچینگ"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "onshore-oil.gate",
+    venueIds: ["onshore-oil"],
+    label: "گیت ورود میدان",
+    aliases: ["گیت", "ورودی", "حراست"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: ["anpr"]
+  },
+  {
+    id: "onshore-oil.perimeter",
+    venueIds: ["onshore-oil"],
+    label: "پیرامون میدان",
+    aliases: ["پیرامون", "حصار", "محیط"],
+    environment: "perimeter",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle", "thermal"]
+  },
+  {
+    id: "offshore-oil.deck",
+    venueIds: ["offshore-oil"],
+    label: "عرشه اصلی",
+    aliases: ["عرشه", "دک", "deck"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "offshore-oil.helipad",
+    venueIds: ["offshore-oil"],
+    label: "هلی‌پد",
+    aliases: ["هلی پد", "هلیکوپتر", "باند هلی"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "offshore-oil.control",
+    venueIds: ["offshore-oil"],
+    label: "اتاق کنترل سکو",
+    aliases: ["اتاق کنترل", "کنترل سکو"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: ["continuous-record"]
+  },
+  {
+    id: "offshore-oil.lifeboat",
+    venueIds: ["offshore-oil"],
+    label: "محل قایق نجات",
+    aliases: ["قایق نجات", "نجات", "اضطراری"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "offshore-oil.riser",
+    venueIds: ["offshore-oil"],
+    label: "مسیر لوله دریایی",
+    aliases: ["رایزر", "لوله دریایی", "خط دریا"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: ["thermal"]
+  },
+  {
+    id: "solar-farm.array",
+    venueIds: ["solar-farm"],
+    label: "آرایه پنل خورشیدی",
+    aliases: ["پنل", "آرایه", "ماژول"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "solar-farm.inverter",
+    venueIds: ["solar-farm"],
+    label: "اینورتر و تجهیزات",
+    aliases: ["اینورتر", "تجهیزات", "کانکس برق"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "solar-farm.substation",
+    venueIds: ["solar-farm"],
+    label: "پست تبدیل نیروگاه",
+    aliases: ["پست", "ترانس", "تبدیل"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "solar-farm.perimeter",
+    venueIds: ["solar-farm"],
+    label: "حصار پیرامونی مزرعه",
+    aliases: ["حصار", "فنس", "پیرامون"],
+    environment: "perimeter",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle", "thermal"]
+  },
+  {
+    id: "solar-farm.gate",
+    venueIds: ["solar-farm"],
+    label: "گیت ورود مزرعه",
+    aliases: ["گیت", "درب", "ورودی"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "plate-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "hydro-plant.dam",
+    venueIds: ["hydro-plant"],
+    label: "سد و دریچه‌ها",
+    aliases: ["سد", "دریچه", "سرریز"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "hydro-plant.turbine-hall",
+    venueIds: ["hydro-plant"],
+    label: "توربین‌خانه",
+    aliases: ["توربین", "ژنراتور", "سالن توربین"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "hydro-plant.control",
+    venueIds: ["hydro-plant"],
+    label: "اتاق کنترل نیروگاه",
+    aliases: ["اتاق کنترل", "کنترل", "دیسپاچینگ"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: ["continuous-record"]
+  },
+  {
+    id: "hydro-plant.channel",
+    venueIds: ["hydro-plant"],
+    label: "کانال و مسیر آب",
+    aliases: ["کانال", "مسیر آب", "آبراه"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "hydro-plant.perimeter",
+    venueIds: ["hydro-plant"],
+    label: "پیرامون نیروگاه",
+    aliases: ["پیرامون", "حصار", "محوطه"],
+    environment: "perimeter",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "safe-city.square",
+    venueIds: ["safe-city"],
+    label: "میدان و فضای عمومی",
+    aliases: ["میدان", "فضای عمومی", "پلازا"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: ["face-search"]
+  },
+  {
+    id: "safe-city.park",
+    venueIds: ["safe-city"],
+    label: "پارک عمومی",
+    aliases: ["پارک", "بوستان", "فضای سبز"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "safe-city.transit-stop",
+    venueIds: ["safe-city"],
+    label: "ایستگاه حمل‌ونقل عمومی",
+    aliases: ["ایستگاه", "مترو", "اتوبوس"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "face-capture",
+    requiredFeatures: ["people-count"]
+  },
+  {
+    id: "safe-city.gathering",
+    venueIds: ["safe-city"],
+    label: "محل تجمع",
+    aliases: ["تجمع", "اجتماع", "میدان اصلی"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: ["people-count"]
+  },
+  {
+    id: "safe-city.command",
+    venueIds: ["safe-city"],
+    label: "مرکز پایش شهری",
+    aliases: ["مرکز پایش", "فرماندهی", "کنترل شهری"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: ["continuous-record"]
+  },
+  {
+    id: "sports-complex.field",
+    venueIds: ["sports-complex"],
+    label: "زمین بازی و مسابقه",
+    aliases: ["زمین", "چمن", "سالن بازی"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "sports-complex.stand",
+    venueIds: ["sports-complex"],
+    label: "جایگاه تماشاگر",
+    aliases: ["جایگاه", "سکو", "تماشاگر"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: ["people-count"]
+  },
+  {
+    id: "sports-complex.gate",
+    venueIds: ["sports-complex"],
+    label: "گیت بازرسی ورودی",
+    aliases: ["گیت", "بازرسی", "ورودی ورزشگاه"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "sports-complex.ticket",
+    venueIds: ["sports-complex"],
+    label: "باجه بلیت ورزشگاه",
+    aliases: ["بلیت", "گیشه", "باجه"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "sports-complex.parking",
+    venueIds: ["sports-complex"],
+    label: "پارکینگ تماشاگران",
+    aliases: ["پارکینگ", "پارک", "توقفگاه"],
+    environment: "parking",
+    priority: "important",
+    goal: "plate-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "sports-complex.locker",
+    venueIds: ["sports-complex"],
+    label: "رختکن ورزشکاران",
+    aliases: ["رختکن", "دوش", "کمد"],
+    environment: "indoor-room",
+    priority: "optional",
+    goal: "monitor",
+    requiredFeatures: [],
+    note: "نصب دوربین در رختکن ممنوع است"
+  },
+  {
+    id: "data-centre.rack-aisle",
+    venueIds: ["data-centre"],
+    label: "راهروی رک",
+    aliases: ["راهرو رک", "سالن سرور", "کریدور سرد"],
+    environment: "indoor-corridor",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: ["continuous-record"]
+  },
+  {
+    id: "data-centre.entrance",
+    venueIds: ["data-centre"],
+    label: "ورودی کنترل‌شده سالن",
+    aliases: ["مانترپ", "ورودی", "اکسس کنترل"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "data-centre.power",
+    venueIds: ["data-centre"],
+    label: "اتاق برق و UPS",
+    aliases: ["برق", "یو پی اس", "ژنراتور"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "data-centre.cooling",
+    venueIds: ["data-centre"],
+    label: "تأسیسات سرمایش",
+    aliases: ["چیلر", "سرمایش", "هواساز"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: ["thermal"]
+  },
+  {
+    id: "data-centre.loading",
+    venueIds: ["data-centre"],
+    label: "محل تحویل تجهیزات",
+    aliases: ["تحویل", "بارگیری", "انبار تجهیزات"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "airport.security-gate",
+    venueIds: ["airport"],
+    label: "گیت بازرسی امنیتی",
+    aliases: ["بازرسی", "گیت امنیتی", "ایکس ری"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: ["face-search"]
+  },
+  {
+    id: "airport.check-in",
+    venueIds: ["airport"],
+    label: "پیشخوان پذیرش",
+    aliases: ["چک این", "پذیرش", "کانتر"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "airport.baggage",
+    venueIds: ["airport"],
+    label: "تحویل و دریافت بار",
+    aliases: ["بار", "چمدان", "نوار بار"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "airport.transit-hall",
+    venueIds: ["airport"],
+    label: "سالن ترانزیت و انتظار",
+    aliases: ["ترانزیت", "سالن انتظار", "گیت پرواز"],
+    environment: "indoor-room",
+    priority: "important",
+    goal: "face-capture",
+    requiredFeatures: ["people-count"]
+  },
+  {
+    id: "airport.apron",
+    venueIds: ["airport"],
+    label: "اپرون و باند",
+    aliases: ["اپرون", "باند", "پارک هواپیما"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "airport.perimeter",
+    venueIds: ["airport"],
+    label: "پیرامون فرودگاه",
+    aliases: ["پیرامون", "حصار", "محیط"],
+    environment: "perimeter",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle", "thermal"]
+  },
+  {
+    id: "port.container-yard",
+    venueIds: ["port"],
+    label: "محوطه کانتینر",
+    aliases: ["کانتینر", "محوطه", "یارد"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "plate-capture",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "port.gate",
+    venueIds: ["port"],
+    label: "گیت ورود کامیون",
+    aliases: ["گیت", "کامیون", "ورودی بندر"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "plate-capture",
+    requiredFeatures: ["anpr"]
+  },
+  {
+    id: "port.crane",
+    venueIds: ["port"],
+    label: "جرثقیل ساحلی",
+    aliases: ["جرثقیل", "کرین", "گنتری"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "port.quay",
+    venueIds: ["port"],
+    label: "خط ساحلی و اسکله",
+    aliases: ["اسکله", "ساحل", "لنگرگاه"],
+    environment: "perimeter",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle", "thermal"]
+  },
+  {
+    id: "port.customs",
+    venueIds: ["port"],
+    label: "محوطه گمرک و بازرسی",
+    aliases: ["گمرک", "بازرسی", "ترخیص"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "railway.platform",
+    venueIds: ["railway"],
+    label: "سکوی مسافر",
+    aliases: ["سکو", "پلتفرم", "محل انتظار"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: ["people-count"]
+  },
+  {
+    id: "railway.platform-edge",
+    venueIds: ["railway"],
+    label: "لبه خطر سکو",
+    aliases: ["لبه سکو", "خط زرد", "لبه خطر"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "railway.ticket-hall",
+    venueIds: ["railway"],
+    label: "سالن بلیت و گیت",
+    aliases: ["بلیت", "گیت", "سالن فروش"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "railway.escalator",
+    venueIds: ["railway"],
+    label: "پله برقی و راه‌پله",
+    aliases: ["پله برقی", "پله", "دسترسی"],
+    environment: "indoor-corridor",
+    priority: "important",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "railway.tunnel",
+    venueIds: ["railway"],
+    label: "دهانه تونل و مسیر",
+    aliases: ["تونل", "مسیر ریل", "دهانه"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "mine.pit",
+    venueIds: ["mine"],
+    label: "دهانه معدن و جبهه‌کار",
+    aliases: ["دهانه", "جبهه کار", "پیت"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "mine.haul-road",
+    venueIds: ["mine"],
+    label: "مسیر ماشین‌آلات سنگین",
+    aliases: ["جاده معدن", "کامیون", "مسیر حمل"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "plate-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "mine.explosives",
+    venueIds: ["mine"],
+    label: "دپوی مواد منفجره",
+    aliases: ["مواد منفجره", "انبار دینامیت", "دپو"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: ["continuous-record"]
+  },
+  {
+    id: "mine.weighbridge",
+    venueIds: ["mine"],
+    label: "باسکول",
+    aliases: ["باسکول", "توزین", "وزن کشی"],
+    environment: "outdoor",
+    priority: "critical",
+    goal: "plate-capture",
+    requiredFeatures: ["anpr"]
+  },
+  {
+    id: "mine.crusher",
+    venueIds: ["mine"],
+    label: "سنگ‌شکن و فرآوری",
+    aliases: ["سنگ شکن", "فرآوری", "خردایش"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: []
+  },
+  {
+    id: "water-plant.basin",
+    venueIds: ["water-plant"],
+    label: "حوضچه تصفیه",
+    aliases: ["حوضچه", "استخر", "ته نشینی"],
+    environment: "outdoor",
+    priority: "important",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
+  },
+  {
+    id: "water-plant.chemical",
+    venueIds: ["water-plant"],
+    label: "اتاق مواد شیمیایی",
+    aliases: ["مواد شیمیایی", "کلرزنی", "انبار شیمیایی"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "water-plant.pump",
+    venueIds: ["water-plant"],
+    label: "ایستگاه پمپاژ آب",
+    aliases: ["پمپاژ", "پمپ", "موتورخانه"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-capture",
+    requiredFeatures: []
+  },
+  {
+    id: "water-plant.control",
+    venueIds: ["water-plant"],
+    label: "اتاق کنترل تصفیه‌خانه",
+    aliases: ["اتاق کنترل", "اسکادا", "کنترل"],
+    environment: "indoor-room",
+    priority: "critical",
+    goal: "face-identify",
+    requiredFeatures: []
+  },
+  {
+    id: "water-plant.perimeter",
+    venueIds: ["water-plant"],
+    label: "پیرامون تصفیه‌خانه",
+    aliases: ["پیرامون", "حصار", "محوطه"],
+    environment: "perimeter",
+    priority: "critical",
+    goal: "monitor",
+    requiredFeatures: ["human-vehicle"]
   }
 ];
 

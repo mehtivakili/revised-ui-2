@@ -14,6 +14,7 @@ import {
   elementsInRect,
   mergeSelection,
   pasteSelection,
+  resolveRoomAwarePick,
   summariseSelection
 } from "@/src/lib/planner/selection";
 import { defaultCameraOptics, isSelected, soleSelection, toggleSelection } from "@/src/domain/planner/types";
@@ -118,6 +119,61 @@ describe("preset placement", () => {
         `${group} has no presets, so its menu would render nothing`
       );
     }
+  });
+});
+
+describe("single-click room selection in furnished samples", () => {
+  const room = {
+    id: "room-under-desk",
+    polygon: [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 6 }, { x: 0, z: 6 }],
+    boundarySource: "detected"
+  };
+
+  test("an unassigned room wins over furniture covering the clicked point", () => {
+    const furnished = { ...floor(), rooms: [room] };
+    const result = resolveRoomAwarePick(furnished, { x: 2, z: 2 }, { kind: "obstacle", id: "o-near" });
+    assert.equal(result.id, room.id);
+    assert.equal(result.kind, "room");
+  });
+
+  test("Alt explicitly selects the foreground furniture", () => {
+    const furnished = { ...floor(), rooms: [room] };
+    const foreground = { kind: "obstacle", id: "o-near" };
+    assert.deepEqual(resolveRoomAwarePick(furnished, { x: 2, z: 2 }, foreground, { preferForeground: true }), foreground);
+  });
+
+  test("an already assigned room does not block ordinary furniture editing", () => {
+    const furnished = { ...floor(), rooms: [{ ...room, sectionTypeId: "office.workspace" }] };
+    const foreground = { kind: "obstacle", id: "o-near" };
+    assert.deepEqual(resolveRoomAwarePick(furnished, { x: 2, z: 2 }, foreground), foreground);
+  });
+
+  test("repeated clicks cycle from an inner room through every enclosing room", () => {
+    const inner = { ...room, id: "inner", polygon: [{ x: 1, z: 1 }, { x: 4, z: 1 }, { x: 4, z: 4 }, { x: 1, z: 4 }] };
+    const middle = { ...room, id: "middle", polygon: [{ x: 0, z: 0 }, { x: 7, z: 0 }, { x: 7, z: 5 }, { x: 0, z: 5 }] };
+    const outer = { ...room, id: "outer", polygon: [{ x: -2, z: -2 }, { x: 12, z: -2 }, { x: 12, z: 8 }, { x: -2, z: 8 }] };
+    const nested = { ...floor(), rooms: [outer, inner, middle] };
+    const point = { x: 2, z: 2 };
+
+    const first = resolveRoomAwarePick(nested, point, { kind: "room", id: outer.id });
+    const second = resolveRoomAwarePick(nested, point, { kind: "room", id: inner.id }, { cycleFromRoomId: first.id });
+    const third = resolveRoomAwarePick(nested, point, { kind: "room", id: inner.id }, { cycleFromRoomId: second.id });
+    const wrapped = resolveRoomAwarePick(nested, point, { kind: "room", id: inner.id }, { cycleFromRoomId: third.id });
+
+    assert.deepEqual([first.id, second.id, third.id, wrapped.id], ["inner", "middle", "outer", "inner"]);
+    assert.deepEqual([first.roomLayer, second.roomLayer, third.roomLayer], [1, 2, 3]);
+    assert.equal(first.roomLayerCount, 3);
+  });
+
+  test("nested assigned rooms still win over furniture so their layers remain reachable", () => {
+    const inner = { ...room, id: "assigned-inner", sectionTypeId: "residential.living", polygon: [{ x: 1, z: 1 }, { x: 4, z: 1 }, { x: 4, z: 4 }, { x: 1, z: 4 }] };
+    const outer = { ...room, id: "assigned-outer", sectionTypeId: "residential.yard", polygon: [{ x: -2, z: -2 }, { x: 12, z: -2 }, { x: 12, z: 8 }, { x: -2, z: 8 }] };
+    const nested = { ...floor(), rooms: [outer, inner] };
+    const result = resolveRoomAwarePick(nested, { x: 2, z: 2 }, { kind: "obstacle", id: "o-near" });
+
+    assert.equal(result.kind, "room");
+    assert.equal(result.id, inner.id);
+    assert.equal(result.roomLayerCount, 2);
   });
 });
 

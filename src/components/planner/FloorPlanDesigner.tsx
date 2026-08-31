@@ -46,7 +46,8 @@ import {
   TriangleAlert,
   Trash2,
   Undo2,
-  Minus
+  Minus,
+  X
 } from "lucide-react";
 import type { ProjectCameraTemplate } from "@/src/domain/catalog/types";
 import {
@@ -129,6 +130,7 @@ export function FloorPlanDesigner({
   plan: controlledPlan,
   mode = "environment",
   variant = "default",
+  readOnly = false,
   cameraTemplates = [],
   onPlanChange,
   onSummaryChange
@@ -136,6 +138,12 @@ export function FloorPlanDesigner({
   plan?: BuildingPlan;
   mode?: DesignerMode;
   variant?: "default" | "focus";
+  /**
+   * Presentation mode: the canvas still renders everything and pans and zooms freely,
+   * but no tool can alter the plan. Used by the saved-project viewer, where showing a
+   * finished design must not risk changing it.
+   */
+  readOnly?: boolean;
   cameraTemplates?: ProjectCameraTemplate[];
   onPlanChange?: (plan: BuildingPlan) => void;
   onSummaryChange?: (summary: PlanSummary) => void;
@@ -164,6 +172,7 @@ export function FloorPlanDesigner({
   const [hint, setHint] = useState<string | null>(null);
   const [pendingBackdrop, setPendingBackdrop] = useState<PlanBackdrop | null>(null);
   const [showDefaults, setShowDefaults] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
   const [smartPlacementReport, setSmartPlacementReport] = useState<SmartPlacementReport | null>(null);
   const [isOptimisingPlacement, setIsOptimisingPlacement] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -173,19 +182,31 @@ export function FloorPlanDesigner({
   const pointerPlanPositionRef = useRef<Vec2 | null>(null);
   const [historyState, setHistoryState] = useState({ past: 0, future: 0 });
 
+  useEffect(() => {
+    if (!showResetDialog) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowResetDialog(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [showResetDialog]);
+
   const storedActiveFloor = plan.floors.find((floor) => floor.id === plan.activeFloorId) ?? plan.floors[0];
   const activeFloor = useMemo(() => {
     if (!storedActiveFloor) return storedActiveFloor;
     const reconciled = reconcileRooms(storedActiveFloor);
     // Old projects may carry the result of an earlier, stricter detector. Surface newly
     // recoverable rooms immediately; the next ordinary edit persists this repaired set.
-    return reconciled.length > (storedActiveFloor.rooms ?? []).length
+    return reconciled.length !== (storedActiveFloor.rooms ?? []).length
       ? { ...storedActiveFloor, rooms: reconciled }
       : storedActiveFloor;
   }, [storedActiveFloor]);
   const activeFloorIndex = plan.floors.findIndex((floor) => floor.id === activeFloor?.id);
   /** Spaces still waiting for a section type — the red outlines. */
-  const pendingRoomCount = unassignedRooms(activeFloor ?? { rooms: [] } as never).length;
+  const pendingRooms = useMemo(() => plan.floors.flatMap((floor) =>
+    unassignedRooms(floor).map((room) => ({ floor, room }))
+  ), [plan.floors]);
+  const pendingRoomCount = pendingRooms.length;
   const smartPlacementErrors = useMemo(() => validateSmartPlacementPlan(plan), [plan]);
   const referenceFloor = activeFloorIndex > 0 ? plan.floors[activeFloorIndex - 1] : null;
   const designDefaults = { ...defaultPlanDefaults, ...plan.defaults };
@@ -485,28 +506,50 @@ export function FloorPlanDesigner({
 
   const runSmartPlacement = () => {
     if (isOptimisingPlacement) return;
+    if (smartPlacementErrors.length > 0) {
+      setSmartPlacementReport(null);
+      const firstPending = pendingRooms[0];
+      if (firstPending) {
+        if (plan.activeFloorId !== firstPending.floor.id) {
+          publishPlan({ ...plan, activeFloorId: firstPending.floor.id });
+        }
+        setViewMode("top");
+        setTool("select");
+        setSelection([{ kind: "room", id: firstPending.room.id }]);
+        setHint(`جانمایی شروع نشد؛ فضای بدون نوع در «${firstPending.floor.name}» انتخاب شد. نوع آن را از پنل مشخصات تعیین کنید.`);
+      } else {
+        setHint(`جانمایی خودکار شروع نشد: ${smartPlacementErrors[0]}`);
+      }
+      return;
+    }
     setIsOptimisingPlacement(true);
     setSmartPlacementReport(null);
     setHint("در حال تحلیل هندسه طبقات، ورودی‌ها، موانع، PPM و نقاط کور...");
     window.requestAnimationFrame(() => {
       window.setTimeout(() => {
-        const result = optimiseCameraPlacement(plan, [], { enforceSemanticValidation: true });
-        if (result.report.accepted && result.report.placed > 0) {
-          commit(result.plan);
-          setViewMode("top");
-          setTool("select");
-          setSelection(emptySelection);
-          setShowCoverage(true);
-          setHint(
-            `${formatFa(result.report.placed)} دوربین جانمایی شد؛ پوشش برآوردی از `
-            + `${formatFa(result.report.coverageBeforePercent, 0)}٪ به `
-            + `${formatFa(result.report.coverageAfterPercent, 0)}٪ رسید.`
-          );
-        } else {
-          setHint(result.report.warnings[0] || "همه دوربین‌های تعریف‌شده قبلاً جانمایی شده‌اند.");
+        try {
+          const result = optimiseCameraPlacement(plan, [], { enforceSemanticValidation: true });
+          if (result.report.accepted && result.report.placed > 0) {
+            commit(result.plan);
+            setViewMode("top");
+            setTool("select");
+            setSelection(emptySelection);
+            setShowCoverage(true);
+            setHint(
+              `${formatFa(result.report.placed)} دوربین جانمایی شد؛ پوشش برآوردی از `
+              + `${formatFa(result.report.coverageBeforePercent, 0)}٪ به `
+              + `${formatFa(result.report.coverageAfterPercent, 0)}٪ رسید.`
+            );
+          } else {
+            setHint(result.report.warnings[0] || "همه دوربین‌های تعریف‌شده قبلاً جانمایی شده‌اند.");
+          }
+          setSmartPlacementReport(result.report);
+        } catch (cause) {
+          console.error("[smart-placement] optimisation failed", cause);
+          setHint("جانمایی خودکار با خطای داخلی متوقف شد؛ نقشه تغییری نکرد و می‌توانید دوباره تلاش کنید.");
+        } finally {
+          setIsOptimisingPlacement(false);
         }
-        setSmartPlacementReport(result.report);
-        setIsOptimisingPlacement(false);
       }, 20);
     });
   };
@@ -522,7 +565,10 @@ export function FloorPlanDesigner({
     setHint(`${formatFa(placedCameraCount)} دوربین از جانمایی همه طبقات حذف شد؛ اکنون می‌توانید انتخاب و جانمایی را از ابتدا انجام دهید. Ctrl+Z برای بازگردانی.`);
   };
 
-  const coverage = useMemo(() => (activeFloor ? computeFloorCoverage(activeFloor, 1.5) : null), [activeFloor]);
+  const coverage = useMemo(
+    () => (mode === "cameras" && activeFloor ? computeFloorCoverage(activeFloor, 1.5) : null),
+    [activeFloor, mode]
+  );
   const areaM2 = useMemo(() => (activeFloor ? floorAreaM2(activeFloor.walls) : 0), [activeFloor]);
   const hasClosedPerimeter = useMemo(
     () => Boolean(activeFloor && largestClosedWallLoop(activeFloor.walls)),
@@ -584,13 +630,27 @@ export function FloorPlanDesigner({
   };
 
   const resetPlan = () => {
-    if (!window.confirm("کل نقشه، طبقات، دیوارها، درها، موانع، دوربین‌ها و تصویر پس‌زمینه پاک شوند؟")) return;
-    commit(createEmptyPlan());
+    const emptyPlan = createEmptyPlan();
+    commit({
+      ...emptyPlan,
+      // Resetting the drawing is not the same as starting a different project. Keep
+      // the programme that drives the checklist and all project-level preferences.
+      venueTypeId: plan.venueTypeId,
+      customSectionTypes: plan.customSectionTypes?.map((section) => ({ ...section })),
+      dismissedSectionIds: plan.dismissedSectionIds ? [...plan.dismissedSectionIds] : undefined,
+      gridSizeM: plan.gridSizeM,
+      snapM: plan.snapM,
+      defaults: { ...plan.defaults }
+    });
+    setShowResetDialog(false);
     setPendingBackdrop(null);
     setSelection(emptySelection);
     setTool("select");
     setViewMode("top");
-    setHint("نقشه به حالت اولیه بازگشت");
+    setPreviewFocusFloorId(null);
+    setSmartPlacementReport(null);
+    setShowCoverage(true);
+    setHint("محتوای نقشه پاک شد؛ نوع پروژه و چک‌لیست آن حفظ شده‌اند");
   };
 
   const backdropControls = pendingBackdrop ?? activeFloor?.backdrop ?? null;
@@ -632,7 +692,7 @@ export function FloorPlanDesigner({
   const activeTool = tools.find((item) => item.id === tool);
 
   return (
-    <section className={`plan-designer plan-designer-${mode} plan-designer-${variant}`}>
+    <section className={`plan-designer plan-designer-${mode} plan-designer-${variant}${readOnly ? " plan-designer-readonly" : ""}`}>
       {variant !== "focus" ? <header className="plan-designer-head">
         <span className="plan-designer-head-icon"><Building2 size={20} aria-hidden="true" /></span>
         <div>
@@ -705,14 +765,14 @@ export function FloorPlanDesigner({
             <button type="button" onClick={() => removeFloor(plan.activeFloorId)} disabled={plan.floors.length <= 1}>
               <Trash2 size={15} aria-hidden="true" />حذف طبقه
             </button>
-            <button type="button" className="plan-reset-all" onClick={resetPlan}>
+            <button type="button" className="plan-reset-all" onClick={() => setShowResetDialog(true)}>
               <RotateCcw size={15} aria-hidden="true" />ریست کل نقشه
             </button>
           </div>
         ) : null}
       </div>
 
-      <div className="plan-toolbar plan-ribbon">
+      {readOnly ? null : <div className="plan-toolbar plan-ribbon">
         <section className="plan-ribbon-section plan-ribbon-drawing" aria-label="ترسیم و جانمایی">
           <div className="plan-tool-group">
             {tools.map((item) => {
@@ -753,11 +813,11 @@ export function FloorPlanDesigner({
                 <button
                   key={item.id}
                   type="button"
-                  className={tool === item.id ? "active" : ""}
+                  className={`plan-tool-button is-${item.id}${tool === item.id ? " active" : ""}`}
                   onClick={() => { setTool(item.id); setSelection(emptySelection); setHint(item.hint); }}
                   title={item.hint}
                 >
-                  <Icon size={16} aria-hidden="true" />
+                  <span className="plan-tool-icon"><Icon size={17} aria-hidden="true" /></span>
                   <span>{item.label}</span>
                 </button>
               );
@@ -779,20 +839,20 @@ export function FloorPlanDesigner({
 
         <section className="plan-ribbon-section plan-ribbon-view" aria-label="نمایش">
           <div className="plan-tool-group">
-          <button type="button" className={viewMode === "top" ? "active" : ""} onClick={() => setViewMode("top")}>
-            <Grid3x3 size={16} aria-hidden="true" /><span>نمای نقشه</span>
+          <button type="button" className={`plan-view-tool is-map${viewMode === "top" ? " active" : ""}`} onClick={() => setViewMode("top")}>
+            <span className="plan-tool-icon"><Grid3x3 size={17} aria-hidden="true" /></span><span>نمای نقشه</span>
           </button>
           <button
             type="button"
-            className={viewMode === "orbit" ? "active" : ""}
+            className={`plan-view-tool is-orbit${viewMode === "orbit" ? " active" : ""}`}
             onClick={() => setViewMode("orbit")}
             title="در نمای سه‌بعدی، اسکرول ماوس را نگه دارید و بکشید تا نما بچرخد"
           >
-            <Move3d size={16} aria-hidden="true" /><span>نمای سه‌بعدی</span>
+            <span className="plan-tool-icon"><Move3d size={17} aria-hidden="true" /></span><span>نمای سه‌بعدی</span>
           </button>
           <button
             type="button"
-            className={viewMode === "building" ? "active" : ""}
+            className={`plan-view-tool is-building${viewMode === "building" ? " active" : ""}`}
             onClick={() => {
               setViewMode("building");
               setBuildingFloorFilter("above");
@@ -803,7 +863,7 @@ export function FloorPlanDesigner({
             }}
             title="چیدمان همه طبقات روی یکدیگر"
           >
-            <Building2 size={16} aria-hidden="true" /><span>ساختمان</span>
+            <span className="plan-tool-icon"><Building2 size={17} aria-hidden="true" /></span><span>ساختمان</span>
           </button>
           </div>
           <span className="plan-ribbon-label">نمایش</span>
@@ -822,8 +882,8 @@ export function FloorPlanDesigner({
               </select>
             </label>
             {mode === "environment" ? (
-              <button type="button" onClick={() => fileRef.current?.click()}>
-                <ImageIcon size={16} aria-hidden="true" /><span>بارگذاری نقشه</span>
+              <button type="button" className="plan-settings-tool is-upload" onClick={() => fileRef.current?.click()}>
+                <span className="plan-tool-icon"><ImageIcon size={17} aria-hidden="true" /></span><span>بارگذاری نقشه</span>
               </button>
             ) : null}
             <input
@@ -878,7 +938,7 @@ export function FloorPlanDesigner({
             </button>
           ) : null}
         </div>
-      </div>
+      </div>}
 
       {mode === "environment" && showAdvancedElements ? (
         <section className="plan-element-strip is-advanced" aria-label="المان‌های پیشرفته">
@@ -990,7 +1050,8 @@ export function FloorPlanDesigner({
                   type="button"
                   className="smart-placement-action"
                   onClick={runSmartPlacement}
-                  disabled={isOptimisingPlacement || smartPlacementErrors.length > 0}
+                  disabled={isOptimisingPlacement}
+                  title={smartPlacementErrors.length > 0 ? `نیازمند اصلاح نقشه: ${smartPlacementErrors[0]}` : undefined}
                 >
                   <Sparkles className={isOptimisingPlacement ? "is-spinning" : undefined} size={16} aria-hidden="true" />
                   {isOptimisingPlacement ? "در حال تحلیل عمیق نقشه..." : "تحلیل و ساخت چیدمان پیشنهادی"}
@@ -1045,12 +1106,12 @@ export function FloorPlanDesigner({
           selection={selection}
           snapM={plan.snapM}
           defaults={designDefaults}
-          readOnly={viewMode === "building"}
+          readOnly={readOnly || viewMode === "building"}
           buildingFloors={viewMode === "building" ? buildingPreviewFloors : undefined}
           focusedFloorId={viewMode === "building" ? previewFocusFloorId : null}
           referenceFloor={viewMode !== "building" && mode === "environment" ? referenceFloor : null}
           pendingBackdrop={pendingBackdrop}
-          showCoverage={showCoverage}
+          showCoverage={mode === "cameras" && showCoverage}
           palette={variant === "focus" ? "studio" : "classic"}
           customSectionTypes={plan.customSectionTypes}
           onSelect={setSelection}
@@ -1063,6 +1124,11 @@ export function FloorPlanDesigner({
           onCancelBackdropPlacement={() => {
             setPendingBackdrop(null);
             setHint(activeFloor.backdrop ? "جابه‌جایی تصویر لغو شد" : "ورود تصویر لغو شد");
+          }}
+          onCancelInteraction={() => {
+            setSelection(emptySelection);
+            setTool("select");
+            setHint(null);
           }}
         />
         <div className="plan-workspace-sidebar">
@@ -1127,8 +1193,10 @@ export function FloorPlanDesigner({
         <div className="plan-closure-warning plan-room-warning" role="status">
           <TriangleAlert size={17} aria-hidden="true" />
           <div>
-            <strong>{formatFa(pendingRoomCount)} فضا هنوز نوع ندارد</strong>
-            <span>مرز این فضاها قرمز است. روی هرکدام کلیک کنید و از پنل سمت راست نوعش را انتخاب کنید تا در جانمایی هوشمند به حساب بیاید.</span>
+            <strong>{formatFa(pendingRoomCount)} فضا در کل پروژه هنوز نوع ندارد</strong>
+            <span>
+              طبقات درگیر: {Array.from(new Set(pendingRooms.map(({ floor }) => floor.name))).join("، ")}. مرز این فضاها قرمز است؛ روی هرکدام کلیک کنید و نوعش را از پنل سمت راست انتخاب کنید.
+            </span>
           </div>
         </div>
       ) : null}
@@ -1174,6 +1242,46 @@ export function FloorPlanDesigner({
           {coverage ? <span><strong>{formatFa(coverage.identifyPercent, 0)}٪</strong> سطح شناسایی</span> : null}
         </div>
       </div>
+
+      {showResetDialog ? (
+        <div
+          className="plan-reset-dialog-backdrop"
+          role="presentation"
+          onMouseDown={() => setShowResetDialog(false)}
+        >
+          <section
+            className="plan-reset-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="plan-reset-dialog-title"
+            aria-describedby="plan-reset-dialog-description"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="plan-reset-dialog-close"
+              onClick={() => setShowResetDialog(false)}
+              aria-label="بستن"
+            >
+              <X size={17} aria-hidden="true" />
+            </button>
+            <div className="plan-reset-dialog-icon"><RotateCcw size={24} aria-hidden="true" /></div>
+            <div className="plan-reset-dialog-copy">
+              <h2 id="plan-reset-dialog-title">ریست محتوای نقشه؟</h2>
+              <p id="plan-reset-dialog-description">
+                تمام طبقات، دیوارها، درها، پنجره‌ها، تجهیزات، دوربین‌ها و تصویر زمینه پاک می‌شوند.
+              </p>
+              <span><Shield size={14} aria-hidden="true" />نوع پروژه و چک‌لیست انتخاب‌شده حفظ خواهند شد.</span>
+            </div>
+            <div className="plan-reset-dialog-actions">
+              <button type="button" className="is-cancel" onClick={() => setShowResetDialog(false)}>انصراف</button>
+              <button type="button" className="is-confirm" onClick={resetPlan}>
+                <RotateCcw size={15} aria-hidden="true" />ریست نقشه
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1208,12 +1316,12 @@ function DoorToolMenu({
     <div className="plan-object-tool-menu plan-door-tool-menu">
       <button
         type="button"
-        className={active ? "plan-object-tool-trigger active" : "plan-object-tool-trigger"}
+        className={active ? "plan-object-tool-trigger plan-tool-button is-door active" : "plan-object-tool-trigger plan-tool-button is-door"}
         onClick={() => onSelect(variant)}
         aria-haspopup="menu"
         title="برای دیدن انواع در، نشانگر را روی این ابزار نگه دارید"
       >
-        <DoorOpen className="plan-object-tool-main-icon" size={16} aria-hidden="true" />
+        <span className="plan-tool-icon"><DoorOpen className="plan-object-tool-main-icon" size={17} aria-hidden="true" /></span>
         <span>در</span>
         <ChevronDown className="plan-object-tool-chevron" size={11} aria-hidden="true" />
       </button>
@@ -1257,12 +1365,12 @@ function WallToolMenu({
     <div className="plan-object-tool-menu plan-wall-tool-menu">
       <button
         type="button"
-        className={active ? "plan-object-tool-trigger active" : "plan-object-tool-trigger"}
+        className={active ? "plan-object-tool-trigger plan-tool-button is-wall active" : "plan-object-tool-trigger plan-tool-button is-wall"}
         onClick={() => onSelect(mode)}
         aria-haspopup="menu"
         title="انتخاب روش رسم دیوار"
       >
-        <BrickWall className="plan-object-tool-main-icon" size={16} aria-hidden="true" />
+        <span className="plan-tool-icon"><BrickWall className="plan-object-tool-main-icon" size={17} aria-hidden="true" /></span>
         <span>دیوار</span>
         <ChevronDown className="plan-object-tool-chevron" size={11} aria-hidden="true" />
       </button>
@@ -1307,12 +1415,24 @@ function ObstacleToolMenu({
   onPick: (preset: ObstaclePreset) => void;
 }) {
   const presets = obstaclePresets.filter((preset) => preset.group === group);
+  const [preferredPresetId, setPreferredPresetId] = useState(() => presets[0]?.id ?? "");
   if (!presets.length) return null;
+  const preferredPreset = presets.find((preset) => preset.id === preferredPresetId) ?? presets[0];
+  const pickPreset = (preset: ObstaclePreset) => {
+    setPreferredPresetId(preset.id);
+    onPick(preset);
+  };
 
   return (
     <div className={`plan-object-tool-menu is-${group}`}>
-      <button type="button" className="plan-object-tool-trigger" aria-haspopup="menu" title={`افزودن ${label}`}>
-        <Icon className="plan-object-tool-main-icon" size={16} aria-hidden="true" />
+      <button
+        type="button"
+        className="plan-object-tool-trigger plan-preset-tool"
+        aria-haspopup="menu"
+        title={`افزودن ${preferredPreset.label} — برای دیدن انواع، نشانگر را روی ابزار نگه دارید`}
+        onClick={() => pickPreset(preferredPreset)}
+      >
+        <span className="plan-tool-icon"><Icon className="plan-object-tool-main-icon" size={17} aria-hidden="true" /></span>
         <span>{label}</span>
         <ChevronDown className="plan-object-tool-chevron" size={11} aria-hidden="true" />
       </button>
@@ -1329,7 +1449,7 @@ function ObstacleToolMenu({
             draggable
             onDragStart={(event) => startPresetDrag(event, preset)}
             onDragEnd={() => document.querySelector(".preset-drag-ghost")?.remove()}
-            onClick={() => onPick(preset)}
+            onClick={() => pickPreset(preset)}
           >
             <span><strong>{preset.label}</strong><small>{preset.description}</small></span>
             <em>{preset.widthM} × {preset.depthM} × {preset.heightM} m</em>

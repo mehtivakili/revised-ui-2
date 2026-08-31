@@ -18,6 +18,46 @@ import {
   segmentIntersectsRect,
   type PlanRect
 } from "@/src/lib/planner/geometry";
+import { roomsAtPoint } from "@/src/lib/planner/rooms";
+
+export type PlanPick = { kind: string; id: string };
+export type RoomAwarePlanPick = PlanPick & { roomLayer?: number; roomLayerCount?: number };
+
+/**
+ * Dense sample plans put furniture, lawns and roads above the room fill in the raycast.
+ * While that underlying room still needs a type, selecting the semantic space is the
+ * useful default; Alt deliberately opts back into the foreground object for editing.
+ */
+export function resolveRoomAwarePick(
+  floor: FloorPlan,
+  point: Vec2,
+  picked: PlanPick | null,
+  options: { preferForeground?: boolean; cycleFromRoomId?: string } = {}
+): RoomAwarePlanPick | null {
+  if (options.preferForeground || (picked?.kind !== "obstacle" && picked?.kind !== "room")) return picked;
+  const rooms = roomsAtPoint(floor, point);
+  if (rooms.length === 0) return picked;
+
+  // An assigned room must not make ordinary furniture impossible to edit. The room
+  // layer still owns a direct hit on its own fill; an obstacle is only bypassed while
+  // at least one room under it is waiting for its type.
+  if (
+    picked?.kind === "obstacle"
+    && rooms.length === 1
+    && !rooms.some((room) => !room.sectionTypeId)
+  ) return picked;
+
+  const currentIndex = options.cycleFromRoomId
+    ? rooms.findIndex((room) => room.id === options.cycleFromRoomId)
+    : -1;
+  const index = currentIndex >= 0 ? (currentIndex + 1) % rooms.length : 0;
+  return {
+    kind: "room",
+    id: rooms[index].id,
+    roomLayer: index + 1,
+    roomLayerCount: rooms.length
+  };
+}
 
 /**
  * Turns a dragged rectangle into a set of selected elements.
@@ -216,24 +256,24 @@ export function pasteSelection(
     }
     doors.push({ ...clone(door), id: doorIds.get(door.id)!, wallId: mappedWallId!, offset });
   });
-  const obstacles = clipboard.obstacles.map((item, index) => ({
+  const obstacles = clipboard.obstacles.map((item) => ({
     ...clone(item), id: obstacleIds.get(item.id)!, center: moved(item.center, delta)
   }));
-  const rooms = clipboard.rooms.map((item, index) => ({
+  const rooms = clipboard.rooms.map((item) => ({
     ...clone(item),
     id: roomIds.get(item.id)!,
     polygon: item.polygon.map((point) => moved(point, delta)),
     boundarySource: "drawn" as const,
     wallIds: item.wallIds?.every((id) => wallIds.has(id)) ? item.wallIds.map((id) => wallIds.get(id)!) : undefined
   }));
-  const cameras = clipboard.cameras.map((item, index) => ({
+  const cameras = clipboard.cameras.map((item) => ({
     ...clone(item),
     id: cameraIds.get(item.id)!,
     definitionId: undefined,
     roomId: item.roomId ? roomIds.get(item.roomId) : undefined,
     position: moved(item.position, delta)
   }));
-  const requirements = clipboard.requirements.map((item, index) => ({
+  const requirements = clipboard.requirements.map((item) => ({
     ...clone(item),
     id: requirementIds.get(item.id)!,
     polygon: item.polygon.map((point) => moved(point, delta)),
