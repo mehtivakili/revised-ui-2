@@ -6,10 +6,13 @@ import {
   type ObstacleVariant,
   type PlanDoor,
   type PlanObstacle,
+  type PlanRoom,
   type PlanWall,
   type Vec2
 } from "@/src/domain/planner/types";
+import { pointInPolygon } from "@/src/lib/planner/geometry";
 import { obstaclePreset } from "@/src/lib/planner/obstacle-presets";
+import { reconcileRooms } from "@/src/lib/planner/rooms";
 
 type SamplePlanId =
   | "luxury-villa"
@@ -1513,7 +1516,7 @@ function schoolCampusPlan(): BuildingPlan {
   return stackBuilding([ground, first, second, third], ground.id);
 }
 
-export function createSamplePlan(id: SamplePlanId): BuildingPlan {
+function rawSamplePlan(id: SamplePlanId): BuildingPlan {
   switch (id) {
     case "luxury-villa": return luxuryVillaPlan();
     case "modern-office": return modernOfficePlan();
@@ -1527,6 +1530,110 @@ export function createSamplePlan(id: SamplePlanId): BuildingPlan {
     case "barracks-campus": return barracksCampusPlan();
     case "school-campus": return schoolCampusPlan();
   }
+}
+
+/**
+ * The compact sample buildings are meant to open ready for editing, not as an exercise
+ * in programming every detected space.  Use the architecture and the furniture already
+ * present in each room to give it an honest venue section from the outset.  The two mall
+ * models are deliberately excluded: their hundreds of units are large reference models
+ * and assigning their programme is part of the heavy-project workflow.
+ */
+function sampleRoomSectionType(id: SamplePlanId, floor: FloorPlan, room: PlanRoom): string {
+  const wallIds = room.wallIds ?? [];
+  const hasWall = (part: string) => wallIds.some((wallId) => wallId.includes(part));
+  const roomObstacles = floor.obstacles.filter((item) => pointInPolygon(item.center, room.polygon));
+  const hasVariant = (...variants: ObstacleVariant[]) => roomObstacles.some((item) => item.variant && variants.includes(item.variant));
+
+  switch (id) {
+    case "luxury-villa":
+      if (floor.id === "villa-basement") {
+        if (hasVariant("sedan", "suv", "pickup", "van", "truck")) return "residential.parking";
+        return "shared.storeroom";
+      }
+      if (floor.id === "villa-ground") {
+        if (hasWall("villa-estate-")) return "residential.yard";
+        if (hasVariant("fridge", "kitchen-counter", "stove", "sink-unit", "kitchen-island")) return "residential.kitchen";
+        return "residential.living";
+      }
+      if (floor.id === "villa-first") {
+        return hasVariant("bed-double", "bed-single") ? "residential.bedroom" : "residential.living";
+      }
+      if (floor.id === "villa-second") {
+        return hasWall("villa-second-service") && roomObstacles.length <= 4 ? "shared.storeroom" : "residential.living";
+      }
+      return hasWall("villa-roof-room-") ? "shared.storeroom" : "residential.roof";
+
+    case "modern-office":
+      if (hasVariant("stairs-straight", "elevator") || hasWall("core-v") && hasVariant("equipment-rack")) return "shared.stairwell";
+      if (hasVariant("meeting-table")) return "office.meeting";
+      if (floor.id === "office-0" && hasVariant("reception-desk", "lobby-sofa")) return "office.lobby";
+      return "office.openplan";
+
+    case "retail-gallery":
+      if (floor.id === "gallery-mezzanine") return "generic.room";
+      if (hasVariant("storage-rack", "pallet-stack", "crate-stack", "packing-table", "equipment-rack")) return "shop.backstore";
+      if (hasVariant("checkout-counter")) return "shop.checkout";
+      if (hasVariant("display-stand", "clothing-rack", "display-fridge")) return "shop.display";
+      return "shop.salesfloor";
+
+    case "factory-campus":
+      if (hasWall("factory-yard-")) return "industrial.perimeter";
+      if (hasVariant("storage-rack", "pallet-stack", "crate-stack")) return "industrial.warehouse";
+      if (hasVariant("loading-platform", "packing-table")) return "industrial.dock";
+      if (hasVariant("conveyor", "cnc-machine", "workbench", "welding-station")) return "industrial.production";
+      return "generic.room";
+
+    case "residential-parking":
+      return floor.id === "residential-parking" ? "parking.bay-aisle" : "generic.room";
+
+    case "general-hospital":
+      if (floor.id === "hospital-ground") return "hospital.emergency";
+      if (floor.id === "hospital-fourth") return "generic.room";
+      return "hospital.patient-room";
+
+    case "police-station":
+      if (floor.id === "police-basement") {
+        if (hasVariant("sedan", "suv", "van")) return "shared.staff-parking";
+        if (hasVariant("filing-cabinet")) return "office.archive";
+        return "generic.room";
+      }
+      if (floor.id === "police-ground") return "office.lobby";
+      return hasVariant("meeting-table") ? "office.meeting" : "office.openplan";
+
+    case "barracks-campus":
+      if (hasWall("barracks-yard-")) return "industrial.perimeter";
+      return "generic.room";
+
+    case "school-campus":
+      if (hasWall("school-yard-")) return "school.yard";
+      if (floor.id === "school-second" || hasVariant("lab-bench")) return "school.lab";
+      if (floor.id === "school-third" && hasVariant("gym-bleacher")) return "generic.room";
+      return "school.classroom";
+
+    case "kourosh-mall":
+    case "mega-mall":
+      return "generic.room";
+  }
+}
+
+function programmeSampleRooms(id: SamplePlanId, plan: BuildingPlan): BuildingPlan {
+  if (id === "kourosh-mall" || id === "mega-mall") return plan;
+  return {
+    ...plan,
+    floors: plan.floors.map((floor) => ({
+      ...floor,
+      rooms: reconcileRooms(floor).map((room, index) => ({
+        ...room,
+        id: `${floor.id}-sample-room-${index + 1}`,
+        sectionTypeId: sampleRoomSectionType(id, floor, room)
+      }))
+    }))
+  };
+}
+
+export function createSamplePlan(id: SamplePlanId): BuildingPlan {
+  return programmeSampleRooms(id, rawSamplePlan(id));
 }
 
 export type { SamplePlanId };

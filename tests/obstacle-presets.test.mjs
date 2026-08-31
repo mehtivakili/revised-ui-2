@@ -61,6 +61,27 @@ test("sample collection showcases every designer preset without duplicate object
   assert.ok(plan.floors.some((floor) => floor.elevationM < 0), "villa should include a real service basement");
 });
 
+test("all non-mall sample spaces start with a programme type", () => {
+  const readySamples = [
+    "luxury-villa", "modern-office", "retail-gallery", "factory-campus", "residential-parking",
+    "general-hospital", "police-station", "barracks-campus", "school-campus"
+  ];
+
+  for (const sampleId of readySamples) {
+    const plan = createSamplePlan(sampleId);
+    const rooms = plan.floors.flatMap((floor) => floor.rooms ?? []);
+    assert.ok(rooms.length > 0, `${sampleId} should ship with detected spaces`);
+    assert.ok(rooms.every((room) => room.sectionTypeId), `${sampleId} contains an unprogrammed space`);
+  }
+
+  for (const sampleId of ["kourosh-mall", "mega-mall"]) {
+    assert.ok(
+      createSamplePlan(sampleId).floors.every((floor) => floor.rooms === undefined),
+      `${sampleId} should stay on the heavy-project room workflow`
+    );
+  }
+});
+
 test("every sample plan is richly furnished and uses architectural openings", () => {
   const expectations = {
     "luxury-villa": { floors: 5, obstacles: 60 },
