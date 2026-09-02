@@ -36,6 +36,7 @@ import {
   Move3d,
   Plus,
   Ruler,
+  Server,
   Square,
   Redo2,
   RotateCcw,
@@ -84,6 +85,7 @@ import {
 import { formatFa } from "@/src/lib/chatbot/persian";
 import { cameraFromTemplate, createBlankCamera, housingLabels } from "@/src/lib/planner/camera-templates";
 import { obstaclePresets, type ObstacleGroup, type ObstaclePreset } from "@/src/lib/planner/obstacle-presets";
+import { importDxfWalls, type DxfImportResult } from "@/src/lib/planner/dxf-import";
 import {
   copySelection,
   deleteSelection,
@@ -308,7 +310,7 @@ export function FloorPlanDesigner({
   const updateFloor = useCallback((floor: FloorPlan, openChoices?: Record<string, "inferred" | "enclosing">) => {
     const current = plan.floors.find((item) => item.id === floor.id);
     let next = floor;
-    if (!current || current.walls !== floor.walls || openChoices) {
+    if ((!current || current.walls !== floor.walls || openChoices) && (!next.roomDetectionDeferred || openChoices)) {
       next = { ...next, rooms: reconcileRooms(next, { openChoices }) };
     }
     if (next.coverageRequirements?.some((requirement) => requirement.sourceRoomId)) {
@@ -629,6 +631,75 @@ export function FloorPlanDesigner({
     reader.readAsDataURL(file);
   };
 
+  /** Imports editable CAD linework; DWG is converted server-side before using the DXF parser. */
+  const handlePlanUpload = async (file: File) => {
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith(".dxf") && !lowerName.endsWith(".dwg")) {
+      handleBackdropUpload(file);
+      return;
+    }
+    try {
+      let imported: DxfImportResult;
+      if (lowerName.endsWith(".dwg")) {
+        setHint("در حال خواندن و تبدیل فایل DWG…");
+        const form = new FormData();
+        form.append("file", file);
+        form.append("heightM", String(plan.defaults.wallHeightM));
+        form.append("thicknessM", String(plan.defaults.wallThicknessM));
+        const response = await fetch("/api/planner/dwg-to-dxf?format=walls", { method: "POST", body: form });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null) as { error?: string } | null;
+          throw new Error(payload?.error ?? "تبدیل فایل DWG انجام نشد");
+        }
+        imported = await response.json() as DxfImportResult;
+      } else {
+        imported = importDxfWalls(await file.text(), {
+          heightM: plan.defaults.wallHeightM,
+          thicknessM: plan.defaults.wallThicknessM
+        });
+      }
+      // Re-importing a CAD file is an update, not an additive drawing action. Keeping
+      // the previous generated walls made a cleaned import look unchanged (and made
+      // every retry denser). Preserve manually drawn walls, but replace prior CAD
+      // geometry and remove openings that were attached to those old generated walls.
+      const previousCadWallIds = new Set(
+        activeFloor.walls.filter((wall) => wall.id.startsWith("dxf-wall-")).map((wall) => wall.id)
+      );
+      const nextFloor = {
+        ...activeFloor,
+        walls: [
+          ...activeFloor.walls.filter((wall) => !previousCadWallIds.has(wall.id)),
+          ...imported.walls
+        ],
+        doors: activeFloor.doors.filter((opening) => !previousCadWallIds.has(opening.wallId)),
+        // Dense CAD drawings can contain thousands of wall segments. Running planar
+        // room detection synchronously here blocks React before the imported plan is
+        // ever committed or rendered. Manual room areas remain available afterward.
+        roomDetectionDeferred: imported.discardedSegments > 0 || imported.walls.length >= 400 ? true : activeFloor.roomDetectionDeferred
+      };
+      if (imported.discardedSegments > 0 || imported.walls.length >= 400) {
+        commit({ ...plan, floors: plan.floors.map((floor) => (floor.id === nextFloor.id ? nextFloor : floor)) });
+      } else {
+        updateFloor(nextFloor);
+      }
+      setPendingBackdrop(null);
+      setViewMode("top");
+      setTool("select");
+      setSelection(emptySelection);
+      setHint(
+        `${formatFa(imported.walls.length)} دیوار از ${lowerName.endsWith(".dwg") ? "DWG" : "DXF"} وارد شد · واحد: ${imported.unitLabel} · `
+        + `${formatFa(imported.layerCount)} لایه خوانده شد`
+        + (imported.detectedPlanGroups > 1 ? ` · از ${formatFa(imported.detectedPlanGroups)} پلان جدا، بزرگ‌ترین پلان وارد شد` : "")
+        + (imported.discardedSegments > 0 ? ` · ${formatFa(imported.discardedSegments)} خط تکراری/اضافی حذف شد` : "")
+        + (previousCadWallIds.size > 0 ? ` · ${formatFa(previousCadWallIds.size)} دیوار CAD قبلی جایگزین شد` : "")
+        + (imported.scaleCorrection > 1 ? ` · مقیاس غیرواقعی فایل ${formatFa(imported.scaleCorrection)} برابر اصلاح شد` : "")
+        + (imported.discardedSegments > 0 || imported.walls.length >= 400 ? " · تشخیص خودکار فضاها برای جلوگیری از توقف صفحه به تعویق افتاد" : "")
+      );
+    } catch (cause) {
+      setHint(cause instanceof Error ? cause.message : "خواندن فایل CAD انجام نشد");
+    }
+  };
+
   const resetPlan = () => {
     const emptyPlan = createEmptyPlan();
     commit({
@@ -831,6 +902,19 @@ export function FloorPlanDesigner({
             <div className="plan-tool-group">
               <ObstacleToolMenu group="vehicle" label="خودرو" icon={CarFront} onPick={addPresetObstacle} />
               <ObstacleToolMenu group="structure" label="سازه" icon={ChartNoAxesGantt} onPick={addPresetObstacle} />
+              <ObstacleToolMenu group="server-room" label="اتاق سرور" icon={Server} onPick={addPresetObstacle} />
+              <button
+                type="button"
+                className="plan-tool-button is-column"
+                title="افزودن ستون سازه‌ای؛ پس از جانمایی، ابعاد و ارتفاع آن قابل ویرایش است"
+                onClick={() => {
+                  const preset = obstaclePresets.find((item) => item.id === "structural-column");
+                  if (preset) addPresetObstacle(preset);
+                }}
+              >
+                <span className="plan-tool-icon"><Cuboid size={17} aria-hidden="true" /></span>
+                <span>ستون</span>
+              </button>
               <ObstacleToolMenu group="tree" label="درخت" icon={TreePine} onPick={addPresetObstacle} />
             </div>
             <span className="plan-ribbon-label">عناصر آماده</span>
@@ -883,17 +967,17 @@ export function FloorPlanDesigner({
             </label>
             {mode === "environment" ? (
               <button type="button" className="plan-settings-tool is-upload" onClick={() => fileRef.current?.click()}>
-                <span className="plan-tool-icon"><ImageIcon size={17} aria-hidden="true" /></span><span>بارگذاری نقشه</span>
+                <span className="plan-tool-icon"><ImageIcon size={17} aria-hidden="true" /></span><span>نقشه / CAD</span>
               </button>
             ) : null}
             <input
               ref={fileRef}
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg,image/webp,.dxf,.dwg,application/dxf,application/x-dxf,application/acad,application/x-acad,application/autocad_dwg,image/x-dwg"
               hidden
               onChange={(event) => {
                 const file = event.target.files?.[0];
-                if (file) handleBackdropUpload(file);
+                if (file) void handlePlanUpload(file);
                 event.target.value = "";
               }}
             />

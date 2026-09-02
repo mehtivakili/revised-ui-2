@@ -389,6 +389,16 @@ export function PlanInspector({
                 </select>
               </label>
             ) : null}
+            <label className="plan-text-field">
+              <span>جهت بازشدن نسبت به فضا</span>
+              <select
+                value={door.swingDirection ?? "inward"}
+                onChange={(event) => update({ swingDirection: event.target.value as "inward" | "outward" })}
+              >
+                <option value="inward">بازشو به داخل</option>
+                <option value="outward">بازشو به بیرون</option>
+              </select>
+            </label>
             <NumberField
               label="میزان بازشدگی"
               unit="درجه"
@@ -399,7 +409,7 @@ export function PlanInspector({
               onChange={(openAngleDeg) => update({ openAngleDeg })}
             />
             <div className="plan-tool-tip">
-              <span>زاویه بازشدگی فقط برای نمایش نقشه است؛ در محاسبات پوشش و DORI این در همیشه بسته فرض می‌شود.</span>
+              <span>دستگیره بنفش کنار در نیز جهت داخل/بیرون را فوراً عوض می‌کند. زاویه بازشدگی فقط برای نمایش نقشه است؛ در محاسبات پوشش و DORI در همیشه بسته فرض می‌شود.</span>
             </div>
           </>
         )}

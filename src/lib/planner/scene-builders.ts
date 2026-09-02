@@ -13,7 +13,7 @@ import type {
   Vec2
 } from "@/src/domain/planner/types";
 import type { CameraCoverage } from "@/src/lib/planner/coverage";
-import { largestClosedWallLoop, type RightAngleCorner } from "@/src/lib/planner/geometry";
+import { largestClosedWallLoop, pointInPolygon, type RightAngleCorner } from "@/src/lib/planner/geometry";
 import { isCardinalAngle } from "@/src/lib/planner/rotation";
 
 /**
@@ -127,7 +127,8 @@ export function buildWallWithDoors(
   THREE: ThreeModule,
   wall: PlanWall,
   doors: PlanDoor[],
-  selected: boolean
+  selected: boolean,
+  planView = false
 ): THREE_NS.Object3D {
   if (!doors.length) return buildWallMesh(THREE, wall, selected);
   const group = new THREE.Group();
@@ -148,25 +149,32 @@ export function buildWallWithDoors(
     const solid = wallSectionMesh(THREE, wall, cursorM, opening.startM, 0, wall.heightM, selected);
     if (solid) group.add(solid);
 
-    // A window leaves masonry below it as well as above; a door only above.
-    const sillHeightM = opening.door.type === "window" ? Math.max(0, opening.door.sillHeightM ?? 0.9) : 0;
-    if (sillHeightM > 0.01) {
-      const apron = wallSectionMesh(THREE, wall, opening.startM, opening.endM, 0, sillHeightM, selected);
-      if (apron) group.add(apron);
-    }
+    /*
+     * Perspective needs the real sill and lintel. In a plan view they would be seen
+     * from above as an unbroken wall, so the whole opening is intentionally left empty;
+     * buildWindowMesh supplies the conventional dashed glazing line instead.
+     */
+    if (!planView) {
+      // A window leaves masonry below it as well as above; a door only above.
+      const sillHeightM = opening.door.type === "window" ? Math.max(0, opening.door.sillHeightM ?? 0.9) : 0;
+      if (sillHeightM > 0.01) {
+        const apron = wallSectionMesh(THREE, wall, opening.startM, opening.endM, 0, sillHeightM, selected);
+        if (apron) group.add(apron);
+      }
 
-    const openingTopM = sillHeightM + opening.door.heightM;
-    const lintelHeightM = Math.max(0, wall.heightM - openingTopM);
-    const lintel = wallSectionMesh(
-      THREE,
-      wall,
-      opening.startM,
-      opening.endM,
-      openingTopM,
-      lintelHeightM,
-      selected
-    );
-    if (lintel) group.add(lintel);
+      const openingTopM = sillHeightM + opening.door.heightM;
+      const lintelHeightM = Math.max(0, wall.heightM - openingTopM);
+      const lintel = wallSectionMesh(
+        THREE,
+        wall,
+        opening.startM,
+        opening.endM,
+        openingTopM,
+        lintelHeightM,
+        selected
+      );
+      if (lintel) group.add(lintel);
+    }
     cursorM = Math.max(cursorM, opening.endM);
   }
   const tail = wallSectionMesh(THREE, wall, cursorM, span, 0, wall.heightM, selected);
@@ -175,12 +183,40 @@ export function buildWallWithDoors(
   return group;
 }
 
+/**
+ * Converts the user-facing inside/outside choice to the physical side of this wall.
+ * When only one side touches a detected room that side is inside. Shared internal walls
+ * have rooms on both sides, so their stable drawing normal is used and the flip control
+ * still gives the user an unambiguous visual choice.
+ */
+export function doorSwingNormalSign(door: PlanDoor, wall: PlanWall, rooms: PlanRoom[] = []): 1 | -1 {
+  const dx = wall.b.x - wall.a.x;
+  const dz = wall.b.z - wall.a.z;
+  const span = Math.hypot(dx, dz) || 0.01;
+  const normal = { x: -dz / span, z: dx / span };
+  const center = { x: wall.a.x + dx * door.offset, z: wall.a.z + dz * door.offset };
+  const probeDistance = Math.max(0.3, wall.thicknessM / 2 + 0.15);
+  const positive = {
+    x: center.x + normal.x * probeDistance,
+    z: center.z + normal.z * probeDistance
+  };
+  const negative = {
+    x: center.x - normal.x * probeDistance,
+    z: center.z - normal.z * probeDistance
+  };
+  const positiveInside = rooms.some((room) => pointInPolygon(positive, room.polygon));
+  const negativeInside = rooms.some((room) => pointInPolygon(negative, room.polygon));
+  const inwardSign: 1 | -1 = positiveInside !== negativeInside && negativeInside ? -1 : 1;
+  return (door.swingDirection ?? "inward") === "inward" ? inwardSign : inwardSign === 1 ? -1 : 1;
+}
+
 /** Architectural top-view swing symbol plus a framed, half-open 3D door leaf. */
 export function buildDoorMesh(
   THREE: ThreeModule,
   door: PlanDoor,
   wall: PlanWall,
-  selected: boolean
+  selected: boolean,
+  rooms: PlanRoom[] = []
 ): THREE_NS.Object3D {
   if (door.type === "window") return buildWindowMesh(THREE, door, wall, selected);
   const group = new THREE.Group();
@@ -221,12 +257,14 @@ export function buildDoorMesh(
     const closedDirection = { x: -u.x * hingeSign, z: -u.z * hingeSign };
     // Both leaves swing to the same side of the wall; because their closed directions
     // are opposite, they rotate away from the centre in opposite angular directions.
-    const swingNormal = normal;
+    const swingSign = doorSwingNormalSign(door, wall, rooms);
+    const swingNormal = { x: normal.x * swingSign, z: normal.z * swingSign };
     const openDirection = {
       x: closedDirection.x * Math.cos(angleRad) + swingNormal.x * Math.sin(angleRad),
       z: closedDirection.z * Math.cos(angleRad) + swingNormal.z * Math.sin(angleRad)
     };
     const leaf = new THREE.Mesh(new THREE.BoxGeometry(leafWidth, door.heightM - 0.08, isGlass ? 0.035 : 0.07), leafMaterial);
+    leaf.name = "door-leaf";
     leaf.position.set(
       hinge.x + openDirection.x * leafWidth / 2,
       (door.heightM - 0.08) / 2,
@@ -297,7 +335,12 @@ export function buildWallEndpointHandles(THREE: ThreeModule, wall: PlanWall): TH
 }
 
 /** Handles at the physical jambs; dragging one keeps the opposite jamb fixed. */
-export function buildDoorResizeHandles(THREE: ThreeModule, door: PlanDoor, wall: PlanWall): THREE_NS.Group {
+export function buildDoorResizeHandles(
+  THREE: ThreeModule,
+  door: PlanDoor,
+  wall: PlanWall,
+  rooms: PlanRoom[] = []
+): THREE_NS.Group {
   const group = new THREE.Group();
   const span = Math.max(0.01, Math.hypot(wall.b.x - wall.a.x, wall.b.z - wall.a.z));
   const ux = (wall.b.x - wall.a.x) / span;
@@ -307,6 +350,15 @@ export function buildDoorResizeHandles(THREE: ThreeModule, door: PlanDoor, wall:
   const endM = centreM + door.widthM / 2;
   group.add(resizeKnob(THREE, { x: wall.a.x + ux * startM, z: wall.a.z + uz * startM }, "door-resize-start", door.id, 0x0ea5e9));
   group.add(resizeKnob(THREE, { x: wall.a.x + ux * endM, z: wall.a.z + uz * endM }, "door-resize-end", door.id, 0x0ea5e9));
+  if (door.type !== "window") {
+    const sign = doorSwingNormalSign(door, wall, rooms);
+    const normal = { x: -uz * sign, z: ux * sign };
+    const distanceM = Math.max(0.9, door.widthM / 2 + 0.55);
+    group.add(resizeKnob(THREE, {
+      x: wall.a.x + ux * centreM + normal.x * distanceM,
+      z: wall.a.z + uz * centreM + normal.z * distanceM
+    }, "door-swing-toggle", door.id, 0xa855f7));
+  }
   return group;
 }
 
@@ -375,7 +427,8 @@ function buildWindowMesh(
     roughness: 0.08,
     metalness: 0.1,
     transparent: true,
-    opacity: 0.35
+    opacity: 0.5,
+    side: THREE.DoubleSide
   });
 
   const place = (mesh: THREE_NS.Mesh, offsetAlong: number, height: number) => {
@@ -392,6 +445,26 @@ function buildWindowMesh(
   place(new THREE.Mesh(new THREE.BoxGeometry(door.widthM + 0.18, 0.07, thickness * 1.35), frameMaterial), 0, sillHeightM - 0.035);
   place(new THREE.Mesh(new THREE.BoxGeometry(0.05, door.heightM - 0.1, thickness * 0.8), frameMaterial), 0, sillHeightM + door.heightM / 2);
   place(new THREE.Mesh(new THREE.BoxGeometry(door.widthM - 0.05, door.heightM - 0.1, 0.03), glass), 0, sillHeightM + door.heightM / 2);
+
+  // The sill and lintel are physically correct in perspective but look like an uncut
+  // wall from straight above. A dashed architectural opening line above the wall keeps
+  // the window unmistakable in plan view without hiding its real 3D frame and pane.
+  const dashed = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(center.x - u.x * halfWidth, wall.heightM + 0.035, center.z - u.z * halfWidth),
+      new THREE.Vector3(center.x + u.x * halfWidth, wall.heightM + 0.035, center.z + u.z * halfWidth)
+    ]),
+    new THREE.LineDashedMaterial({
+      color: selected ? 0xf59e0b : 0x0284c7,
+      dashSize: 0.2,
+      gapSize: 0.12,
+      depthTest: false
+    })
+  );
+  dashed.computeLineDistances();
+  dashed.name = "window-opening-dash";
+  dashed.renderOrder = 45;
+  group.add(dashed);
 
   group.userData = { kind: "door", id: door.id };
   group.traverse((child) => { child.userData = { kind: "door", id: door.id }; });
@@ -437,6 +510,29 @@ export function buildObstacleMesh(
   selected: boolean,
   renderScope?: ObstacleRenderScope
 ): THREE_NS.Object3D {
+  if (["equipment-rack", "nvr-cabinet", "ups-unit", "network-switch", "monitoring-console"].includes(obstacle.variant ?? "")) {
+    const equipment = buildServerRoomObstacle(THREE, obstacle, selected);
+    if (renderScope) {
+      Object.assign(equipment.userData, renderScope);
+      equipment.traverse((child) => Object.assign(child.userData, renderScope));
+    }
+    return equipment;
+  }
+  if (obstacle.variant === "structural-column") {
+    const radius = Math.max(0.08, Math.min(obstacle.widthM, obstacle.depthM) / 2);
+    const geometry = new THREE.CylinderGeometry(radius, radius, obstacle.heightM, 24);
+    const material = new THREE.MeshStandardMaterial({
+      color: selected ? palette.obstacleSelected : 0x9ca3af,
+      roughness: 0.78,
+      metalness: 0.08
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(obstacle.center.x, obstacle.heightM / 2, obstacle.center.z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData = { kind: "obstacle", id: obstacle.id, ...renderScope };
+    return mesh;
+  }
   if (obstacle.kind === "surface") {
     const surface = buildSurfaceObstacle(THREE, obstacle, selected);
     if (renderScope) {
@@ -515,6 +611,94 @@ export function buildObstacleMesh(
   mesh.rotation.y = -(obstacle.rotationDeg * Math.PI) / 180;
   mesh.userData = { kind: "obstacle", id: obstacle.id, ...renderScope };
   return mesh;
+}
+
+/** Recognisable server-room equipment instead of anonymous grey boxes. */
+function buildServerRoomObstacle(THREE: ThreeModule, obstacle: PlanObstacle, selected: boolean) {
+  const group = new THREE.Group();
+  const dark = obstacleMaterial(THREE, 0x1e293b, obstacle, selected, 0.55);
+  const frame = obstacleMaterial(THREE, 0x64748b, obstacle, selected, 0.72);
+  const panel = obstacleMaterial(THREE, 0x0f172a, obstacle, selected, 0.38);
+  const screen = new THREE.MeshStandardMaterial({
+    color: 0x0b2940,
+    emissive: 0x0ea5e9,
+    emissiveIntensity: 0.7,
+    roughness: 0.18,
+    metalness: 0.25
+  });
+  const ledGreen = new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: 2 });
+  const ledAmber = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xd97706, emissiveIntensity: 1.8 });
+  const box = (
+    width: number,
+    height: number,
+    depth: number,
+    material: THREE_NS.Material,
+    x: number,
+    y: number,
+    z: number,
+    name?: string
+  ) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+    mesh.position.set(x, y, z);
+    if (name) mesh.name = name;
+    group.add(mesh);
+    return mesh;
+  };
+
+  if (obstacle.variant === "equipment-rack") {
+    box(obstacle.widthM, obstacle.heightM, obstacle.depthM, frame, 0, obstacle.heightM / 2, 0, "server-rack-frame");
+    box(obstacle.widthM * 0.78, obstacle.heightM * 0.88, obstacle.depthM * 0.04, panel, 0, obstacle.heightM * 0.51, obstacle.depthM * 0.51, "server-rack-front");
+    for (let index = 0; index < 7; index += 1) {
+      const y = obstacle.heightM * (0.18 + index * 0.105);
+      box(obstacle.widthM * 0.68, obstacle.heightM * 0.065, obstacle.depthM * 0.035, dark, 0, y, obstacle.depthM * 0.535, "rack-server-unit");
+      const led = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 5), index % 3 === 0 ? ledAmber : ledGreen);
+      led.position.set(obstacle.widthM * 0.24, y, obstacle.depthM * 0.565);
+      group.add(led);
+    }
+    for (const x of [-1, 1]) {
+      const rail = box(0.025, obstacle.heightM * 0.94, 0.025, dark, x * obstacle.widthM * 0.44, obstacle.heightM / 2, obstacle.depthM * 0.52);
+      rail.name = "rack-rail";
+    }
+  } else if (obstacle.variant === "nvr-cabinet") {
+    box(obstacle.widthM, obstacle.heightM, obstacle.depthM, dark, 0, obstacle.heightM / 2, 0, "nvr-body");
+    box(obstacle.widthM * 0.94, obstacle.heightM * 0.72, 0.02, panel, 0, obstacle.heightM / 2, obstacle.depthM / 2 + 0.012, "nvr-front-panel");
+    box(obstacle.widthM * 0.2, obstacle.heightM * 0.2, 0.024, screen, -obstacle.widthM * 0.25, obstacle.heightM * 0.53, obstacle.depthM / 2 + 0.026, "nvr-status-screen");
+    for (let index = 0; index < 4; index += 1) {
+      const led = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 5), index === 3 ? ledAmber : ledGreen);
+      led.position.set(obstacle.widthM * (0.08 + index * 0.09), obstacle.heightM * 0.53, obstacle.depthM / 2 + 0.03);
+      group.add(led);
+    }
+  } else if (obstacle.variant === "ups-unit") {
+    box(obstacle.widthM, obstacle.heightM, obstacle.depthM, dark, 0, obstacle.heightM / 2, 0, "ups-body");
+    box(obstacle.widthM * 0.7, obstacle.heightM * 0.17, 0.025, panel, 0, obstacle.heightM * 0.72, obstacle.depthM / 2 + 0.015, "ups-control-panel");
+    box(obstacle.widthM * 0.28, obstacle.heightM * 0.075, 0.03, screen, 0, obstacle.heightM * 0.74, obstacle.depthM / 2 + 0.032, "ups-display");
+    for (let row = 0; row < 5; row += 1) {
+      box(obstacle.widthM * 0.58, 0.018, 0.02, frame, 0, obstacle.heightM * (0.18 + row * 0.075), obstacle.depthM / 2 + 0.02, "ups-vent");
+    }
+  } else if (obstacle.variant === "network-switch") {
+    box(obstacle.widthM, obstacle.heightM, obstacle.depthM, frame, 0, obstacle.heightM / 2, 0, "poe-switch-body");
+    for (let index = 0; index < 12; index += 1) {
+      const x = -obstacle.widthM * 0.39 + index * obstacle.widthM * 0.071;
+      box(obstacle.widthM * 0.05, obstacle.heightM * 0.42, 0.018, panel, x, obstacle.heightM * 0.48, obstacle.depthM / 2 + 0.012, "poe-port");
+      if (index % 2 === 0) {
+        const led = new THREE.Mesh(new THREE.SphereGeometry(0.007, 6, 4), ledGreen);
+        led.position.set(x, obstacle.heightM * 0.82, obstacle.depthM / 2 + 0.024);
+        group.add(led);
+      }
+    }
+  } else {
+    // Monitoring console: desk, equipment pedestal and three angled displays.
+    box(obstacle.widthM, obstacle.heightM * 0.08, obstacle.depthM, frame, 0, obstacle.heightM * 0.52, 0, "monitoring-desk");
+    box(obstacle.widthM * 0.18, obstacle.heightM * 0.5, obstacle.depthM * 0.62, dark, 0, obstacle.heightM * 0.25, 0, "monitoring-pedestal");
+    for (let index = -1; index <= 1; index += 1) {
+      const monitor = box(obstacle.widthM * 0.27, obstacle.heightM * 0.32, 0.04, screen, index * obstacle.widthM * 0.29, obstacle.heightM * 0.8, -obstacle.depthM * 0.13, "monitoring-screen");
+      monitor.rotation.y = -index * 0.14;
+      box(obstacle.widthM * 0.18, 0.025, obstacle.depthM * 0.28, dark, index * obstacle.widthM * 0.29, obstacle.heightM * 0.58, 0.08, "monitoring-keyboard");
+    }
+  }
+
+  addSelectionFootprint(THREE, group, obstacle, selected);
+  return finishObstacleGroup(group, obstacle);
 }
 
 const surfaceColors: Partial<Record<NonNullable<PlanObstacle["variant"]>, number>> = {

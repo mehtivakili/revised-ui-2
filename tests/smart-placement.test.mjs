@@ -154,6 +154,53 @@ test("smart placement preserves existing cameras and fills blind areas", () => {
   }
 });
 
+test("a second room camera prefers the diagonally opposite corner", () => {
+  const polygon = [
+    { x: -10, z: -6 }, { x: 10, z: -6 }, { x: 10, z: 6 }, { x: -10, z: 6 }
+  ];
+  const emptyFloor = {
+    ...floor,
+    walls: walls.slice(0, 4),
+    obstacles: [],
+    cameras: [],
+    rooms: [{ id: "room-1", polygon, name: "سالن" }]
+  };
+  const cornerDefinitions = ["corner-a", "corner-b"].map((id, index) => ({
+    id,
+    roomId: "room-1",
+    zoneId: "room-1",
+    groupName: "سالن",
+    name: `دوربین گوشه ${index + 1}`,
+    housing: "turret",
+    goal: "monitor",
+    mountKind: "corner",
+    mountFallbacks: ["wall-edge"],
+    optics: { ...defaultCameraOptics, focalMm: 2.8, maxRangeM: 24 },
+    features: { microphone: false, colorNightVision: false, weatherproof: false }
+  }));
+  const plan = {
+    floors: [emptyFloor],
+    activeFloorId: emptyFloor.id,
+    gridSizeM: 1,
+    snapM: 1,
+    defaults: { ...defaultPlanDefaults }
+  };
+  const result = optimiseCameraPlacement(plan, cornerDefinitions);
+  const cameras = result.plan.floors[0].cameras;
+  assert.equal(cameras.length, 2, JSON.stringify(result.report));
+  assert.ok(cameras.every((camera) => camera.mountKind === "corner"));
+  const cornerIndices = cameras.map((camera) => polygon.reduce(
+    (best, vertex, index) => {
+      const value = Math.hypot(camera.position.x - vertex.x, camera.position.z - vertex.z);
+      return value < best.distance ? { index, distance: value } : best;
+    },
+    { index: 0, distance: Number.POSITIVE_INFINITY }
+  ).index);
+  const raw = Math.abs(cornerIndices[0] - cornerIndices[1]);
+  assert.equal(Math.min(raw, polygon.length - raw), 2, "the pair should occupy opposite corners");
+  assert.ok(cameras[1].placementReasons.some((reason) => reason.includes("پوشش ضربدری")));
+});
+
 test("reset placement removes every camera but preserves the plan and clears stale verdicts", () => {
   const sourceFloor = {
     ...floor,

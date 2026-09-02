@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Camera, Copy, Eye, LayoutGrid, Layers, LoaderCircle, PencilLine,
   RefreshCw, Ruler, Search, Trash2
@@ -188,7 +188,7 @@ export function ProjectGallery({
  * grid stays scannable. Seeing the spaces up front tells the user what the designer will
  * ask them to define, which is the same checklist they meet later in the left rail.
  */
-export function VenueComposition({ venueId }: { venueId: VenueTypeId }) {
+export function VenueComposition({ venueId, headerAction }: { venueId: VenueTypeId; headerAction?: ReactNode }) {
   const venue = findVenueType(venueId);
   const sections = useMemo(
     () => sectionsForVenue(venueId).filter((section) => section.id !== "generic.room"),
@@ -207,8 +207,11 @@ export function VenueComposition({ venueId }: { venueId: VenueTypeId }) {
   return (
     <div className="venue-composition" role="region" aria-label={`بخش‌های ${venue.label}`}>
       <header>
-        <strong>{venue.label} از چه بخش‌هایی تشکیل شده؟</strong>
-        <small>{formatFa(sections.length)} فضای پیشنهادی — همه اختیاری‌اند و در طراحی قابل تغییرند</small>
+        <div>
+          <strong>{venue.label} از چه بخش‌هایی تشکیل شده؟</strong>
+          <small>{formatFa(sections.length)} فضای پیشنهادی — همه اختیاری‌اند و در طراحی قابل تغییرند</small>
+        </div>
+        {headerAction}
       </header>
       <div className="venue-composition-groups">
         {groups.map((group) => (

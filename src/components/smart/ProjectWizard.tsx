@@ -15,7 +15,7 @@ import { CameraTemplateEditor } from "@/src/components/smart/CameraTemplateEdito
 import { CameraStreamEditor } from "@/src/components/smart/CameraStreamEditor";
 import { defaultCameraTemplates, zonesFromPlan, zonesFromTemplates } from "@/src/lib/planner/camera-templates";
 import { recommendCameraSelection, type CameraSelectionAnalysis } from "@/src/lib/planner/camera-selection";
-import { createSamplePlan, type SamplePlanId } from "@/src/lib/planner/sample-plans";
+import { createSamplePlan, sampleVenueTypeIds, type SamplePlanId } from "@/src/lib/planner/sample-plans";
 import { venueTypes, type VenueType, type VenueTypeId } from "@/src/domain/planner/venues";
 import { ProjectGallery, VenueComposition } from "@/src/components/smart/ProjectGallery";
 import {
@@ -160,6 +160,29 @@ const presets: WizardPreset[] = [
 
 const samplePresets: WizardPreset[] = [
   {
+    id: "family-villa-sample",
+    title: "ویلای خانوادگی دو طبقه",
+    description: "نشیمن، آشپزخانه، اتاق کار، سه اتاق خواب، حیاط و ورودی خودرو",
+    planId: "family-villa",
+    brief: { projectType: "residential", siteAreaM2: 504, floors: 2, entrances: 2, archiveDays: 30, lowLightPriority: true },
+    zones: [
+      { id: "family-entry", name: "دروازه، حیاط و ورودی اصلی", cameraCount: 3, outdoor: true, goal: "face-capture", targetDistanceM: 10, sceneWidthM: 7, mountingHeightM: 3.4, targetHeightM: 1.7, cameraTiltDeg: 12 },
+      { id: "family-common", name: "نشیمن و مسیرهای مشترک", cameraCount: 3, outdoor: false, goal: "monitor", targetDistanceM: 9, sceneWidthM: 7, mountingHeightM: 3, targetHeightM: 1.5, cameraTiltDeg: 12 }
+    ]
+  },
+  {
+    id: "corner-retail-shop-sample",
+    title: "فروشگاه محلی تک‌طبقه",
+    description: "ویترین، سالن فروش، استندها، صندوق، انبار و اتاق خدمات",
+    planId: "corner-retail-shop",
+    brief: { projectType: "shop", siteAreaM2: 280, floors: 1, entrances: 2, archiveDays: 21 },
+    zones: [
+      { id: "corner-entry", name: "ورودی، ویترین و صندوق", cameraCount: 3, outdoor: false, goal: "face-identify", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 13 },
+      { id: "corner-sales", name: "سالن فروش و استندها", cameraCount: 3, outdoor: false, goal: "monitor", targetDistanceM: 9, sceneWidthM: 7, mountingHeightM: 3.1, targetHeightM: 1.5, cameraTiltDeg: 12 },
+      { id: "corner-stock", name: "انبار و خروج پشتی", cameraCount: 1, outdoor: false, goal: "face-capture", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 3, targetHeightM: 1.6, cameraTiltDeg: 13 }
+    ]
+  },
+  {
     id: "luxury-villa-sample",
     title: "عمارت مجلل کامل",
     description: "زیرزمین خدماتی، باغ، استخر، سوئیت‌ها، گالری و روف‌گاردن",
@@ -194,6 +217,443 @@ const samplePresets: WizardPreset[] = [
       { id: "gallery-entry", name: "ورودی و ویترین", cameraCount: 2, outdoor: false, goal: "face-capture", targetDistanceM: 5, sceneWidthM: 3.5, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 14 },
       { id: "gallery-floor", name: "سالن و استندها", cameraCount: 4, outdoor: false, goal: "monitor", targetDistanceM: 11, sceneWidthM: 9, mountingHeightM: 3.3, targetHeightM: 1.5, cameraTiltDeg: 12 },
       { id: "gallery-till", name: "صندوق و انبار", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 3, targetHeightM: 1.5, cameraTiltDeg: 13 }
+    ]
+  },
+  {
+    id: "neighbourhood-supermarket-sample",
+    title: "سوپرمارکت محله‌ای کامل",
+    description: "ورودی کنترل‌شده، شش راهروی فروش، چهار صندوق، سردخانه، اتاق پول و بارانداز",
+    planId: "neighbourhood-supermarket",
+    brief: { projectType: "shop", siteAreaM2: 1440, floors: 1, entrances: 3, archiveDays: 30, lowLightPriority: true },
+    zones: [
+      { id: "market-entry", name: "ورودی مشتری و خط صندوق", cameraCount: 4, outdoor: false, goal: "face-identify", targetDistanceM: 7, sceneWidthM: 5, mountingHeightM: 3.2, targetHeightM: 1.7, cameraTiltDeg: 12 },
+      { id: "market-aisles", name: "راهروها و قفسه‌های فروش", cameraCount: 6, outdoor: false, goal: "monitor", targetDistanceM: 13, sceneWidthM: 10, mountingHeightM: 3.6, targetHeightM: 1.5, cameraTiltDeg: 10 },
+      { id: "market-secure", name: "اتاق پول، انبار و سردخانه", cameraCount: 3, outdoor: false, goal: "face-identify", targetDistanceM: 7, sceneWidthM: 5, mountingHeightM: 3.2, targetHeightM: 1.6, cameraTiltDeg: 12 },
+      { id: "market-dock", name: "بارانداز و تحویل کالا", cameraCount: 2, outdoor: true, goal: "face-capture", targetDistanceM: 12, sceneWidthM: 8, mountingHeightM: 4, targetHeightM: 1.6, cameraTiltDeg: 11 }
+    ]
+  },
+  {
+    id: "secure-jewellery-branch-sample",
+    title: "شعبه امن طلا و صرافی",
+    description: "ورودی دو مرحله‌ای، ویترین‌ها، چهار پیشخوان، خزانه، کنترل کارکنان و خروج اضطراری",
+    planId: "secure-jewellery-branch",
+    brief: { projectType: "shop", siteAreaM2: 384, floors: 1, entrances: 2, archiveDays: 60, redundancyRequired: true },
+    zones: [
+      { id: "jewellery-entry", name: "ورودی دو مرحله‌ای و نمای بیرونی", cameraCount: 3, outdoor: false, goal: "face-identify", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 13 },
+      { id: "jewellery-counter", name: "پیشخوان‌ها و ویترین", cameraCount: 4, outdoor: false, goal: "face-identify", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 3.1, targetHeightM: 1.6, cameraTiltDeg: 13 },
+      { id: "jewellery-vault", name: "خزانه و مسیر کارکنان", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 5, sceneWidthM: 3.5, mountingHeightM: 3, targetHeightM: 1.6, cameraTiltDeg: 14 },
+      { id: "jewellery-street", name: "پیاده‌رو و جلوی شعبه", cameraCount: 1, outdoor: true, goal: "face-capture", targetDistanceM: 10, sceneWidthM: 7, mountingHeightM: 3.5, targetHeightM: 1.7, cameraTiltDeg: 11 }
+    ]
+  },
+  {
+    id: "compact-industrial-workshop-sample",
+    title: "کارگاه تولیدی جمع‌وجور",
+    description: "سالن تولید، انبار، اتاق برق، دفتر کنترل، بارانداز و گیت خودرو",
+    planId: "compact-industrial-workshop",
+    brief: { projectType: "factory", siteAreaM2: 1232, floors: 1, entrances: 3, archiveDays: 45, redundancyRequired: true },
+    zones: [
+      { id: "compact-factory-gate", name: "گیت خودرو و ورود پرسنل", cameraCount: 3, outdoor: true, goal: "plate-capture", targetDistanceM: 14, sceneWidthM: 4, mountingHeightM: 4, targetHeightM: 0.8, cameraTiltDeg: 12 },
+      { id: "compact-factory-production", name: "تولید و ماشین‌آلات", cameraCount: 4, outdoor: false, goal: "monitor", targetDistanceM: 16, sceneWidthM: 12, mountingHeightM: 4.8, targetHeightM: 1.5, cameraTiltDeg: 10 },
+      { id: "compact-factory-stock", name: "انبار، بارانداز و اتاق برق", cameraCount: 3, outdoor: false, goal: "face-capture", targetDistanceM: 10, sceneWidthM: 7, mountingHeightM: 4, targetHeightM: 1.6, cameraTiltDeg: 11 }
+    ]
+  },
+  {
+    id: "urban-public-parking-sample",
+    title: "پارکینگ عمومی شهری",
+    description: "رمپ ورود و خروج مستقل، جای پارک، راهبند، اتاق کنترل و لابی عابر",
+    planId: "urban-public-parking",
+    brief: { projectType: "parking", siteAreaM2: 1344, floors: 1, entrances: 3, archiveDays: 45, lowLightPriority: true },
+    zones: [
+      { id: "parking-ramps", name: "رمپ ورود و خروج", cameraCount: 4, outdoor: false, goal: "plate-capture", targetDistanceM: 14, sceneWidthM: 4, mountingHeightM: 3, targetHeightM: 0.8, cameraTiltDeg: 12 },
+      { id: "parking-deck", name: "راهروها و جای پارک", cameraCount: 5, outdoor: false, goal: "face-capture", targetDistanceM: 15, sceneWidthM: 11, mountingHeightM: 3, targetHeightM: 1.5, cameraTiltDeg: 10 },
+      { id: "parking-pedestrian", name: "مسیر عابر و اتاق کنترل", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 7, sceneWidthM: 5, mountingHeightM: 2.9, targetHeightM: 1.7, cameraTiltDeg: 13 }
+    ]
+  },
+  {
+    id: "neighbourhood-restaurant-sample",
+    title: "رستوران محله‌ای",
+    description: "سالن شش‌میزه، صندوق، آشپزخانه، انبار مواد، در پشتی و تحویل بیرون‌بر",
+    planId: "neighbourhood-restaurant",
+    brief: { projectType: "shop", siteAreaM2: 560, floors: 1, entrances: 2, archiveDays: 30 },
+    zones: [
+      { id: "restaurant-front", name: "ورودی و صندوق", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 13 },
+      { id: "restaurant-dining", name: "سالن پذیرایی", cameraCount: 3, outdoor: false, goal: "monitor", targetDistanceM: 10, sceneWidthM: 8, mountingHeightM: 3.2, targetHeightM: 1.5, cameraTiltDeg: 11 },
+      { id: "restaurant-service", name: "آشپزخانه، انبار و در پشتی", cameraCount: 3, outdoor: false, goal: "face-capture", targetDistanceM: 8, sceneWidthM: 6, mountingHeightM: 3.1, targetHeightM: 1.6, cameraTiltDeg: 12 }
+    ]
+  },
+  {
+    id: "primary-school-sample",
+    title: "مدرسه ابتدایی یک‌طبقه",
+    description: "چهار کلاس، آزمایشگاه، لابی، راهروی مرکزی، حیاط و محل تحویل دانش‌آموز",
+    planId: "primary-school",
+    brief: { projectType: "office", siteAreaM2: 1344, floors: 1, entrances: 2, archiveDays: 30 },
+    zones: [
+      { id: "school-front", name: "ورودی، تحویل دانش‌آموز و حیاط", cameraCount: 5, outdoor: true, goal: "face-identify", targetDistanceM: 11, sceneWidthM: 7, mountingHeightM: 3.6, targetHeightM: 1.7, cameraTiltDeg: 11 },
+      { id: "school-corridor", name: "راهرو و لابی", cameraCount: 2, outdoor: false, goal: "monitor", targetDistanceM: 12, sceneWidthM: 9, mountingHeightM: 3, targetHeightM: 1.5, cameraTiltDeg: 11 },
+      { id: "school-rooms", name: "کلاس‌ها و آزمایشگاه", cameraCount: 4, outdoor: false, goal: "monitor", targetDistanceM: 9, sceneWidthM: 7, mountingHeightM: 3, targetHeightM: 1.5, cameraTiltDeg: 12 }
+    ]
+  },
+  {
+    id: "outpatient-clinic-sample",
+    title: "درمانگاه و داروخانه",
+    description: "اورژانس کوچک، پذیرش، داروخانه، سه اتاق معاینه و توقف آمبولانس",
+    planId: "outpatient-clinic",
+    brief: { projectType: "office", siteAreaM2: 960, floors: 1, entrances: 2, archiveDays: 45, redundancyRequired: true },
+    zones: [
+      { id: "clinic-emergency", name: "اورژانس و ورودی‌ها", cameraCount: 3, outdoor: false, goal: "face-identify", targetDistanceM: 7, sceneWidthM: 5, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 13 },
+      { id: "clinic-reception", name: "پذیرش و راهروی عمومی", cameraCount: 3, outdoor: false, goal: "face-identify", targetDistanceM: 8, sceneWidthM: 6, mountingHeightM: 3, targetHeightM: 1.6, cameraTiltDeg: 12 },
+      { id: "clinic-pharmacy", name: "داروخانه و انبار دارو", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 3, targetHeightM: 1.6, cameraTiltDeg: 13 },
+      { id: "clinic-ambulance", name: "توقف آمبولانس", cameraCount: 1, outdoor: true, goal: "plate-capture", targetDistanceM: 12, sceneWidthM: 5, mountingHeightM: 3.5, targetHeightM: 0.9, cameraTiltDeg: 11 }
+    ]
+  },
+  {
+    id: "boutique-hotel-sample",
+    title: "هتل بوتیک دو طبقه",
+    description: "لابی پخ‌دار، پذیرش، صندوق امانات، رستوران، اتاق‌های میهمان و راهروی ستون‌دار",
+    planId: "boutique-hotel",
+    brief: { projectType: "office", siteAreaM2: 1040, floors: 2, entrances: 2, archiveDays: 45, lowLightPriority: true },
+    zones: [
+      { id: "hotel-lobby", name: "لابی، پذیرش و ورودی", cameraCount: 3, outdoor: false, goal: "face-identify", targetDistanceM: 7, sceneWidthM: 5, mountingHeightM: 3.2, targetHeightM: 1.7, cameraTiltDeg: 12 },
+      { id: "hotel-corridor", name: "راهروی طبقات", cameraCount: 4, outdoor: false, goal: "face-capture", targetDistanceM: 11, sceneWidthM: 7, mountingHeightM: 3, targetHeightM: 1.6, cameraTiltDeg: 11 },
+      { id: "hotel-safe", name: "صندوق امانات", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 5, sceneWidthM: 3.5, mountingHeightM: 3, targetHeightM: 1.6, cameraTiltDeg: 13 }
+    ]
+  },
+  {
+    id: "neighbourhood-fuel-station-sample",
+    title: "جایگاه سوخت محله‌ای",
+    description: "فروشگاه پخ‌دار، سه سکوی سوخت، سایبان ستون‌دار، مسیر خودرو و محل مخازن",
+    planId: "neighbourhood-fuel-station",
+    brief: { projectType: "parking", siteAreaM2: 1500, floors: 1, entrances: 2, archiveDays: 45, lowLightPriority: true },
+    zones: [
+      { id: "fuel-gate", name: "ورودی و خروجی خودرو", cameraCount: 4, outdoor: true, goal: "plate-capture", targetDistanceM: 14, sceneWidthM: 4, mountingHeightM: 4, targetHeightM: 0.8, cameraTiltDeg: 12 },
+      { id: "fuel-islands", name: "سکوها و پمپ‌های سوخت", cameraCount: 6, outdoor: true, goal: "plate-capture", targetDistanceM: 10, sceneWidthM: 6, mountingHeightM: 4, targetHeightM: 1.2, cameraTiltDeg: 11 },
+      { id: "fuel-shop", name: "فروشگاه و صندوق", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 13 },
+      { id: "fuel-tanks", name: "مخازن و تخلیه سوخت", cameraCount: 2, outdoor: true, goal: "monitor", targetDistanceM: 15, sceneWidthM: 10, mountingHeightM: 4, targetHeightM: 1.5, cameraTiltDeg: 10 }
+    ]
+  },
+  {
+    id: "courtyard-apartment-sample",
+    title: "مجتمع مسکونی حیاط‌دار",
+    description: "پارکینگ زیرزمین، انباری، موتورخانه، لابی پخ‌دار، مشاعات و هسته دسترسی",
+    planId: "courtyard-apartment",
+    brief: { projectType: "residential", siteAreaM2: 1584, floors: 2, entrances: 2, archiveDays: 30, lowLightPriority: true },
+    zones: [
+      { id: "apartment-lobby", name: "لابی و ورودی اصلی", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 13 },
+      { id: "apartment-parking", name: "در پارکینگ و مسیر خودرو", cameraCount: 3, outdoor: false, goal: "plate-capture", targetDistanceM: 13, sceneWidthM: 4, mountingHeightM: 3, targetHeightM: 0.8, cameraTiltDeg: 12 },
+      { id: "apartment-storage", name: "انباری‌ها و تاسیسات", cameraCount: 2, outdoor: false, goal: "face-capture", targetDistanceM: 8, sceneWidthM: 5, mountingHeightM: 3, targetHeightM: 1.6, cameraTiltDeg: 12 }
+    ]
+  },
+  {
+    id: "orchard-farm-sample",
+    title: "باغ و دامداری کوچک",
+    description: "انبار محصول، جایگاه دام، اتاق تاسیسات چندضلعی، مسیر ورودی و باغ حلقه‌ای",
+    planId: "orchard-farm",
+    brief: { projectType: "factory", siteAreaM2: 3600, floors: 1, entrances: 2, archiveDays: 45, lowLightPriority: true },
+    zones: [
+      { id: "farm-access", name: "دروازه و مسیر دسترسی", cameraCount: 3, outdoor: true, goal: "plate-capture", targetDistanceM: 18, sceneWidthM: 5, mountingHeightM: 4, targetHeightM: 0.8, cameraTiltDeg: 11 },
+      { id: "farm-perimeter", name: "حصار و پیرامون باغ", cameraCount: 5, outdoor: true, goal: "monitor", targetDistanceM: 22, sceneWidthM: 16, mountingHeightM: 4.5, targetHeightM: 1.5, cameraTiltDeg: 9 },
+      { id: "farm-buildings", name: "انبار، جایگاه دام و تاسیسات", cameraCount: 4, outdoor: false, goal: "face-capture", targetDistanceM: 11, sceneWidthM: 8, mountingHeightM: 3.6, targetHeightM: 1.6, cameraTiltDeg: 11 }
+    ]
+  },
+  {
+    id: "urban-roundabout-sample",
+    title: "میدان و تقاطع شهری",
+    description: "جزیره دایره‌ای واقعی، چهار بازوی خیابان، گذر عابر، علائم و باجه کنترل پخ‌دار",
+    planId: "urban-roundabout",
+    brief: { projectType: "parking", siteAreaM2: 3600, floors: 1, entrances: 4, archiveDays: 30, lowLightPriority: true },
+    zones: [
+      { id: "road-junction", name: "میدان و نقاط تعارض", cameraCount: 4, outdoor: true, goal: "monitor", targetDistanceM: 22, sceneWidthM: 16, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 9 },
+      { id: "road-crossing", name: "گذر عابر و پیاده‌رو", cameraCount: 4, outdoor: true, goal: "face-capture", targetDistanceM: 12, sceneWidthM: 8, mountingHeightM: 4, targetHeightM: 1.7, cameraTiltDeg: 11 },
+      { id: "road-lanes", name: "مسیرهای ورودی و خروجی", cameraCount: 4, outdoor: true, goal: "plate-capture", targetDistanceM: 18, sceneWidthM: 5, mountingHeightM: 4.5, targetHeightM: 0.8, cameraTiltDeg: 10 }
+    ]
+  },
+  {
+    id: "highway-interchange-sample",
+    title: "تقاطع و رمپ بزرگراهی",
+    description: "دو باند اصلی، رمپ منحنی، شانه اضطراری، پایش سرعت، تابلو VMS و باجه کنترل",
+    planId: "highway-interchange",
+    brief: { projectType: "parking", siteAreaM2: 4200, floors: 1, entrances: 4, archiveDays: 45, lowLightPriority: true },
+    zones: [
+      { id: "highway-mainline", name: "باندهای اصلی و پایش سرعت", cameraCount: 6, outdoor: true, goal: "plate-capture", targetDistanceM: 28, sceneWidthM: 7, mountingHeightM: 6, targetHeightM: 0.8, cameraTiltDeg: 8 },
+      { id: "highway-ramp", name: "رمپ ورود و خروج", cameraCount: 4, outdoor: true, goal: "anpr", targetDistanceM: 22, sceneWidthM: 5, mountingHeightM: 5, targetHeightM: 0.8, cameraTiltDeg: 10 },
+      { id: "highway-shoulder", name: "شانه و توقفگاه اضطراری", cameraCount: 2, outdoor: true, goal: "monitor", targetDistanceM: 24, sceneWidthM: 16, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 9 }
+    ]
+  },
+  {
+    id: "active-construction-site-sample",
+    title: "کارگاه ساختمانی فعال",
+    description: "گیت کنترل، دفتر پخ‌دار، انبار ابزار، دپوی مصالح، گود، ستون‌ها و جرثقیل",
+    planId: "active-construction-site",
+    brief: { projectType: "factory", siteAreaM2: 3900, floors: 1, entrances: 2, archiveDays: 45, lowLightPriority: true },
+    zones: [
+      { id: "construction-gate", name: "گیت ورود کارگاه", cameraCount: 3, outdoor: true, goal: "face-identify", targetDistanceM: 10, sceneWidthM: 6, mountingHeightM: 4, targetHeightM: 1.7, cameraTiltDeg: 11 },
+      { id: "construction-material", name: "مصالح و تجهیزات", cameraCount: 5, outdoor: true, goal: "face-capture", targetDistanceM: 18, sceneWidthM: 13, mountingHeightM: 5, targetHeightM: 1.6, cameraTiltDeg: 9 },
+      { id: "construction-perimeter", name: "پیرامون، گود و جرثقیل", cameraCount: 5, outdoor: true, goal: "monitor", targetDistanceM: 24, sceneWidthM: 18, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 9 }
+    ]
+  },
+  {
+    id: "conference-centre-sample",
+    title: "مرکز همایش بادبزنی",
+    description: "لابی ثبت‌نام، سالن حضار، صحنه، تریبون، اتاق کنترل صدا و ورودی دو لنگه",
+    planId: "conference-centre",
+    brief: { projectType: "office", siteAreaM2: 1536, floors: 1, entrances: 3, archiveDays: 30 },
+    zones: [
+      { id: "conference-entry", name: "ورودی و ثبت‌نام", cameraCount: 3, outdoor: false, goal: "face-identify", targetDistanceM: 7, sceneWidthM: 5, mountingHeightM: 3.2, targetHeightM: 1.7, cameraTiltDeg: 12 },
+      { id: "conference-audience", name: "فضای حضار", cameraCount: 4, outdoor: false, goal: "monitor", targetDistanceM: 16, sceneWidthM: 13, mountingHeightM: 4.2, targetHeightM: 1.5, cameraTiltDeg: 9 },
+      { id: "conference-stage", name: "صحنه و اتاق کنترل", cameraCount: 3, outdoor: false, goal: "face-capture", targetDistanceM: 12, sceneWidthM: 8, mountingHeightM: 4, targetHeightM: 1.7, cameraTiltDeg: 10 }
+    ]
+  },
+  {
+    id: "car-showroom-sample",
+    title: "نمایشگاه و تحویل خودرو",
+    description: "شوروم شیشه‌ای پخ‌دار، خودروهای نمایشی، قرارداد فروش، قطعات و سکوی تحویل",
+    planId: "car-showroom",
+    brief: { projectType: "shop", siteAreaM2: 1800, floors: 1, entrances: 3, archiveDays: 30, lowLightPriority: true },
+    zones: [
+      { id: "showroom-floor", name: "سالن نمایش خودرو", cameraCount: 4, outdoor: false, goal: "face-capture", targetDistanceM: 14, sceneWidthM: 11, mountingHeightM: 4, targetHeightM: 1.6, cameraTiltDeg: 10 },
+      { id: "showroom-sales", name: "دفتر فروش و قرارداد", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 13 },
+      { id: "showroom-yard", name: "محوطه و تحویل خودرو", cameraCount: 4, outdoor: true, goal: "plate-capture", targetDistanceM: 16, sceneWidthM: 6, mountingHeightM: 4, targetHeightM: 0.8, cameraTiltDeg: 11 }
+    ]
+  },
+  {
+    id: "bus-terminal-sample",
+    title: "پایانه اتوبوس محله‌ای",
+    description: "سالن بلیت پخ‌دار، صف، سکوی انتظار، سایبان ستون‌دار و دو جایگاه اتوبوس",
+    planId: "bus-terminal",
+    brief: { projectType: "parking", siteAreaM2: 2100, floors: 1, entrances: 3, archiveDays: 30, lowLightPriority: true },
+    zones: [
+      { id: "bus-ticket", name: "باجه بلیت و صف", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 13 },
+      { id: "bus-platform", name: "سکو و سرپناه انتظار", cameraCount: 4, outdoor: true, goal: "face-capture", targetDistanceM: 14, sceneWidthM: 10, mountingHeightM: 4, targetHeightM: 1.7, cameraTiltDeg: 10 },
+      { id: "bus-lane", name: "مسیر ورود اتوبوس", cameraCount: 3, outdoor: true, goal: "plate-capture", targetDistanceM: 18, sceneWidthM: 6, mountingHeightM: 4.5, targetHeightM: 0.9, cameraTiltDeg: 10 }
+    ]
+  },
+  {
+    id: "city-bus-fleet-sample",
+    title: "اتوبوس و توقفگاه ناوگان",
+    description: "کابین گرد اتوبوس، صندلی‌ها، درهای مسافر، راننده، دید مسیر و محوطه توقف ناوگان",
+    planId: "city-bus-fleet",
+    brief: { projectType: "parking", siteAreaM2: 1700, floors: 1, entrances: 3, archiveDays: 30, lowLightPriority: true },
+    zones: [
+      { id: "fleet-cabin", name: "کابین مسافر و درها", cameraCount: 3, outdoor: false, goal: "face-capture", targetDistanceM: 8, sceneWidthM: 5, mountingHeightM: 2.8, targetHeightM: 1.6, cameraTiltDeg: 12 },
+      { id: "fleet-driver", name: "راننده و دید مسیر", cameraCount: 2, outdoor: false, goal: "monitor", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 2.7, targetHeightM: 1.5, cameraTiltDeg: 11 },
+      { id: "fleet-depot", name: "توقفگاه و ورود ناوگان", cameraCount: 4, outdoor: true, goal: "plate-capture", targetDistanceM: 18, sceneWidthM: 7, mountingHeightM: 4.5, targetHeightM: 0.9, cameraTiltDeg: 10 }
+    ]
+  },
+  {
+    id: "security-control-room-sample",
+    title: "مرکز مانیتورینگ امنیتی",
+    description: "ورودی کنترل‌شده، سالن اپراتورها، دیوار نمایش، اتاق UPS و تجهیزات پشتیبان",
+    planId: "security-control-room",
+    brief: { projectType: "office", siteAreaM2: 792, floors: 1, entrances: 2, archiveDays: 60, redundancyRequired: true },
+    zones: [
+      { id: "control-entry", name: "ورودی کنترل‌شده", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 5, sceneWidthM: 3.5, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 13 },
+      { id: "control-operators", name: "اپراتورها و دیوار نمایش", cameraCount: 3, outdoor: false, goal: "face-identify", targetDistanceM: 9, sceneWidthM: 7, mountingHeightM: 3, targetHeightM: 1.6, cameraTiltDeg: 11 },
+      { id: "control-power", name: "UPS و برق اضطراری", cameraCount: 2, outdoor: false, goal: "face-capture", targetDistanceM: 7, sceneWidthM: 5, mountingHeightM: 3, targetHeightM: 1.6, cameraTiltDeg: 12 }
+    ]
+  },
+  {
+    id: "urban-substation-sample",
+    title: "پست برق شهری",
+    description: "سوئیچگیر، اتاق رله پخ‌دار، دو ترانس، شینه‌ها، گیت و پیرامون حفاظت‌شده",
+    planId: "urban-substation",
+    brief: { projectType: "factory", siteAreaM2: 2600, floors: 1, entrances: 2, archiveDays: 60, redundancyRequired: true, lowLightPriority: true },
+    zones: [
+      { id: "substation-transformers", name: "ترانسفورماتورها و محوطه", cameraCount: 4, outdoor: true, goal: "monitor", targetDistanceM: 18, sceneWidthM: 14, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 9 },
+      { id: "substation-rooms", name: "سوئیچگیر و اتاق رله", cameraCount: 3, outdoor: false, goal: "face-identify", targetDistanceM: 9, sceneWidthM: 6, mountingHeightM: 3.4, targetHeightM: 1.7, cameraTiltDeg: 11 },
+      { id: "substation-gate", name: "گیت و پیرامون پست", cameraCount: 5, outdoor: true, goal: "face-identify", targetDistanceM: 18, sceneWidthM: 12, mountingHeightM: 5, targetHeightM: 1.7, cameraTiltDeg: 9 }
+    ]
+  },
+  {
+    id: "regional-warehouse-sample",
+    title: "انبار منطقه‌ای و بارانداز",
+    description: "دوازده ردیف رک، بسته‌بندی، دو سکوی بار، دفتر موجودی، گیت کامیون و محوطه",
+    planId: "regional-warehouse",
+    brief: { projectType: "factory", siteAreaM2: 2500, floors: 1, entrances: 4, archiveDays: 45, redundancyRequired: true },
+    zones: [
+      { id: "warehouse-aisles", name: "راهروهای قفسه", cameraCount: 6, outdoor: false, goal: "monitor", targetDistanceM: 18, sceneWidthM: 11, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 9 },
+      { id: "warehouse-office", name: "دفتر و کنترل موجودی", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 7, sceneWidthM: 5, mountingHeightM: 3.2, targetHeightM: 1.7, cameraTiltDeg: 12 },
+      { id: "warehouse-yard", name: "بارانداز، گیت و محوطه", cameraCount: 5, outdoor: true, goal: "plate-capture", targetDistanceM: 18, sceneWidthM: 7, mountingHeightM: 5, targetHeightM: 0.9, cameraTiltDeg: 10 }
+    ]
+  },
+  {
+    id: "neighbourhood-mall-sample",
+    title: "مرکز خرید محله‌ای سه‌تراز",
+    description: "پارکینگ زیرزمین، ورودی اصلی، گالری تجاری، حراست، پله‌برقی و فودکورت کوچک",
+    planId: "neighbourhood-mall",
+    brief: { projectType: "shop", siteAreaM2: 3300, floors: 3, entrances: 4, archiveDays: 45, lowLightPriority: true, redundancyRequired: true },
+    zones: [
+      { id: "small-mall-entry", name: "ورودی و گالری مشترک", cameraCount: 5, outdoor: false, goal: "face-identify", targetDistanceM: 10, sceneWidthM: 7, mountingHeightM: 3.8, targetHeightM: 1.7, cameraTiltDeg: 11 },
+      { id: "small-mall-core", name: "پله‌برقی، آسانسور و فودکورت", cameraCount: 5, outdoor: false, goal: "monitor", targetDistanceM: 13, sceneWidthM: 10, mountingHeightM: 4, targetHeightM: 1.5, cameraTiltDeg: 10 },
+      { id: "small-mall-parking", name: "پارکینگ و ورودی خودرو", cameraCount: 5, outdoor: false, goal: "plate-capture", targetDistanceM: 15, sceneWidthM: 7, mountingHeightM: 3, targetHeightM: 0.9, cameraTiltDeg: 10 },
+      { id: "small-mall-control", name: "اتاق کنترل و حراست", cameraCount: 2, outdoor: false, goal: "face-identify", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 3.2, targetHeightM: 1.7, cameraTiltDeg: 12 }
+    ]
+  },
+  {
+    id: "pipeline-monitoring-station-sample",
+    title: "ایستگاه پایش خط لوله",
+    description: "مسیر طولی لوله، سه مجموعه شیر، پایش نشتی، ایستگاه پمپاژ پخ‌دار و مسیر سرویس",
+    planId: "pipeline-monitoring-station",
+    brief: { projectType: "factory", siteAreaM2: 4200, floors: 1, entrances: 2, archiveDays: 60, redundancyRequired: true, lowLightPriority: true },
+    zones: [
+      { id: "pipeline-route", name: "مسیر و حریم خط لوله", cameraCount: 6, outdoor: true, goal: "monitor", targetDistanceM: 28, sceneWidthM: 18, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 8 },
+      { id: "pipeline-valves", name: "شیرآلات و نقاط نشتی", cameraCount: 4, outdoor: true, goal: "face-capture", targetDistanceM: 14, sceneWidthM: 9, mountingHeightM: 4.5, targetHeightM: 1.6, cameraTiltDeg: 10 },
+      { id: "pipeline-pump", name: "ایستگاه پمپاژ", cameraCount: 3, outdoor: true, goal: "face-identify", targetDistanceM: 10, sceneWidthM: 7, mountingHeightM: 4, targetHeightM: 1.7, cameraTiltDeg: 11 }
+    ]
+  },
+  {
+    id: "transmission-corridor-sample",
+    title: "کریدور انتقال برق",
+    description: "پنج دکل خطی، حریم انتقال، جاده سرویس، ترانس کاهنده و ساختمان پست تبدیل",
+    planId: "transmission-corridor",
+    brief: { projectType: "factory", siteAreaM2: 4400, floors: 1, entrances: 2, archiveDays: 45, lowLightPriority: true },
+    zones: [
+      { id: "transmission-towers", name: "دکل‌ها و پایه‌ها", cameraCount: 5, outdoor: true, goal: "monitor", targetDistanceM: 25, sceneWidthM: 17, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 8 },
+      { id: "transmission-corridor", name: "حریم و مسیر دسترسی", cameraCount: 5, outdoor: true, goal: "monitor", targetDistanceM: 28, sceneWidthM: 20, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 8 },
+      { id: "transmission-stepdown", name: "پست تبدیل و ترانس", cameraCount: 3, outdoor: true, goal: "face-capture", targetDistanceM: 12, sceneWidthM: 8, mountingHeightM: 4, targetHeightM: 1.6, cameraTiltDeg: 10 }
+    ]
+  },
+  {
+    id: "onshore-oil-field-sample",
+    title: "میدان نفتی خشکی",
+    description: "سه سرچاه، دو مخزن گرد، مشعل، اتاق کنترل، مسیر کامیون و حصار امنیتی",
+    planId: "onshore-oil-field",
+    brief: { projectType: "factory", siteAreaM2: 4600, floors: 1, entrances: 2, archiveDays: 60, redundancyRequired: true, lowLightPriority: true },
+    zones: [
+      { id: "onshore-process", name: "سرچاه‌ها و مخازن", cameraCount: 7, outdoor: true, goal: "monitor", targetDistanceM: 20, sceneWidthM: 15, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 9 },
+      { id: "onshore-control", name: "اتاق کنترل", cameraCount: 3, outdoor: false, goal: "face-identify", targetDistanceM: 8, sceneWidthM: 6, mountingHeightM: 3.4, targetHeightM: 1.7, cameraTiltDeg: 12 },
+      { id: "onshore-security", name: "گیت و پیرامون میدان", cameraCount: 6, outdoor: true, goal: "face-identify", targetDistanceM: 20, sceneWidthM: 13, mountingHeightM: 5, targetHeightM: 1.7, cameraTiltDeg: 9 }
+    ]
+  },
+  {
+    id: "offshore-platform-sample",
+    title: "سکوی نفتی دریایی",
+    description: "عرشه اصلی، هلی‌پد دایره‌ای، اتاق کنترل، قایق‌های نجات و رایزرهای دریایی",
+    planId: "offshore-platform",
+    brief: { projectType: "factory", siteAreaM2: 2700, floors: 1, entrances: 3, archiveDays: 60, redundancyRequired: true, lowLightPriority: true },
+    zones: [
+      { id: "offshore-deck", name: "عرشه و تجهیزات", cameraCount: 6, outdoor: true, goal: "face-capture", targetDistanceM: 18, sceneWidthM: 14, mountingHeightM: 5, targetHeightM: 1.6, cameraTiltDeg: 9 },
+      { id: "offshore-helipad", name: "هلی‌پد", cameraCount: 3, outdoor: true, goal: "monitor", targetDistanceM: 20, sceneWidthM: 16, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 9 },
+      { id: "offshore-control", name: "کنترل، نجات و رایزر", cameraCount: 5, outdoor: false, goal: "face-identify", targetDistanceM: 10, sceneWidthM: 7, mountingHeightM: 3.5, targetHeightM: 1.7, cameraTiltDeg: 11 }
+    ]
+  },
+  {
+    id: "solar-generation-farm-sample",
+    title: "مزرعه تولید برق خورشیدی",
+    description: "بیست آرایه پنل، اتاق اینورتر پخ‌دار، پست تبدیل، مسیر سرویس، گیت و حصار",
+    planId: "solar-generation-farm",
+    brief: { projectType: "factory", siteAreaM2: 4800, floors: 1, entrances: 2, archiveDays: 45, redundancyRequired: true, lowLightPriority: true },
+    zones: [
+      { id: "solar-arrays", name: "آرایه‌های پنل", cameraCount: 6, outdoor: true, goal: "monitor", targetDistanceM: 25, sceneWidthM: 19, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 8 },
+      { id: "solar-power", name: "اینورتر و پست تبدیل", cameraCount: 4, outdoor: true, goal: "face-capture", targetDistanceM: 14, sceneWidthM: 9, mountingHeightM: 4.5, targetHeightM: 1.6, cameraTiltDeg: 10 },
+      { id: "solar-security", name: "گیت و پیرامون مزرعه", cameraCount: 6, outdoor: true, goal: "plate-capture", targetDistanceM: 20, sceneWidthM: 12, mountingHeightM: 5, targetHeightM: 0.9, cameraTiltDeg: 9 }
+    ]
+  },
+  {
+    id: "hydroelectric-power-station-sample",
+    title: "نیروگاه برق‌آبی",
+    description: "بدنه سد، سرریز، مخزن، کانال خروجی، سه واحد توربین و اتاق کنترل نیروگاه",
+    planId: "hydroelectric-power-station",
+    brief: { projectType: "factory", siteAreaM2: 5200, floors: 1, entrances: 2, archiveDays: 60, redundancyRequired: true, lowLightPriority: true },
+    zones: [
+      { id: "hydro-dam", name: "سد، دریچه‌ها و مسیر آب", cameraCount: 7, outdoor: true, goal: "monitor", targetDistanceM: 28, sceneWidthM: 20, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 8 },
+      { id: "hydro-turbines", name: "توربین‌خانه و ژنراتورها", cameraCount: 4, outdoor: false, goal: "face-capture", targetDistanceM: 15, sceneWidthM: 10, mountingHeightM: 5, targetHeightM: 1.6, cameraTiltDeg: 9 },
+      { id: "hydro-control", name: "کنترل و پیرامون نیروگاه", cameraCount: 5, outdoor: true, goal: "face-identify", targetDistanceM: 16, sceneWidthM: 10, mountingHeightM: 4.5, targetHeightM: 1.7, cameraTiltDeg: 10 }
+    ]
+  },
+  {
+    id: "safe-city-district-sample",
+    title: "ناحیه شهر ایمن",
+    description: "پلازای دایره‌ای، تقاطع، بوستان، ایستگاه حمل‌ونقل و مرکز فرماندهی شهری",
+    planId: "safe-city-district",
+    brief: { projectType: "office", siteAreaM2: 4500, floors: 1, entrances: 4, archiveDays: 45, redundancyRequired: true, lowLightPriority: true },
+    zones: [
+      { id: "safe-city-square", name: "میدان، تقاطع و محل تجمع", cameraCount: 8, outdoor: true, goal: "face-capture", targetDistanceM: 22, sceneWidthM: 16, mountingHeightM: 5, targetHeightM: 1.7, cameraTiltDeg: 9 },
+      { id: "safe-city-park", name: "بوستان و ایستگاه عمومی", cameraCount: 5, outdoor: true, goal: "monitor", targetDistanceM: 18, sceneWidthM: 14, mountingHeightM: 4.5, targetHeightM: 1.5, cameraTiltDeg: 10 },
+      { id: "safe-city-command", name: "مرکز پایش شهری", cameraCount: 3, outdoor: false, goal: "face-identify", targetDistanceM: 8, sceneWidthM: 6, mountingHeightM: 3.4, targetHeightM: 1.7, cameraTiltDeg: 12 }
+    ]
+  },
+  {
+    id: "urban-sports-complex-sample",
+    title: "مجتمع ورزشی شهری",
+    description: "زمین مسابقه، پیست، جایگاه چهارطرفه، گیت بازرسی، باجه بلیت و پارکینگ",
+    planId: "urban-sports-complex",
+    brief: { projectType: "parking", siteAreaM2: 5600, floors: 1, entrances: 4, archiveDays: 30, lowLightPriority: true },
+    zones: [
+      { id: "sports-field", name: "زمین و جایگاه تماشاگران", cameraCount: 8, outdoor: true, goal: "face-capture", targetDistanceM: 24, sceneWidthM: 19, mountingHeightM: 5, targetHeightM: 1.7, cameraTiltDeg: 8 },
+      { id: "sports-gate", name: "گیت، بلیت و صف ورودی", cameraCount: 5, outdoor: true, goal: "face-identify", targetDistanceM: 12, sceneWidthM: 7, mountingHeightM: 4, targetHeightM: 1.7, cameraTiltDeg: 11 },
+      { id: "sports-parking", name: "پارکینگ تماشاگران", cameraCount: 4, outdoor: true, goal: "plate-capture", targetDistanceM: 18, sceneWidthM: 8, mountingHeightM: 4.5, targetHeightM: 0.9, cameraTiltDeg: 10 }
+    ]
+  },
+  {
+    id: "compact-data-centre-sample",
+    title: "مرکز داده امن",
+    description: "مانترپ ورودی، چهارده رک، راهروهای سرد، UPS، سرمایش و محل تحویل تجهیزات",
+    planId: "compact-data-centre",
+    brief: { projectType: "office", siteAreaM2: 2100, floors: 1, entrances: 3, archiveDays: 60, redundancyRequired: true },
+    zones: [
+      { id: "data-racks", name: "راهروهای رک و سالن سرور", cameraCount: 6, outdoor: false, goal: "face-identify", targetDistanceM: 14, sceneWidthM: 8, mountingHeightM: 3.8, targetHeightM: 1.7, cameraTiltDeg: 10 },
+      { id: "data-access", name: "مانترپ و ورودی کنترل‌شده", cameraCount: 3, outdoor: false, goal: "face-identify", targetDistanceM: 6, sceneWidthM: 4, mountingHeightM: 3.2, targetHeightM: 1.7, cameraTiltDeg: 13 },
+      { id: "data-support", name: "برق، سرمایش و بارگیری", cameraCount: 5, outdoor: false, goal: "face-capture", targetDistanceM: 10, sceneWidthM: 7, mountingHeightM: 3.8, targetHeightM: 1.6, cameraTiltDeg: 11 }
+    ]
+  },
+  {
+    id: "regional-airport-terminal-sample",
+    title: "فرودگاه منطقه‌ای",
+    description: "ترمینال پخ‌دار، پذیرش، بازرسی، سالن انتظار، نوار بار، اپرون و هواپیمای منطقه‌ای",
+    planId: "regional-airport-terminal",
+    brief: { projectType: "parking", siteAreaM2: 7200, floors: 1, entrances: 5, archiveDays: 60, redundancyRequired: true, lowLightPriority: true },
+    zones: [
+      { id: "airport-security", name: "ورودی و گیت امنیتی", cameraCount: 5, outdoor: false, goal: "face-identify", targetDistanceM: 9, sceneWidthM: 6, mountingHeightM: 3.8, targetHeightM: 1.7, cameraTiltDeg: 11 },
+      { id: "airport-terminal", name: "پذیرش، ترانزیت و بار", cameraCount: 8, outdoor: false, goal: "face-capture", targetDistanceM: 16, sceneWidthM: 11, mountingHeightM: 4.5, targetHeightM: 1.7, cameraTiltDeg: 9 },
+      { id: "airport-apron", name: "اپرون و پیرامون فرودگاه", cameraCount: 8, outdoor: true, goal: "monitor", targetDistanceM: 30, sceneWidthM: 22, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 8 }
+    ]
+  },
+  {
+    id: "container-port-sample",
+    title: "بندر کانتینری",
+    description: "یارد کانتینر، سه جرثقیل ساحلی، اسکله، گمرک، گیت کامیون و حوض بندر",
+    planId: "container-port",
+    brief: { projectType: "factory", siteAreaM2: 7600, floors: 1, entrances: 3, archiveDays: 60, redundancyRequired: true, lowLightPriority: true },
+    zones: [
+      { id: "port-yard", name: "یارد کانتینر و مسیر کامیون", cameraCount: 8, outdoor: true, goal: "plate-capture", targetDistanceM: 25, sceneWidthM: 16, mountingHeightM: 5, targetHeightM: 0.9, cameraTiltDeg: 8 },
+      { id: "port-quay", name: "اسکله و جرثقیل‌های ساحلی", cameraCount: 7, outdoor: true, goal: "monitor", targetDistanceM: 28, sceneWidthM: 21, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 8 },
+      { id: "port-customs", name: "گیت و گمرک", cameraCount: 5, outdoor: true, goal: "face-identify", targetDistanceM: 14, sceneWidthM: 8, mountingHeightM: 4.5, targetHeightM: 1.7, cameraTiltDeg: 10 }
+    ]
+  },
+  {
+    id: "railway-interchange-station-sample",
+    title: "ایستگاه راه‌آهن و مترو",
+    description: "سالن بلیت، صف، پله‌برقی، دو سکوی مسافر، شش خط ریل و دهانه‌های تونل",
+    planId: "railway-interchange-station",
+    brief: { projectType: "office", siteAreaM2: 5200, floors: 1, entrances: 4, archiveDays: 45, redundancyRequired: true, lowLightPriority: true },
+    zones: [
+      { id: "railway-hall", name: "سالن بلیت و گیت", cameraCount: 5, outdoor: false, goal: "face-identify", targetDistanceM: 11, sceneWidthM: 7, mountingHeightM: 3.8, targetHeightM: 1.7, cameraTiltDeg: 11 },
+      { id: "railway-platforms", name: "سکوها و لبه خطر", cameraCount: 8, outdoor: true, goal: "face-capture", targetDistanceM: 22, sceneWidthM: 13, mountingHeightM: 4.5, targetHeightM: 1.7, cameraTiltDeg: 9 },
+      { id: "railway-access", name: "پله‌برقی و دهانه تونل", cameraCount: 5, outdoor: false, goal: "monitor", targetDistanceM: 18, sceneWidthM: 11, mountingHeightM: 4, targetHeightM: 1.5, cameraTiltDeg: 10 }
+    ]
+  },
+  {
+    id: "open-pit-mine-sample",
+    title: "معدن روباز",
+    description: "پیت دایره‌ای پلکانی، جاده حمل، کامیون‌ها، باسکول، سنگ‌شکن و انبار امن مواد منفجره",
+    planId: "open-pit-mine",
+    brief: { projectType: "factory", siteAreaM2: 8500, floors: 1, entrances: 2, archiveDays: 60, redundancyRequired: true, lowLightPriority: true },
+    zones: [
+      { id: "mine-pit", name: "دهانه معدن و جبهه‌کار", cameraCount: 7, outdoor: true, goal: "monitor", targetDistanceM: 30, sceneWidthM: 23, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 8 },
+      { id: "mine-road", name: "جاده حمل و باسکول", cameraCount: 6, outdoor: true, goal: "plate-capture", targetDistanceM: 22, sceneWidthM: 9, mountingHeightM: 5, targetHeightM: 0.9, cameraTiltDeg: 9 },
+      { id: "mine-process", name: "سنگ‌شکن و انبار مواد منفجره", cameraCount: 5, outdoor: true, goal: "face-identify", targetDistanceM: 16, sceneWidthM: 10, mountingHeightM: 4.5, targetHeightM: 1.7, cameraTiltDeg: 10 }
+    ]
+  },
+  {
+    id: "water-treatment-plant-sample",
+    title: "تصفیه‌خانه آب و فاضلاب",
+    description: "چهار حوضچه مدور، کانال‌ها، پمپاژ، مواد شیمیایی، اسکادا و پیرامون حفاظت‌شده",
+    planId: "water-treatment-plant",
+    brief: { projectType: "factory", siteAreaM2: 6100, floors: 1, entrances: 3, archiveDays: 60, redundancyRequired: true, lowLightPriority: true },
+    zones: [
+      { id: "water-basins", name: "حوضچه‌ها و کانال‌های آب", cameraCount: 7, outdoor: true, goal: "monitor", targetDistanceM: 24, sceneWidthM: 18, mountingHeightM: 5, targetHeightM: 1.5, cameraTiltDeg: 8 },
+      { id: "water-process", name: "پمپ و مواد شیمیایی", cameraCount: 5, outdoor: false, goal: "face-identify", targetDistanceM: 10, sceneWidthM: 7, mountingHeightM: 3.8, targetHeightM: 1.7, cameraTiltDeg: 11 },
+      { id: "water-control", name: "کنترل، گیت و پیرامون", cameraCount: 6, outdoor: true, goal: "face-capture", targetDistanceM: 18, sceneWidthM: 12, mountingHeightM: 4.5, targetHeightM: 1.7, cameraTiltDeg: 9 }
     ]
   },
   {
@@ -297,20 +757,6 @@ const samplePresets: WizardPreset[] = [
 ];
 
 /** Venue programme paired with each fully drawn sample plan. */
-const sampleVenueTypes: Record<SamplePlanId, VenueTypeId> = {
-  "luxury-villa": "residential",
-  "modern-office": "office",
-  "retail-gallery": "shop",
-  "factory-campus": "industrial",
-  "residential-parking": "apartment",
-  "kourosh-mall": "mall",
-  "mega-mall": "mall",
-  "general-hospital": "hospital",
-  "police-station": "office",
-  "barracks-campus": "industrial",
-  "school-campus": "school"
-};
-
 const allPresets = [...presets, ...samplePresets];
 
 type VenueExperience = {
@@ -666,12 +1112,17 @@ export function ProjectWizard() {
       goal: distinctGoals.size === 1 ? templates[0].goal : "mixed"
     }));
     if (preset.planId) {
-      const venueTypeId = sampleVenueTypes[preset.planId];
+      const venueTypeId = sampleVenueTypeIds[preset.planId];
       setBuildingPlan({ ...createSamplePlan(preset.planId), venueTypeId });
       setSelectedSampleId(preset.id);
       setSiteMode("designer");
       setSavedMessage(`نمونه «${preset.title}» روی طراح بارگذاری شد؛ همه اجزا قابل ویرایش‌اند.`);
     }
+  }
+
+  function openSample(preset: WizardPreset) {
+    applyPreset(preset);
+    setDesignFocusActive(true);
   }
 
   async function generate() {
@@ -738,6 +1189,7 @@ export function ProjectWizard() {
       samples={samplePresets}
       selectedSampleId={selectedSampleId}
       onApplySample={applyPreset}
+      onOpenSample={openSample}
     />
   );
 
@@ -1001,7 +1453,8 @@ function ProjectTypeGateway({
   galleryToken,
   samples,
   selectedSampleId,
-  onApplySample
+  onApplySample,
+  onOpenSample
 }: {
   venues: VenueType[];
   selectedVenueId: VenueTypeId | null;
@@ -1015,6 +1468,7 @@ function ProjectTypeGateway({
   samples: WizardPreset[];
   selectedSampleId: string | null;
   onApplySample: (preset: WizardPreset) => void;
+  onOpenSample: (preset: WizardPreset) => void;
 }) {
   /*
    * Hover previews the composition, clicking commits it.
@@ -1029,6 +1483,7 @@ function ProjectTypeGateway({
     bottom: number;
   } | null>(null);
   const venuePreviewTimerRef = useRef<number | null>(null);
+  const venueDismissTimerRef = useRef<number | null>(null);
   const venuePointerRef = useRef<{ venueId: VenueTypeId; clientX: number; clientY: number } | null>(null);
   const venueGroups = useMemo(() => venueCategories
     .map((category) => ({
@@ -1038,6 +1493,15 @@ function ProjectTypeGateway({
         .filter((venue): venue is VenueType => Boolean(venue))
     }))
     .filter((category) => category.venues.length > 0), [venues]);
+  const samplesByVenue = useMemo(() => {
+    const mapped = new Map<VenueTypeId, WizardPreset>();
+    for (const sample of samples) {
+      if (!sample.planId) continue;
+      const venueId = sampleVenueTypeIds[sample.planId];
+      if (!mapped.has(venueId)) mapped.set(venueId, sample);
+    }
+    return mapped;
+  }, [samples]);
 
   const showVenuePreview = (venueId: VenueTypeId, clientX: number, clientY: number) => {
     const popupWidth = 560;
@@ -1057,8 +1521,32 @@ function ProjectTypeGateway({
       window.clearTimeout(venuePreviewTimerRef.current);
       venuePreviewTimerRef.current = null;
     }
+    if (venueDismissTimerRef.current !== null) {
+      window.clearTimeout(venueDismissTimerRef.current);
+      venueDismissTimerRef.current = null;
+    }
     venuePointerRef.current = null;
     setVenuePreview(null);
+  };
+
+  const keepVenuePreviewOpen = () => {
+    if (venueDismissTimerRef.current === null) return;
+    window.clearTimeout(venueDismissTimerRef.current);
+    venueDismissTimerRef.current = null;
+  };
+
+  const scheduleVenueDismiss = () => {
+    if (venuePreviewTimerRef.current !== null) {
+      window.clearTimeout(venuePreviewTimerRef.current);
+      venuePreviewTimerRef.current = null;
+    }
+    venuePointerRef.current = null;
+    if (!venuePreview) return;
+    keepVenuePreviewOpen();
+    venueDismissTimerRef.current = window.setTimeout(() => {
+      venueDismissTimerRef.current = null;
+      setVenuePreview(null);
+    }, 140);
   };
 
   const scheduleVenuePreview = (venueId: VenueTypeId, clientX: number, clientY: number) => {
@@ -1074,6 +1562,7 @@ function ProjectTypeGateway({
 
   useEffect(() => () => {
     if (venuePreviewTimerRef.current !== null) window.clearTimeout(venuePreviewTimerRef.current);
+    if (venueDismissTimerRef.current !== null) window.clearTimeout(venueDismissTimerRef.current);
   }, []);
 
   return (
@@ -1107,7 +1596,7 @@ function ProjectTypeGateway({
         <div
           className="project-venue-grid"
           aria-live="polite"
-          onMouseLeave={cancelVenuePreview}
+          onMouseLeave={scheduleVenueDismiss}
         >
           <details className="project-samples-panel">
             <summary>
@@ -1118,7 +1607,7 @@ function ProjectTypeGateway({
             </summary>
             <div className="project-samples-grid">
               {samples.map((sample, index) => {
-                const venueId = sample.planId ? sampleVenueTypes[sample.planId] : undefined;
+                const venueId = sample.planId ? sampleVenueTypeIds[sample.planId] : undefined;
                 const venue = venueId ? venueTypes.find((item) => item.id === venueId) : undefined;
                 const selected = sample.id === selectedSampleId;
                 return (
@@ -1155,30 +1644,37 @@ function ProjectTypeGateway({
                   const Icon = experience.icon;
                   const selected = venue.id === selectedVenueId;
                   return (
-                    <button
-                      type="button"
+                    <article
                       key={venue.id}
                       className={`project-venue-card venue-${venue.id}${selected ? " is-selected" : ""}`}
                       style={{ "--venue-accent": venueCardAccents.get(venue.id) } as CSSProperties}
-                      onClick={() => onSelect(venue.id)}
                       onMouseEnter={(event) => scheduleVenuePreview(venue.id, event.clientX, event.clientY)}
                       onMouseMove={(event) => {
                         venuePointerRef.current = { venueId: venue.id, clientX: event.clientX, clientY: event.clientY };
-                        if (venuePreview?.venueId === venue.id) showVenuePreview(venue.id, event.clientX, event.clientY);
                       }}
-                      onMouseLeave={cancelVenuePreview}
+                      onMouseLeave={scheduleVenueDismiss}
                       onFocus={(event) => {
+                        if (event.target !== event.currentTarget && !(event.target as HTMLElement).classList.contains("project-venue-select")) return;
                         cancelVenuePreview();
                         const rect = event.currentTarget.getBoundingClientRect();
                         showVenuePreview(venue.id, rect.right, rect.top + rect.height / 2);
                       }}
-                      onBlur={cancelVenuePreview}
-                      aria-pressed={selected}
+                      onBlur={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) cancelVenuePreview();
+                      }}
                     >
-                      <span className="project-venue-icon"><Icon size={28} strokeWidth={1.8} aria-hidden="true" /></span>
-                      <span className="project-venue-copy"><strong>{experience.shortLabel}</strong><small>{venue.blurb}</small></span>
-                      {selected && <span className="project-venue-check"><Check size={14} aria-hidden="true" /></span>}
-                    </button>
+                      <button
+                        type="button"
+                        className="project-venue-select"
+                        onClick={() => onSelect(venue.id)}
+                        aria-pressed={selected}
+                        aria-label={`انتخاب ${experience.shortLabel}`}
+                      >
+                        <span className="project-venue-icon"><Icon size={28} strokeWidth={1.8} aria-hidden="true" /></span>
+                        <span className="project-venue-copy"><strong>{experience.shortLabel}</strong><small>{venue.blurb}</small></span>
+                        {selected && <span className="project-venue-check"><Check size={14} aria-hidden="true" /></span>}
+                      </button>
+                    </article>
                   );
                 })}
               </div>
@@ -1192,8 +1688,26 @@ function ProjectTypeGateway({
             className="project-venue-popover"
             style={{ left: venuePreview.left, bottom: venuePreview.bottom }}
             aria-live="polite"
+            onMouseEnter={keepVenuePreviewOpen}
+            onMouseLeave={cancelVenuePreview}
           >
-            <VenueComposition venueId={venuePreview.venueId} />
+            <VenueComposition
+              venueId={venuePreview.venueId}
+              headerAction={samplesByVenue.get(venuePreview.venueId) ? (
+                <button
+                  type="button"
+                  className="project-venue-popover-action"
+                  onClick={() => {
+                    const sample = samplesByVenue.get(venuePreview.venueId);
+                    if (sample) onOpenSample(sample);
+                  }}
+                >
+                  <Sparkles size={12} aria-hidden="true" />
+                  باز کردن نمونه
+                  <ArrowLeft size={11} aria-hidden="true" />
+                </button>
+              ) : null}
+            />
           </aside>
         )}
       </div>

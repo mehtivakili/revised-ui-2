@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test, { describe } from "node:test";
-import { castRay, collectOccluders, collectRightAngleCorners, convexHull, findRightAngleCorner, floorAreaM2, isAxisAlignedSegment, openingsOnWall, polygonArea, pointInPolygon, projectPointToWall, snapWallToEqualParallel, traceWallLoop } from "@/src/lib/planner/geometry";
+import { castRay, collectOccluders, collectRightAngleCorners, convexHull, findRightAngleCorner, floorAreaM2, isAxisAlignedSegment, openingHostWallAtPoint, openingsOnWall, polygonArea, pointInPolygon, projectPointToWall, snapWallToEqualParallel, traceWallLoop } from "@/src/lib/planner/geometry";
 import { cameraFovDeg, computeCameraCoverage, ppmAtDistance, roomCoverageForGoal } from "@/src/lib/planner/coverage";
 import { defaultCameraOptics, duplicateFloor, createFloor } from "@/src/domain/planner/types";
 
@@ -26,6 +26,11 @@ describe("plan geometry", () => {
   test("open walls have no valid area until the perimeter closes", () => {
     const open = room.slice(0, 3);
     assert.equal(floorAreaM2(open), 0);
+  });
+
+  test("opening tools find a pasted wall from geometry even when another mesh is in front", () => {
+    const pasted = wall("wall-paste-batch-0", 20, 8, 30, 8);
+    assert.equal(openingHostWallAtPoint([...room, pasted], { x: 25, z: 8.2 })?.id, pasted.id);
   });
 
   test("convex hull drops interior points", () => {

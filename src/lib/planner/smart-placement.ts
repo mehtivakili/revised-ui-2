@@ -41,6 +41,9 @@ type Candidate = {
   yawDeg: number;
   facesDoor: boolean;
   mounting: "corner" | "wall" | "ceiling" | "central" | "pole";
+  /** Room and vertex retained so a second camera can prefer the diagonal corner. */
+  roomId?: string;
+  cornerIndex?: number;
 };
 
 type FloorContext = {
@@ -513,7 +516,9 @@ function buildCandidates(
         position: corner,
         yawDeg: (Math.atan2(centre.z - corner.z, centre.x - corner.x) * 180) / Math.PI,
         facesDoor: false,
-        mounting: "corner"
+        mounting: "corner",
+        roomId: room.id,
+        cornerIndex: index
       });
       if (permitsPole) {
         push({
@@ -662,6 +667,46 @@ function verticalGeometryFactor(camera: PlanCamera, point: Vec2) {
   if (errorDeg <= 18) return 1 - ((errorDeg - 7) / 11) * 0.55;
   if (errorDeg <= 30) return 0.45 - ((errorDeg - 18) / 12) * 0.3;
   return 0.08;
+}
+
+/**
+ * Indoor fixed cameras normally start in a corner. When another corner camera already
+ * serves the same room, the farthest cyclic vertex receives the strongest preference,
+ * producing the familiar crossed fields of view without overruling actual coverage.
+ */
+function diagonalCornerPreference(
+  candidate: Candidate,
+  floor: FloorPlan,
+  cameras: PlanCamera[]
+): { factor: number; isDiagonalPair: boolean } {
+  if (candidate.mounting !== "corner" || candidate.cornerIndex === undefined || !candidate.roomId) {
+    return { factor: 1, isDiagonalPair: false };
+  }
+  const room = (floor.rooms ?? []).find((item) => item.id === candidate.roomId);
+  if (!room || room.polygon.length < 3) return { factor: 1.08, isDiagonalPair: false };
+  const cornerPeers = cameras.filter((camera) =>
+    camera.mountKind === "corner"
+      && (camera.roomId === room.id || pointInPolygon(camera.position, room.polygon))
+  );
+  if (!cornerPeers.length) return { factor: 1.1, isDiagonalPair: false };
+
+  const nearestVertex = (position: Vec2) => room.polygon.reduce(
+    (best, vertex, index) => {
+      const value = distance(position, vertex);
+      return value < best.distance ? { index, distance: value } : best;
+    },
+    { index: 0, distance: Number.POSITIVE_INFINITY }
+  ).index;
+  const maximumStep = Math.max(1, Math.floor(room.polygon.length / 2));
+  const separation = Math.min(...cornerPeers.map((camera) => {
+    const peerIndex = nearestVertex(camera.position);
+    const raw = Math.abs(candidate.cornerIndex! - peerIndex);
+    return Math.min(raw, room.polygon.length - raw) / maximumStep;
+  }));
+  return {
+    factor: 0.92 + 0.3 * Math.min(1, separation),
+    isDiagonalPair: separation >= 0.85
+  };
 }
 
 function weightedCoveredPercent(contexts: FloorContext[], useInitial: boolean) {
@@ -822,10 +867,11 @@ export function optimiseCameraPlacement(
         const camera = cameraFromDefinition(definition, context.floor.id, candidate);
         camera.mountKind = candidateMount;
         constrainMountHeight(camera, context.floor);
-        const tooClose = [
+        const floorCameras = [
           ...context.floor.cameras,
           ...(additions.get(context.floor.id) ?? [])
-        ].some((existing) => distance(existing.position, camera.position) < 1.5);
+        ];
+        const tooClose = floorCameras.some((existing) => distance(existing.position, camera.position) < 1.5);
         if (tooClose) continue;
 
         const coverage = computeCameraCoverage(camera, occluders, 28);
@@ -853,6 +899,7 @@ export function optimiseCameraPlacement(
           // fixed cameras solely because its potential polygon is wider.
           score *= 0.62;
         }
+        score *= diagonalCornerPreference(candidate, context.floor, floorCameras).factor;
         // A small fairness term prevents a large ground floor from starving every
         // upper storey when enough cameras exist to cover both.
         score *= 1 + 0.12 / (floorCameraCount + 1);
@@ -865,6 +912,19 @@ export function optimiseCameraPlacement(
       continue;
     }
     const selected = best;
+    const existingOnFloor = [
+      ...selected.context.floor.cameras,
+      ...(additions.get(selected.context.floor.id) ?? [])
+    ];
+    const cornerPreference = diagonalCornerPreference(selected.candidate, selected.context.floor, existingOnFloor);
+    if (selected.candidate.mounting === "corner") {
+      selected.camera.placementReasons = [
+        ...(selected.camera.placementReasons ?? []),
+        cornerPreference.isDiagonalPair
+          ? "این گوشه روبه‌روی دوربین قبلی انتخاب شد تا پوشش ضربدری و زاویه دید کامل‌تری ایجاد شود."
+          : "گوشه فضا برای استفاده بهتر از زاویه دید و کاهش نقطه کور ترجیح داده شد."
+      ];
+    }
     additions.set(selected.context.floor.id, [...(additions.get(selected.context.floor.id) ?? []), selected.camera]);
     selected.context.currentPpm = selected.context.currentPpm.map((value, index) => Math.max(value, selected.ppm[index]));
   }

@@ -211,6 +211,21 @@ export function wallSegment(wall: PlanWall): Segment {
   return { a: wall.a, b: wall.b, heightM: wall.heightM };
 }
 
+/**
+ * Finds the physical wall under an opening-tool click without relying on render order.
+ * This is especially important after pasting a furnished room, where its room surface or
+ * furniture can be the first Three.js ray hit even though the pointer is on the wall.
+ */
+export function openingHostWallAtPoint(walls: PlanWall[], point: Vec2): PlanWall | undefined {
+  return walls.reduce<{ wall: PlanWall; distanceM: number } | null>((best, wall) => {
+    const projected = projectPointToWall(point, wall);
+    const distanceM = Math.hypot(point.x - projected.point.x, point.z - projected.point.z);
+    const toleranceM = Math.max(0.35, wall.thicknessM / 2 + 0.2);
+    if (distanceM > toleranceM || (best && best.distanceM <= distanceM)) return best;
+    return { wall, distanceM };
+  }, null)?.wall;
+}
+
 const COINCIDENT_WALL_TOLERANCE_M = 0.04;
 const PARALLEL_WALL_TOLERANCE = Math.sin((0.5 * Math.PI) / 180);
 

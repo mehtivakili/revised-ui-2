@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test, { describe } from "node:test";
 import * as THREE from "three";
-import { buildCameraMarker, buildDoorMesh, buildPolygonVertexHandles } from "@/src/lib/planner/scene-builders";
+import {
+  buildCameraMarker,
+  buildDoorMesh,
+  buildDoorResizeHandles,
+  buildPolygonVertexHandles,
+  buildWallWithDoors
+} from "@/src/lib/planner/scene-builders";
 
 const wall = {
   id: "wall",
@@ -55,6 +61,42 @@ describe("door variants", () => {
     assert.equal(lines(group).length, 1);
     assert.equal(transparentMeshes(group).length, 0);
   });
+
+  test("inside/outside choice flips the leaf across the wall", () => {
+    const room = {
+      id: "inside",
+      polygon: [{ x: 0, z: 0 }, { x: 5, z: 0 }, { x: 5, z: 4 }, { x: 0, z: 4 }],
+      boundarySource: "drawn"
+    };
+    const inward = buildDoorMesh(THREE, { ...door("single-solid"), swingDirection: "inward" }, wall, false, [room]);
+    const outward = buildDoorMesh(THREE, { ...door("single-solid"), swingDirection: "outward" }, wall, false, [room]);
+    assert.ok(inward.getObjectByName("door-leaf").position.z > 0);
+    assert.ok(outward.getObjectByName("door-leaf").position.z < 0);
+  });
+
+  test("a selected door exposes an on-element swing toggle", () => {
+    const handles = buildDoorResizeHandles(THREE, door("single-solid"), wall);
+    assert.ok(handles.children.some((child) => child.userData.kind === "door-swing-toggle"));
+  });
+});
+
+test("a window cuts the wall, renders glass, and marks the opening with a dashed line", () => {
+  const window = {
+    ...door("single-glass"),
+    id: "window",
+    type: "window",
+    variant: undefined,
+    sillHeightM: 0.9,
+    heightM: 1.2,
+    openAngleDeg: 0
+  };
+  const cutWall = buildWallWithDoors(THREE, wall, [window], false);
+  const planWall = buildWallWithDoors(THREE, wall, [window], false, true);
+  const rendered = buildDoorMesh(THREE, window, wall, false);
+  assert.ok(cutWall.children.length >= 4, "masonry should be split around the window opening");
+  assert.equal(planWall.children.length, 2, "top view must leave the whole window span empty");
+  assert.ok(rendered.getObjectByName("window-opening-dash")?.isLine);
+  assert.ok(transparentMeshes(rendered).length >= 1, "the 3D pane should remain visible and transparent");
 });
 
 test("editable polygons expose one direct-manipulation handle per vertex", () => {

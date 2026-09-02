@@ -234,6 +234,21 @@ function DoorSvg({ door, wall }: { door: PlanDoor; wall: PlanWall }) {
   const openingStart = { x: center.x - u.x * door.widthM / 2, z: center.z - u.z * door.widthM / 2 };
   const openingEnd = { x: center.x + u.x * door.widthM / 2, z: center.z + u.z * door.widthM / 2 };
 
+  if (door.type === "window") {
+    return (
+      <g>
+        <line
+          x1={openingStart.x} y1={openingStart.z} x2={openingEnd.x} y2={openingEnd.z}
+          stroke="#fff" strokeWidth={Math.max(0.18, wall.thicknessM + 0.08)}
+        />
+        <line
+          x1={openingStart.x} y1={openingStart.z} x2={openingEnd.x} y2={openingEnd.z}
+          stroke="#0284c7" strokeWidth={0.09} strokeDasharray="0.2 0.12" strokeLinecap="butt"
+        />
+      </g>
+    );
+  }
+
   return (
     <g>
       <line

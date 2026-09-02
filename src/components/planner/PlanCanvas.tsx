@@ -34,6 +34,7 @@ import {
   collectOccluders,
   collectRightAngleCorners,
   distance,
+  openingHostWallAtPoint,
   openingsOnWall,
   projectPointToWall,
   rectFromPoints,
@@ -535,6 +536,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
       || kind === "obstacle-rotate"
       || kind?.startsWith("wall-end-")
       || kind?.startsWith("door-resize-")
+      || kind === "door-swing-toggle"
       || kind?.startsWith("obstacle-resize-")
       || kind?.startsWith("room-vertex-")
       || kind?.startsWith("requirement-vertex-")
@@ -642,6 +644,8 @@ export function PlanCanvas(props: PlanCanvasProps) {
       ? { clientX: event.clientX, clientY: event.clientY, at: now }
       : null;
     const activeDraft = draftRef.current;
+    const openingTool = current.tool === "door" || current.tool === "window";
+    const openingHostWall = openingTool ? openingHostWallAtPoint(current.floor.walls, point) : undefined;
     const pickedWallForDrawing = current.tool === "wall" && picked?.kind === "wall"
       ? current.floor.walls.find((wall) => wall.id === picked.id)
       : undefined;
@@ -657,14 +661,16 @@ export function PlanCanvas(props: PlanCanvasProps) {
      * underway — except for opening tools and the wall tool, which use a wall click as
      * an exact host point for an opening or a new junction.
      */
-    const openingTool = current.tool === "door" || current.tool === "window";
     const regionDrawingTool = current.tool === "room" || current.tool === "coverage";
+    const placementToolThroughStructure = (current.tool === "camera" || current.tool === "obstacle")
+      && (picked?.kind === "room" || picked?.kind === "requirement" || picked?.kind === "wall");
     if (
       current.tool !== "select"
       && !activeDraft
       && picked
       && !regionDrawingTool
-      && !(openingTool && picked.kind === "wall")
+      && !(openingTool && openingHostWall)
+      && !placementToolThroughStructure
       && !(current.tool === "wall" && picked.kind === "wall")
     ) {
       const kind = picked.kind === "camera-yaw" ? "camera" : picked.kind;
@@ -706,6 +712,19 @@ export function PlanCanvas(props: PlanCanvasProps) {
         setControlsEnabled(false);
         (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
         onHint("لبه در را روی امتداد دیوار بکشید تا عرض آن تغییر کند");
+        return;
+      }
+
+      if (picked?.kind === "door-swing-toggle") {
+        const door = (current.floor.doors ?? []).find((item) => item.id === picked.id);
+        if (!door || door.type === "window") return;
+        const swingDirection = (door.swingDirection ?? "inward") === "inward" ? "outward" : "inward";
+        onFloorChange({
+          ...current.floor,
+          doors: (current.floor.doors ?? []).map((item) => item.id === door.id ? { ...item, swingDirection } : item)
+        });
+        onSelect([{ kind: "door", id: door.id }]);
+        onHint(swingDirection === "inward" ? "جهت بازشو به داخل تغییر کرد" : "جهت بازشو به بیرون تغییر کرد");
         return;
       }
 
@@ -803,9 +822,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
     if (current.tool === "door" || current.tool === "window") {
       const isWindow = current.tool === "window";
       const noun = isWindow ? "پنجره" : "در";
-      const wall = picked?.kind === "wall"
-        ? current.floor.walls.find((item) => item.id === picked.id)
-        : undefined;
+      const wall = openingHostWall;
       if (!wall) {
         onHint(`برای افزودن ${noun}، مستقیماً روی یک دیوار کلیک کنید`);
         return;
@@ -842,6 +859,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
         heightM,
         sillHeightM,
         hinge: "start" as const,
+        swingDirection: "inward" as const,
         openAngleDeg: isWindow ? 0 : 45,
         // Glass bounds the room without blocking the view through it.
         blocksView: !isWindow && !current.doorVariant.endsWith("glass")
@@ -1498,7 +1516,7 @@ function syncScene(
         }
         for (const door of stackedFloor.doors ?? []) {
           const wall = stackedFloor.walls.find((item) => item.id === door.wallId);
-          if (wall) floorGroup.add(buildDoorMesh(THREE, door, wall, false));
+          if (wall) floorGroup.add(buildDoorMesh(THREE, door, wall, false, stackedFloor.rooms ?? []));
         }
         for (const camera of stackedFloor.cameras) {
           floorGroup.add(buildCameraMarker(
@@ -1550,7 +1568,7 @@ function syncScene(
   for (const wall of floor.walls) {
     const doors = openingsOnWall(wall, floor.walls, floor.doors ?? []);
     const selected = isSelected(selection, "wall", wall.id);
-    groups.content.add(buildWallWithDoors(THREE, wall, doors, selected));
+    groups.content.add(buildWallWithDoors(THREE, wall, doors, selected, viewMode === "top"));
     if (selected && selection.length === 1) groups.content.add(buildWallEndpointHandles(THREE, wall));
   }
   for (const corner of collectRightAngleCorners(floor.walls)) {
@@ -1575,8 +1593,8 @@ function syncScene(
     const wall = floor.walls.find((item) => item.id === door.wallId);
     if (wall) {
       const selected = isSelected(selection, "door", door.id);
-      groups.content.add(buildDoorMesh(THREE, door, wall, selected));
-      if (selected && selection.length === 1) groups.content.add(buildDoorResizeHandles(THREE, door, wall));
+      groups.content.add(buildDoorMesh(THREE, door, wall, selected, floor.rooms ?? []));
+      if (selected && selection.length === 1) groups.content.add(buildDoorResizeHandles(THREE, door, wall, floor.rooms ?? []));
     }
   }
   for (const camera of floor.cameras) {

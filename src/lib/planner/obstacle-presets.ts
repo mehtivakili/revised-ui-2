@@ -6,6 +6,7 @@ export type ObstacleGroup =
   | "structure"
   | "landscape"
   | "site"
+  | "server-room"
   | "living"
   | "bedroom"
   | "kitchen"
@@ -35,6 +36,7 @@ export const obstacleGroupLabels: Record<ObstacleGroup, string> = {
   education: "آموزشی",
   landscape: "محوطه و فضای سبز",
   site: "تجهیزات سایت",
+  "server-room": "اتاق سرور و مانیتورینگ",
   vehicle: "خودرو",
   tree: "درخت",
   structure: "سازه"
@@ -68,6 +70,7 @@ export const obstaclePresets: ObstaclePreset[] = [
   { id: "conifer", group: "tree", label: "درخت سوزنی‌برگ", description: "فرم مخروطی", kind: "tree", widthM: 3.2, depthM: 3.2, heightM: 7 },
   { id: "palm", group: "tree", label: "نخل", description: "تنه بلند و تاج باز", kind: "tree", widthM: 4, depthM: 4, heightM: 7.5 },
   { id: "stairs-straight", group: "structure", label: "راه‌پله مستقیم", description: "اتصال عمودی طبقات", kind: "stairs", widthM: 4.2, depthM: 1.4, heightM: 3.2 },
+  { id: "structural-column", group: "structure", label: "ستون سازه‌ای", description: "ستون گرد قابل تغییر برای راهرو و سالن", kind: "pillar", widthM: 0.45, depthM: 0.45, heightM: 3.2, blocksView: true },
   { id: "elevator", group: "structure", label: "آسانسور", description: "کابین و درِ آسانسور کنار هسته راه‌پله", kind: "equipment", widthM: 2.2, depthM: 2.2, heightM: 3.2, blocksView: true },
   { id: "escalator", group: "structure", label: "پله‌برقی", description: "مسیر متحرک رفت‌وآمد طبقات تجاری", kind: "stairs", widthM: 5.2, depthM: 1.5, heightM: 3.2, blocksView: false },
 
@@ -90,7 +93,11 @@ export const obstaclePresets: ObstaclePreset[] = [
   { id: "gate-sliding", group: "site", label: "دروازه خودرو", description: "ورودی کشویی محوطه", kind: "gate", widthM: 5, depthM: 0.2, heightM: 2, blocksView: true },
   { id: "camera-pole", group: "site", label: "پایه دوربین", description: "دکل نصب دوربین محوطه", kind: "pole", widthM: 0.25, depthM: 0.25, heightM: 4.5, blocksView: false },
   { id: "light-pole", group: "site", label: "پایه روشنایی", description: "روشنایی مؤثر بر دید شبانه", kind: "pole", widthM: 0.22, depthM: 0.22, heightM: 5, blocksView: false },
-  { id: "equipment-rack", group: "site", label: "رک تجهیزات", description: "محل NVR، سوئیچ و UPS", kind: "equipment", widthM: 0.8, depthM: 0.8, heightM: 1.8, blocksView: true },
+  { id: "equipment-rack", group: "server-room", label: "رک شبکه و سرور", description: "رک ایستاده تجهیزات شبکه و ذخیره‌سازی", kind: "equipment", widthM: 0.8, depthM: 0.8, heightM: 1.8, blocksView: true },
+  { id: "nvr-cabinet", group: "server-room", label: "دستگاه NVR", description: "ضبط‌کننده شبکه با هارد و پنل وضعیت", kind: "equipment", widthM: 0.48, depthM: 0.42, heightM: 0.14, blocksView: false },
+  { id: "ups-unit", group: "server-room", label: "UPS و باتری", description: "برق بدون وقفه تجهیزات حفاظتی", kind: "equipment", widthM: 0.55, depthM: 0.72, heightM: 1.05, blocksView: false },
+  { id: "network-switch", group: "server-room", label: "سوئیچ شبکه PoE", description: "سوئیچ رک‌مونت برای دوربین‌ها و شبکه", kind: "equipment", widthM: 0.48, depthM: 0.34, heightM: 0.08, blocksView: false },
+  { id: "monitoring-console", group: "server-room", label: "کنسول مانیتورینگ", description: "میز اپراتور با نمایشگرهای نظارتی", kind: "equipment", widthM: 2.2, depthM: 0.85, heightM: 1.55, blocksView: true },
 
   { id: "hospital-bed", group: "medical", label: "تخت بیمارستانی", description: "تخت بستری با حریم دسترسی", kind: "bed", widthM: 1.05, depthM: 2.2, heightM: 0.72, blocksView: false },
   { id: "stretcher", group: "medical", label: "برانکارد", description: "تخت چرخ‌دار انتقال بیمار", kind: "bed", widthM: 0.75, depthM: 2.05, heightM: 0.82, blocksView: false },

@@ -10424,12 +10424,9 @@ body.chat-assistant-maximized { overflow: hidden; }
 }
 .project-venue-card {
   position: relative;
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  gap: 5px;
   min-height: 112px;
-  padding: 11px 11px 9px;
+  overflow: hidden;
+  padding: 0;
   color: #dce9f8;
   background:
     radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--venue-accent) 18%, transparent), transparent 62%),
@@ -10438,8 +10435,24 @@ body.chat-assistant-maximized { overflow: hidden; }
   border-radius: 17px;
   font-family: inherit;
   text-align: center;
-  cursor: pointer;
   transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.project-venue-select {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 112px;
+  padding: 11px 11px 9px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
 }
 .project-venue-card::before {
   content: "";
@@ -10477,7 +10490,7 @@ body.chat-assistant-maximized { overflow: hidden; }
   width: min(560px, calc(100vw - 32px));
   overflow: visible;
   padding: 3px;
-  pointer-events: none;
+  pointer-events: auto;
   filter: drop-shadow(0 16px 28px rgba(0, 8, 22, .34));
   animation: project-venue-popover-in .14s ease-out;
 }
@@ -10493,6 +10506,7 @@ body.chat-assistant-maximized { overflow: hidden; }
 }
 
 .project-venue-popover .venue-composition > header { margin-bottom: 6px; }
+.project-venue-popover .venue-composition > header > div { min-width: 0; }
 .project-venue-popover .venue-composition > header strong {
   overflow: hidden;
   color: #0b3552;
@@ -10503,6 +10517,32 @@ body.chat-assistant-maximized { overflow: hidden; }
 }
 .project-venue-popover .venue-composition > header small,
 .project-venue-popover .venue-composition-meta { display: none; }
+.project-venue-popover-action {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 25px;
+  padding: 4px 9px;
+  color: #fff;
+  background: linear-gradient(135deg, #1689e8, #6658eb);
+  border: 1px solid #7fc7ff;
+  border-radius: 8px;
+  box-shadow: 0 6px 14px rgba(29, 108, 203, .24), inset 0 1px rgba(255, 255, 255, .28);
+  font-family: inherit;
+  font-size: 8px;
+  font-weight: 900;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
+}
+.project-venue-popover-action:hover {
+  filter: brightness(1.1) saturate(1.08);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(29, 108, 203, .32), inset 0 1px rgba(255, 255, 255, .36);
+}
+.project-venue-popover-action:focus-visible { outline: 2px solid #0a66ad; outline-offset: 2px; }
 .project-venue-popover .venue-composition-groups {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
@@ -10663,7 +10703,8 @@ body.chat-assistant-maximized { overflow: hidden; }
   .project-gateway-steps i { width: 14px; }
   .project-gateway-content { width: min(100% - 24px, 620px); padding-top: 9px; }
   .project-venue-section-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-  .project-venue-card { min-height: 88px; padding-inline: 8px; }
+  .project-venue-card { min-height: 88px; }
+  .project-venue-select { min-height: 88px; padding-inline: 8px; }
   .project-gateway-footer { align-items: stretch; flex-direction: column; padding: 12px 16px; }
   .project-gateway-footer > div:last-child { width: 100%; }
   .project-gateway-cancel { flex: 0 0 90px; }
@@ -11674,7 +11715,8 @@ body.chat-assistant-maximized { overflow: hidden; }
   background: #f5fbff;
 }
 
-.venue-composition > header { margin-bottom: 11px; }
+.venue-composition > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
+.venue-composition > header > div { min-width: 0; }
 .venue-composition > header strong { display: block; font-size: 14px; font-weight: 800; color: #0b4a72; }
 .venue-composition > header small { color: var(--muted); font-size: 11.5px; }
 
@@ -11874,6 +11916,7 @@ body.chat-assistant-maximized { overflow: hidden; }
 .plan-door-tool-menu { --tool-color: #d17a08; --tool-soft: #fff3dc; --tool-border: #f0c577; }
 .plan-tool-button.is-window { --tool-color: #1687c9; --tool-soft: #e8f6ff; --tool-border: #9ed5f3; }
 .plan-tool-button.is-obstacle { --tool-color: #dd5d19; --tool-soft: #fff0e7; --tool-border: #f3b38e; }
+.plan-tool-button.is-column { --tool-color: #64748b; --tool-soft: #f1f5f9; --tool-border: #bac5d2; }
 .plan-tool-button.is-room { --tool-color: #15956f; --tool-soft: #e7f8f1; --tool-border: #91d8c1; }
 .plan-tool-button.is-coverage { --tool-color: #d13b68; --tool-soft: #fff0f5; --tool-border: #efabc0; }
 .plan-tool-button.is-camera { --tool-color: #078da8; --tool-soft: #e6f8fb; --tool-border: #8ed6e2; }

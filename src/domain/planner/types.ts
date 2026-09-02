@@ -33,6 +33,7 @@ export type PlanWall = {
  */
 export type PlanOpeningType = "door" | "window";
 export type PlanDoorVariant = "single-solid" | "double-solid" | "single-glass" | "double-glass";
+export type PlanDoorSwingDirection = "inward" | "outward";
 
 export type PlanDoor = {
   id: string;
@@ -47,6 +48,8 @@ export type PlanDoor = {
   /** Height of the opening's lower edge above the floor; 0 for a door. */
   sillHeightM?: number;
   hinge: "start" | "end";
+  /** Semantic swing side; absent in older saves means inward. */
+  swingDirection?: PlanDoorSwingDirection;
   /** Visual opening angle; 0 is closed and 90 is fully open. Doors only. */
   openAngleDeg: number;
   /** Glazed openings bound the space without blocking the view through it. */
@@ -81,6 +84,7 @@ export type ObstacleVariant =
   | "conifer"
   | "palm"
   | "stairs-straight"
+  | "structural-column"
   | "elevator"
   | "escalator"
   | "grass"
@@ -93,6 +97,10 @@ export type ObstacleVariant =
   | "camera-pole"
   | "light-pole"
   | "equipment-rack"
+  | "nvr-cabinet"
+  | "ups-unit"
+  | "network-switch"
+  | "monitoring-console"
   // Living room
   | "sofa-three"
   | "sofa-single"
@@ -380,6 +388,8 @@ export type FloorPlan = {
   obstacles: PlanObstacle[];
   cameras: PlanCamera[];
   rooms?: PlanRoom[];
+  /** Large CAD imports render immediately; room detection can be run explicitly later. */
+  roomDetectionDeferred?: boolean;
   coverageRequirements?: CoverageRequirement[];
   backdrop?: PlanBackdrop;
 };

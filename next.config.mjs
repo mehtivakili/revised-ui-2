@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Keep the DWG WebAssembly reader as a Node dependency so its adjacent .wasm asset
+  // remains discoverable by the conversion route after deployment.
+  serverExternalPackages: ["@mlightcad/libredwg-web"],
   // CI/local verification can use NEXT_DIST_DIR=.next-build without colliding
   // with a running development server's .next cache.
   distDir: process.env.NEXT_DIST_DIR || ".next",
