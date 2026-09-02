@@ -2548,9 +2548,11 @@ function kouroshAtrium(prefix: string): PlanWall[] {
 }
 
 function kouroshAccessCore(prefix: string, top = false): PlanObstacle[] {
-  const stairPositions: Array<[number, number]> = [[-31, -19], [31, -19], [-31, 19], [31, 19]];
+  // Keep stairs in the north/south circulation bands and lift banks in the
+  // east/west bands. Their previous coordinates landed inside shop units.
+  const stairPositions: Array<[number, number]> = [[-31, -26], [31, -26], [-31, 26], [31, 26]];
   const elevatorPositions: Array<[number, number]> = [
-    [-27, -9], [-27, -3], [-27, 3], [-27, 9], [27, -9], [27, -3], [27, 3], [27, 9]
+    [-39, -8], [-39, -2.7], [-39, 2.7], [-39, 8], [39, -8], [39, -2.7], [39, 2.7], [39, 8]
   ];
   const escalatorPositions: Array<[number, number]> = [[-10, -17], [10, -17], [-10, 17], [10, 17]];
   return [
@@ -2629,9 +2631,6 @@ function kouroshRetailAssets(prefix: string): PlanObstacle[] {
       shopFixtures.push([variant, x, z, 0]);
     }
   }
-  for (const x of [-40, 40]) {
-    for (const z of [-17, -8, 8, 17]) shopFixtures.push(["display-stand", x, z, 90]);
-  }
   return [
     ...presetObstacles(`${prefix}-shop-fixtures`, shopFixtures),
     ...presetObstacles(`${prefix}-atrium-kiosks`, [
@@ -2660,7 +2659,7 @@ function kouroshParkingFloor(index: number): FloorPlan {
   const vehiclePlacements: Array<[ObstacleVariant, number, number, number]> = [];
   const variants: ObstacleVariant[] = ["sedan", "suv", "sedan", "pickup", "sedan", "van"];
   for (const z of [-27, -9, 9, 27]) {
-    for (const x of [-39, -31, -17, -9, 9, 17, 31, 39]) {
+    for (const x of [-48, -31, -17, -9, 9, 17, 31, 48]) {
       vehiclePlacements.push([variants[vehiclePlacements.length % variants.length], x, z, 90]);
     }
   }
@@ -2683,7 +2682,7 @@ function kouroshParkingFloor(index: number): FloorPlan {
 
 function kouroshCinemaFloor(index: number, firstHall: number): FloorPlan {
   const id = `kourosh-cinema-${index}`;
-  const hallCenters: Array<[number, number]> = [[-32, -19], [0, -19], [32, -19], [-32, 19], [0, 19], [32, 19]];
+  const hallCenters: Array<[number, number]> = [[-32, -17], [0, -17], [32, -17], [-32, 17], [0, 17], [32, 17]];
   const hallWalls = hallCenters.flatMap(([x, z], hallIndex) => rectangle(
     `${id}-hall-${hallIndex + 1}`,
     x - 12,
@@ -2947,8 +2946,9 @@ function megaAtrium(prefix: string): PlanWall[] {
 }
 
 function megaCore(prefix: string, top = false): PlanObstacle[] {
-  const stairs: Array<[number, number]> = [[-48, -26], [48, -26], [-48, 28], [48, 28]];
-  const elevators: Array<[number, number]> = [[-44, -22], [-44, 22], [44, -22], [44, 22], [-28, 0], [28, 0]];
+  // Dedicated circulation bands keep the core clear of shopfront walls.
+  const stairs: Array<[number, number]> = [[-48, -25], [48, -25], [-48, 25], [48, 25]];
+  const elevators: Array<[number, number]> = [[-44, -10], [-44, 0], [-44, 10], [44, -10], [44, 0], [44, 10]];
   const escalators: Array<[number, number]> = [[-11, -18], [11, -18], [-11, 18], [11, 18]];
   return [
     ...stairs.map(([x, z], index) => top ? topLanding(`${prefix}-landing-${index + 1}`, x, z, 90) : presetObstacle(`${prefix}-stairs-${index + 1}`, "stairs-straight", x, z, 90)),

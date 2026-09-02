@@ -69,12 +69,21 @@ for (const id of ids) {
         }
       }
     }
+    for (const core of floor.obstacles.filter((item) => item.variant === "stairs-straight" || item.variant === "elevator")) {
+      const a = bounds(core);
+      for (const item of floor.obstacles) {
+        if (item === core || ignored.has(item.kind) || ignored.has(item.variant)) continue;
+        const b = bounds(item);
+        const overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const overlapZ = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (overlapX > 0.1 && overlapZ > 0.1) findings.push([id, floor.id, "CORE_OVERLAP", core.id, item.id]);
+      }
+    }
   }
 }
 
 const focused = findings.filter((finding) => {
-  return finding[0] !== "kourosh-mall" && finding[0] !== "mega-mall"
-    && finding[2] === "CROSSES_WALL";
+  return finding[2] === "CORE_OVERLAP";
 });
 for (const finding of focused) console.log(JSON.stringify(finding));
 console.log(`FOCUSED ${focused.length} / TOTAL ${findings.length}`);
