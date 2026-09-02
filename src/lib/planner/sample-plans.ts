@@ -498,10 +498,10 @@ function luxuryVillaPlan(): BuildingPlan {
     ...presetObstacles("villa-private", [
     ["bed-double", -11, -5], ["nightstand", -8.8, -5], ["wardrobe", -14.8, -1.8, 90],
     ["dresser", -10.5, -9.8], ["bed-single", 11, -5], ["bookshelf", 14.8, -4, 90],
-    ["office-desk", -3, 6], ["office-chair", -3, 7.2, 180], ["meeting-table", 3, 6, 90],
+    ["office-desk", -3, 6], ["office-chair", -3, 7.2, 180], ["meeting-table", 3, 9, 90],
     ["filing-cabinet", -5.5, 9.5, 90], ["partition-screen", -2, 4.5]
     ]),
-    ...tableChairs("villa-first-meeting-chairs", 3, 6, 90),
+    ...tableChairs("villa-first-meeting-chairs", 3, 9, 90),
     presetObstacle("villa-first-stairs", "stairs-straight", 2, 4.3, 90),
     presetObstacle("villa-first-elevator", "elevator", 3.8, 4.3, 90)
   ]);
@@ -1491,7 +1491,7 @@ function cityBusFleetPlan(): BuildingPlan {
   const ground = floor("city-bus-fleet-ground", "اتوبوس نمونه و توقفگاه ناوگان", 0, [
     ...polygonEnvelope("city-bus-cabin", cabinOutline, 3.2)
   ], [
-    door("city-bus-passenger-door", "city-bus-cabin-envelope-3", 0.55, 1.4),
+    door("city-bus-passenger-door", "city-bus-cabin-envelope-3", 0.85, 1.4),
     door("city-bus-rear-door", "city-bus-cabin-envelope-7", 0.5, 1.3),
     windowOpening("city-bus-front-window", "city-bus-cabin-envelope-1", 0.82, 3),
     windowOpening("city-bus-side-window-a", "city-bus-cabin-envelope-5", 0.25, 3),
@@ -1873,7 +1873,7 @@ function hydroelectricPowerStationPlan(): BuildingPlan {
     obstacle("hydro-spillway", "سرریز سد", "surface", 10, 9.5, 12, 5, 0.18, false),
     obstacle("hydro-upstream-water", "مخزن بالادست", "surface", 10, 24, 56, 18, 0.05, false),
     obstacle("hydro-tailrace", "کانال خروجی آب", "surface", 10, -15, 18, 28, 0.05, false),
-    ...[-27, -22, -17].map((x, index) => obstacle(`hydro-generator-${index + 1}`, "واحد توربین و ژنراتور", "equipment", x, -2, 4, 5, 4.2, true)),
+    ...[-28.5, -23.5, -18.5].map((x, index) => obstacle(`hydro-generator-${index + 1}`, "واحد توربین و ژنراتور", "equipment", x, 4, 4, 5, 4.2, true)),
     ...presetObstacles("hydro-control-assets", [
       ["equipment-rack", -4.5, -7, 90], ["equipment-rack", -4.5, -3, 90],
       ["office-desk", -10, -5], ["office-chair", -10, -3.8, 180], ["meeting-table", -9, 5]
@@ -2550,11 +2550,11 @@ function kouroshAtrium(prefix: string): PlanWall[] {
 function kouroshAccessCore(prefix: string, top = false): PlanObstacle[] {
   // Keep stairs in the north/south circulation bands and lift banks in the
   // east/west bands. Their previous coordinates landed inside shop units.
-  const stairPositions: Array<[number, number]> = [[-31, -26], [31, -26], [-31, 26], [31, 26]];
+  const stairPositions: Array<[number, number]> = [[-39, -12], [39, -12], [-39, 12], [39, 12]];
   const elevatorPositions: Array<[number, number]> = [
     [-39, -8], [-39, -2.7], [-39, 2.7], [-39, 8], [39, -8], [39, -2.7], [39, 2.7], [39, 8]
   ];
-  const escalatorPositions: Array<[number, number]> = [[-10, -17], [10, -17], [-10, 17], [10, 17]];
+  const escalatorPositions: Array<[number, number]> = [[-10, -10], [10, -10], [-10, 10], [10, 10]];
   return [
     ...stairPositions.map(([x, z], index) => top
       ? topLanding(`${prefix}-landing-${index + 1}`, x, z, 90)
@@ -2626,7 +2626,10 @@ function kouroshShopRing(prefix: string, total: number) {
 function kouroshRetailAssets(prefix: string): PlanObstacle[] {
   const shopFixtures: Array<[ObstacleVariant, number, number, number?]> = [];
   for (const z of [-27, -18, 18, 27]) {
-    for (const x of [-44, -35, -26, -17, 17, 26, 35, 44]) {
+    // At z=±18 the outer x positions sit in the side-shop entrance lanes.
+    // Keep those two rows in the north/south units so no rack masks a door.
+    const xs = Math.abs(z) === 18 ? [-26, -17, 17, 26] : [-44, -35, -26, -17, 17, 26, 35, 44];
+    for (const x of xs) {
       const variant: ObstacleVariant = shopFixtures.length % 3 === 0 ? "clothing-rack" : shopFixtures.length % 3 === 1 ? "shelving-unit" : "display-stand";
       shopFixtures.push([variant, x, z, 0]);
     }
@@ -2659,7 +2662,7 @@ function kouroshParkingFloor(index: number): FloorPlan {
   const vehiclePlacements: Array<[ObstacleVariant, number, number, number]> = [];
   const variants: ObstacleVariant[] = ["sedan", "suv", "sedan", "pickup", "sedan", "van"];
   for (const z of [-27, -9, 9, 27]) {
-    for (const x of [-48, -31, -17, -9, 9, 17, 31, 48]) {
+    for (const x of [-48, -25, -17, -9, 9, 17, 25, 48]) {
       vehiclePlacements.push([variants[vehiclePlacements.length % variants.length], x, z, 90]);
     }
   }
@@ -2676,13 +2679,13 @@ function kouroshParkingFloor(index: number): FloorPlan {
       ["parking-barrier", -12, 31], ["parking-barrier", 12, 31], ["speed-bump", 0, 27],
       ["guard-booth", -42, 28], ["bollard", -5, -26], ["bollard", 5, -26], ["equipment-rack", 43, -28, 90]
     ]),
-    ...kouroshAccessCore(`${id}-core`)
+    ...kouroshAccessCore(`${id}-core`).filter((item) => item.variant !== "escalator")
   ], 3.6);
 }
 
 function kouroshCinemaFloor(index: number, firstHall: number): FloorPlan {
   const id = `kourosh-cinema-${index}`;
-  const hallCenters: Array<[number, number]> = [[-32, -17], [0, -17], [32, -17], [-32, 17], [0, 17], [32, 17]];
+  const hallCenters: Array<[number, number]> = [[-32, -21], [0, -21], [32, -21], [-32, 21], [0, 21], [32, 21]];
   const hallWalls = hallCenters.flatMap(([x, z], hallIndex) => rectangle(
     `${id}-hall-${hallIndex + 1}`,
     x - 12,
@@ -2697,7 +2700,7 @@ function kouroshCinemaFloor(index: number, firstHall: number): FloorPlan {
   ], [
     ...hallCenters.map((_, hallIndex) => door(
       `${id}-hall-${hallIndex + 1}-door`,
-      `${id}-hall-${hallIndex + 1}-south`,
+      `${id}-hall-${hallIndex + 1}-${hallIndex < 3 ? "south" : "north"}`,
       0.5,
       1.8
     )),
@@ -2754,10 +2757,13 @@ function kouroshMallPlan(): BuildingPlan {
     door("kourosh-main-entry", "kourosh-commercial-ground-envelope-south", 0.5, 4.5)
   ];
   const first = kouroshCommercialFloor("kourosh-commercial-first", "طبقه اول، ۱۴۳ واحد تجاری، بورس موبایل و تراریوم", 1, 143);
+  first.obstacles = first.obstacles.filter((item) =>
+    !item.id.includes("-atrium-kiosks-lobby-sofa") && !item.id.includes("-atrium-kiosks-coffee-table")
+  );
   first.obstacles.push(
-    obstacle("kourosh-terrarium", "تراریوم کوروش", "block", 35, -14, 15, 11, 2.2, false),
-    presetObstacle("kourosh-terrarium-palm-a", "palm", 32, -14),
-    presetObstacle("kourosh-terrarium-palm-b", "palm", 38, -14)
+    obstacle("kourosh-terrarium", "تراریوم کوروش", "block", 0, 0, 15, 10, 2.2, false),
+    presetObstacle("kourosh-terrarium-palm-a", "palm", -3, 0),
+    presetObstacle("kourosh-terrarium-palm-b", "palm", 3, 0)
   );
 
   const leisure = floor("kourosh-leisure-2", "طبقه دوم، ژوپیتر ۴۴۲۸ مترمربع و فودکورت", 2, [
@@ -2768,15 +2774,17 @@ function kouroshMallPlan(): BuildingPlan {
     door("kourosh-leisure-2-food-door", "kourosh-leisure-2-food", 0.58, 2),
     windowOpening("kourosh-leisure-2-window-east", "kourosh-leisure-2-envelope-east", 0.5, 4)
   ], [
-    ...stripPrototypeCore(prototypeLeisure?.obstacles),
-    obstacle("kourosh-jupiter-main", "سرزمین بازی ژوپیتر", "block", -26, 0, 32, 43, 2.2, false),
+    ...stripPrototypeCore(prototypeLeisure?.obstacles).filter((item) =>
+      !["kourosh-bowling", "kourosh-family-zone", "kourosh-events-zone", "kourosh-jupiter"].includes(item.id)
+    ),
+    obstacle("kourosh-jupiter-main", "سرزمین بازی ژوپیتر", "block", -24, 0, 20, 43, 2.2, false),
     ...kouroshAccessCore("kourosh-leisure-2-core")
   ], 4.2);
 
   const cinemaLobby = floor("kourosh-cinema-lobby-3", "طبقه سوم، گیشه سینما و خانه کودک", 3, [
     ...kouroshEnvelope("kourosh-cinema-lobby-3"),
     ...kouroshAtrium("kourosh-cinema-lobby-3"),
-    glassPartition("kourosh-cinema-lobby-3-kids", -42, 12, -12, 12)
+    glassPartition("kourosh-cinema-lobby-3-kids", -42, 16, -12, 16)
   ], [
     door("kourosh-cinema-lobby-3-kids-door", "kourosh-cinema-lobby-3-kids", 0.5, 1.8),
     windowOpening("kourosh-cinema-lobby-3-window-east", "kourosh-cinema-lobby-3-envelope-east", 0.5, 3)
@@ -2786,7 +2794,7 @@ function kouroshMallPlan(): BuildingPlan {
       ["queue-barrier", -8, -16], ["queue-barrier", 8, -16], ["lobby-sofa", -30, 20],
       ["lobby-sofa", 30, 20], ["display-fridge", 42, -18, 90], ["vending-machine", 42, 18, 90]
     ]),
-    obstacle("kourosh-kids-club", "خانه بازی کودک", "block", -28, 22, 25, 18, 1.2, false),
+    obstacle("kourosh-kids-club", "خانه بازی کودک", "block", -12, 27, 25, 18, 1.2, false),
     ...kouroshAccessCore("kourosh-cinema-lobby-3-core")
   ]);
 
@@ -2794,7 +2802,7 @@ function kouroshMallPlan(): BuildingPlan {
   const admin5 = floor("kourosh-admin-5", "طبقه پنجم، اداری، فرهنگی و سالن VIP", 5, [
     ...kouroshEnvelope("kourosh-admin-5"),
     ...kouroshAtrium("kourosh-admin-5"),
-    glassPartition("kourosh-admin-5-office", -42, 12, 42, 12),
+    glassPartition("kourosh-admin-5-office", -42, 16, 42, 16),
     glassPartition("kourosh-admin-5-vip", 12, -34, 12, 34)
   ], [
     door("kourosh-admin-5-office-door", "kourosh-admin-5-office", 0.35, 1.5),
@@ -2807,7 +2815,7 @@ function kouroshMallPlan(): BuildingPlan {
       ["filing-cabinet", -42, 28, 90], ["reception-desk", 25, -20], ["lobby-sofa", 34, -12]
     ]),
     ...tableChairs("kourosh-admin-5-meeting", 28, 20),
-    obstacle("kourosh-vip-hall", "سالن VIP کوروش", "block", 30, 22, 26, 18, 1.1, false),
+    obstacle("kourosh-vip-hall", "سالن VIP کوروش", "block", 27, 27, 26, 18, 1.1, false),
     ...kouroshAccessCore("kourosh-admin-5-core")
   ]);
   const cinema6 = kouroshCinemaFloor(6, 7);
@@ -2824,7 +2832,7 @@ function kouroshMallPlan(): BuildingPlan {
       ["palm", -42, -26], ["palm", -42, 26], ["palm", 42, -26], ["palm", 42, 26],
       ["hedge", -30, 0, 90], ["hedge", 30, 0, 90], ["light-pole", 0, -29], ["light-pole", 0, 29]
     ]),
-    ...kouroshAccessCore("kourosh-roof-7-core", true)
+    ...kouroshAccessCore("kourosh-roof-7-core", true).filter((item) => item.variant !== "escalator")
   ]);
 
   const floors = [
@@ -2948,8 +2956,8 @@ function megaAtrium(prefix: string): PlanWall[] {
 function megaCore(prefix: string, top = false): PlanObstacle[] {
   // Dedicated circulation bands keep the core clear of shopfront walls.
   const stairs: Array<[number, number]> = [[-48, -25], [48, -25], [-48, 25], [48, 25]];
-  const elevators: Array<[number, number]> = [[-44, -10], [-44, 0], [-44, 10], [44, -10], [44, 0], [44, 10]];
-  const escalators: Array<[number, number]> = [[-11, -18], [11, -18], [-11, 18], [11, 18]];
+  const elevators: Array<[number, number]> = [[-66, -10], [-66, 0], [-66, 10], [66, -10], [66, 0], [66, 10]];
+  const escalators: Array<[number, number]> = [[-11, -10], [11, -10], [-11, 10], [11, 10]];
   return [
     ...stairs.map(([x, z], index) => top ? topLanding(`${prefix}-landing-${index + 1}`, x, z, 90) : presetObstacle(`${prefix}-stairs-${index + 1}`, "stairs-straight", x, z, 90)),
     ...elevators.map(([x, z], index) => presetObstacle(`${prefix}-elevator-${index + 1}`, "elevator", x, z, 90)),
@@ -2999,7 +3007,7 @@ function megaParkingFloor(index: number): FloorPlan {
   ], [
     ...gridPresets(`${id}-vehicles`, ["sedan", "suv", "pickup", "van"], [-52, -39, -25, -15, 15, 25, 39, 52], [-32, -11, 11, 32], 90),
     ...presetObstacles(`${id}-traffic`, [["parking-barrier", 0, -40], ["guard-booth", 7, -38], ["speed-bump", 0, -34], ["equipment-rack", 57, 37]]),
-    ...megaCore(`${id}-core`)
+    ...megaCore(`${id}-core`).filter((item) => item.variant !== "escalator")
   ], 3.6);
 }
 
@@ -3035,9 +3043,9 @@ function megaMallPlan(): BuildingPlan {
     door("mega-leisure-food-door", "mega-leisure-3-food", 0.55, 2),
     windowOpening("mega-leisure-window-east", "mega-leisure-3-envelope-3", 0.5, 8)
   ], [
-    obstacle("mega-play-zone", "شهربازی سرپوشیده مگامال", "block", -28, 2, 62, 72, 1.2, false),
-    ...gridPresets("mega-play-assets", ["display-stand", "vending-machine", "waiting-bench"], [-52, -38, -24, -10], [-28, -10, 10, 28]),
-    ...Array.from({ length: 10 }, (_, index) => tableChairs(`mega-leisure-table-${index + 1}`, 20 + (index % 5) * 9, 20 + Math.floor(index / 5) * 8, 0, "dining-chair")).flat(),
+    obstacle("mega-play-zone", "شهربازی سرپوشیده مگامال", "block", -30, 2, 16, 60, 1.2, false),
+    ...gridPresets("mega-play-assets", ["display-stand", "vending-machine", "waiting-bench"], [-36, -32, -28, -24], [-24, -8, 8, 24]),
+    ...Array.from({ length: 10 }, (_, index) => tableChairs(`mega-leisure-table-${index + 1}`, 20 + (index % 5) * 9, 18 + Math.floor(index / 5) * 14, 0, "dining-chair")).flat(),
     ...megaCore("mega-leisure-core")
   ], 4.8);
   const cinema = floor("mega-cinema-4", "طبقه چهارم، پردیس سینمایی ۱۰ سالن و لابی", 4, [
@@ -3053,7 +3061,7 @@ function megaMallPlan(): BuildingPlan {
   ], [
     ...Array.from({ length: 10 }, (_, index) => obstacle(`mega-cinema-hall-${index + 1}`, `سالن سینما ${index + 1}`, "block", -52 + (index % 5) * 26, index < 5 ? -18 : 24, 22, 27, 3.6, true)),
     ...gridPresets("mega-cinema-lobby", ["waiting-bench", "vending-machine", "queue-barrier"], [-42, -25, -8, 8, 25, 42], [0]),
-    ...megaCore("mega-cinema-core", true)
+    ...megaCore("mega-cinema-core", true).filter((item) => item.variant !== "escalator")
   ], 5);
   return stackBuilding([...parking, hyper, retail1, retail2, leisure, cinema], hyper.id);
 }
@@ -3072,7 +3080,7 @@ function hospitalFloor(id: string, name: string, index: number, specialty: "emer
   const specialtyAssets: PlanObstacle[] = specialty === "emergency" ? [
     ...clinicalFixtures(`${id}-exam`, "exam-table", [-27, -16, -5, 7, 18, 29], [-14]),
     ...clinicalFixtures(`${id}-stretcher`, "stretcher", [-28, -17, -5.5, 5.5, 17, 28], [14]),
-    ...gridPresets(`${id}-waiting`, ["waiting-bench"], [-26, -17, -8, 8, 17, 26], [0]),
+    ...gridPresets(`${id}-waiting`, ["waiting-bench"], [-20, -12, -4, 4, 12, 20], [0]),
     ...gridPresets(`${id}-medical-carts`, ["medical-cart"], [-17, 5.5, 17], [-7, 7])
   ] : specialty === "surgery" ? [
     ...clinicalFixtures(`${id}-surgery-tables`, "exam-table", [-28, -17, -5.5, 5.5, 17, 28], [-14]),
@@ -3211,7 +3219,7 @@ function barracksCampusPlan(): BuildingPlan {
     door("barracks-third-food-door", "barracks-third-food", 0.5, 1.8),
     windowOpening("barracks-third-window-north", "barracks-third-shell-north", 0.5, 8)
   ], [
-    ...Array.from({ length: 12 }, (_, index) => tableChairs(`barracks-dining-${index + 1}`, 17 + (index % 4) * 7, -17 + Math.floor(index / 4) * 9, 0, "dining-chair")).flat(),
+    ...Array.from({ length: 12 }, (_, index) => tableChairs(`barracks-dining-${index + 1}`, 13 + (index % 4) * 8, -17 + Math.floor(index / 4) * 12.5, 0, "dining-chair")).flat(),
     ...gridPresets("barracks-library", ["library-shelf", "student-desk"], [-34, -25, -16, -7], [14, 22]),
     ...gridPresets("barracks-gym", ["gym-bleacher", "locker-row"], [-30, -10], [-15]),
     ...standardFacilityCore("barracks-third-core", true, 35)

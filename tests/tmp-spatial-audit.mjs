@@ -63,13 +63,16 @@ for (const id of ids) {
         const along = Math.abs((item.center.x - x) * tx + (item.center.z - z) * tz);
         const normal = Math.abs((item.center.x - x) * nx + (item.center.z - z) * nz);
         const box = bounds(item);
-        const radius = Math.max(box.right - box.left, box.bottom - box.top) / 2;
-        if (along < opening.widthM / 2 + radius * 0.55 && normal < 1.15 + radius * 0.55) {
+        const halfWidth = (box.right - box.left) / 2;
+        const halfDepth = (box.bottom - box.top) / 2;
+        const tangentHalf = Math.abs(tx) * halfWidth + Math.abs(tz) * halfDepth;
+        const normalHalf = Math.abs(nx) * halfWidth + Math.abs(nz) * halfDepth;
+        if (along < opening.widthM / 2 + tangentHalf + 0.15 && normal < 0.9 + normalHalf) {
           findings.push([id, floor.id, "BLOCKS_DOOR", opening.id, item.id, item.variant]);
         }
       }
     }
-    for (const core of floor.obstacles.filter((item) => item.variant === "stairs-straight" || item.variant === "elevator")) {
+    for (const core of floor.obstacles.filter((item) => item.variant === "stairs-straight" || item.variant === "elevator" || item.variant === "escalator")) {
       const a = bounds(core);
       for (const item of floor.obstacles) {
         if (item === core || ignored.has(item.kind) || ignored.has(item.variant)) continue;

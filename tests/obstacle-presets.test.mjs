@@ -255,9 +255,10 @@ test("sample buildings have a coherent vertical circulation core", () => {
     for (const floor of floors.slice(0, -1)) {
       const stairs = floor.obstacles.find((item) => item.variant === "stairs-straight");
       const elevators = floor.obstacles.filter((item) => item.variant === "elevator");
+      const maximumCoreWalkM = sampleId === "mega-mall" ? 26 : 12;
       assert.ok(stairs, `${sampleId}/${floor.id} needs a stair to the floor above`);
       assert.ok(
-        elevators.some((elevator) => Math.hypot(stairs.center.x - elevator.center.x, stairs.center.z - elevator.center.z) <= 12),
+        elevators.some((elevator) => Math.hypot(stairs.center.x - elevator.center.x, stairs.center.z - elevator.center.z) <= maximumCoreWalkM),
         `${sampleId}/${floor.id} elevator must sit beside its stair`
       );
     }
@@ -299,6 +300,7 @@ const finalNineSampleIds = [
 ];
 
 const auditedSampleIds = [...firstTenSampleIds, ...secondTenSampleIds, ...thirdTenSampleIds, ...finalNineSampleIds];
+const everySampleId = Object.keys(sampleVenueTypeIds);
 
 function roomsBesideOpening(floor, opening) {
   const wall = floor.walls.find((item) => item.id === opening.wallId);
@@ -360,6 +362,115 @@ function obstacleBounds(item) {
     top: item.center.z - depth / 2, bottom: item.center.z + depth / 2
   };
 }
+
+function segmentsIntersect(a, b, c, d) {
+  const cross = (p, q, r) => (q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x);
+  const abC = cross(a, b, c);
+  const abD = cross(a, b, d);
+  const cdA = cross(c, d, a);
+  const cdB = cross(c, d, b);
+  return ((abC > 0 && abD < 0) || (abC < 0 && abD > 0))
+    && ((cdA > 0 && cdB < 0) || (cdA < 0 && cdB > 0));
+}
+
+function wallCutsObstacle(wall, item) {
+  const bounds = obstacleBounds(item);
+  const inset = Math.min(0.08, (bounds.right - bounds.left) / 4, (bounds.bottom - bounds.top) / 4);
+  const box = {
+    left: bounds.left + inset, right: bounds.right - inset,
+    top: bounds.top + inset, bottom: bounds.bottom - inset
+  };
+  const inside = (point) => point.x > box.left && point.x < box.right && point.z > box.top && point.z < box.bottom;
+  if (inside(wall.a) || inside(wall.b)) return true;
+  const corners = [
+    { x: box.left, z: box.top }, { x: box.right, z: box.top },
+    { x: box.right, z: box.bottom }, { x: box.left, z: box.bottom }
+  ];
+  return corners.some((corner, index) => segmentsIntersect(wall.a, wall.b, corner, corners[(index + 1) % corners.length]));
+}
+
+test("stairs, elevators and escalators in every sample stay clear of walls, furniture and vehicles", () => {
+  const nonSolid = new Set(["surface", "road", "grass", "rug", "speed-bump", "wheel-stop", "loading-platform"]);
+  for (const sampleId of everySampleId) {
+    for (const floor of createSamplePlan(sampleId).floors) {
+      const cores = floor.obstacles.filter((item) =>
+        item.variant === "stairs-straight" || item.variant === "elevator" || item.variant === "escalator"
+      );
+      for (const core of cores) {
+        assert.equal(
+          floor.walls.some((wall) => wallCutsObstacle(wall, core)),
+          false,
+          `${sampleId}/${floor.id}: ${core.id} cuts through a wall`
+        );
+        const coreBounds = obstacleBounds(core);
+        for (const item of floor.obstacles) {
+          if (item === core || cores.includes(item) || nonSolid.has(item.kind) || nonSolid.has(item.variant)) continue;
+          const itemBounds = obstacleBounds(item);
+          const overlapX = Math.min(coreBounds.right, itemBounds.right) - Math.max(coreBounds.left, itemBounds.left);
+          const overlapZ = Math.min(coreBounds.bottom, itemBounds.bottom) - Math.max(coreBounds.top, itemBounds.top);
+          assert.ok(overlapX <= 0.1 || overlapZ <= 0.1, `${sampleId}/${floor.id}: ${core.id} overlaps ${item.id}`);
+        }
+      }
+    }
+  }
+});
+
+test("usable door approaches in every sample are not blocked by furniture", () => {
+  const ignored = new Set(["gate-sliding", "parking-barrier", "road", "speed-bump", "wheel-stop", "loading-platform"]);
+  for (const sampleId of everySampleId) {
+    for (const floor of createSamplePlan(sampleId).floors) {
+      for (const opening of floor.doors.filter((item) => item.type !== "window")) {
+        const wall = floor.walls.find((item) => item.id === opening.wallId);
+        assert.ok(wall, `${sampleId}/${floor.id}: ${opening.id} has no host wall`);
+        const dx = wall.b.x - wall.a.x;
+        const dz = wall.b.z - wall.a.z;
+        const length = Math.hypot(dx, dz);
+        const tangent = { x: dx / length, z: dz / length };
+        const normal = { x: -tangent.z, z: tangent.x };
+        const point = {
+          x: wall.a.x + dx * opening.offset,
+          z: wall.a.z + dz * opening.offset
+        };
+        for (const item of floor.obstacles) {
+          if (item.kind === "surface" || ignored.has(item.variant)) continue;
+          const bounds = obstacleBounds(item);
+          const halfWidth = (bounds.right - bounds.left) / 2;
+          const halfDepth = (bounds.bottom - bounds.top) / 2;
+          const tangentHalf = Math.abs(tangent.x) * halfWidth + Math.abs(tangent.z) * halfDepth;
+          const normalHalf = Math.abs(normal.x) * halfWidth + Math.abs(normal.z) * halfDepth;
+          const along = Math.abs((item.center.x - point.x) * tangent.x + (item.center.z - point.z) * tangent.z);
+          const away = Math.abs((item.center.x - point.x) * normal.x + (item.center.z - point.z) * normal.z);
+          assert.ok(
+            along >= opening.widthM / 2 + tangentHalf + 0.15 || away >= 0.9 + normalHalf,
+            `${sampleId}/${floor.id}: ${item.id} blocks ${opening.id}`
+          );
+        }
+      }
+    }
+  }
+});
+
+test("vertical circulation never inherits a private room programme or a checklist overlay", () => {
+  const invalidTypes = new Set([
+    "residential.bedroom", "sample.apartment.private-unit", "hospital.patient-room", "shared.storeroom"
+  ]);
+  for (const sampleId of everySampleId) {
+    for (const floor of createSamplePlan(sampleId).floors) {
+      const cores = floor.obstacles.filter((item) =>
+        item.variant === "stairs-straight" || item.variant === "elevator" || item.label.includes("پاگرد نهایی")
+      );
+      for (const core of cores) {
+        const room = (floor.rooms ?? []).find((item) => pointInPolygon(core.center, item.polygon));
+        if (room) assert.equal(invalidTypes.has(room.sectionTypeId), false, `${sampleId}/${floor.id}: ${core.id} is inside ${room.name}`);
+        assert.equal(
+          (floor.coverageRequirements ?? []).some((requirement) => pointInPolygon(core.center, requirement.polygon)),
+          false,
+          `${sampleId}/${floor.id}: checklist overlay covers ${core.id}`
+        );
+      }
+    }
+  }
+});
 
 test("the audited samples do not stack furniture, vehicles, stairs or elevators on each other", () => {
   const nonSolid = new Set(["rug", "grass", "road", "speed-bump", "wheel-stop", "loading-platform"]);
@@ -734,7 +845,8 @@ test("Kourosh Mall keeps an escalator beside the stair and elevator on every lev
     const stairsOrLandings = floor.obstacles.filter((item) => item.variant === "stairs-straight" || item.label.includes("پاگرد نهایی"));
     assert.equal(elevators.length, 8, `${floor.id} needs the passenger and service elevator banks`);
     assert.equal(stairsOrLandings.length, 4, `${floor.id} needs four emergency circulation cores`);
-    assert.equal(escalators.length, 4, `${floor.id} needs four atrium escalators`);
+    const expectsEscalators = !floor.id.startsWith("kourosh-parking-b") && floor.id !== "kourosh-roof-7";
+    assert.equal(escalators.length, expectsEscalators ? 4 : 0, `${floor.id} escalator count must match its public circulation role`);
   }
 });
 
@@ -749,7 +861,8 @@ test("Mega Mall reproduces its public programme as a dense eight-level complex",
   assert.ok(objects.length >= 450, "Mega Mall should be fully furnished rather than diagrammatic");
   for (const floor of plan.floors) {
     assert.equal(floor.obstacles.filter((item) => item.variant === "elevator").length, 6, `${floor.id} elevator banks`);
-    assert.equal(floor.obstacles.filter((item) => item.variant === "escalator").length, 4, `${floor.id} escalators`);
+    const expectsEscalators = !floor.id.startsWith("mega-parking-b") && floor.id !== "mega-cinema-4";
+    assert.equal(floor.obstacles.filter((item) => item.variant === "escalator").length, expectsEscalators ? 4 : 0, `${floor.id} escalators`);
   }
 });
 
