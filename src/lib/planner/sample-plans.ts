@@ -499,7 +499,7 @@ function luxuryVillaPlan(): BuildingPlan {
     ["bed-double", -11, -5], ["nightstand", -8.8, -5], ["wardrobe", -14.8, -1.8, 90],
     ["dresser", -10.5, -9.8], ["bed-single", 11, -5], ["bookshelf", 14.8, -4, 90],
     ["office-desk", -3, 6], ["office-chair", -3, 7.2, 180], ["meeting-table", 3, 6, 90],
-    ["filing-cabinet", -5.5, 9.5, 90], ["partition-screen", 0, 4.5]
+    ["filing-cabinet", -5.5, 9.5, 90], ["partition-screen", -2, 4.5]
     ]),
     ...tableChairs("villa-first-meeting-chairs", 3, 6, 90),
     presetObstacle("villa-first-stairs", "stairs-straight", 2, 4.3, 90),
@@ -647,7 +647,7 @@ function retailGalleryPlan(): BuildingPlan {
     ]),
     ...presetObstacles("gallery-stock", [
       ["storage-rack", 17.5, 9, 90], ["storage-rack", 12.5, 9, 90],
-      ["pallet-stack", 8, 10], ["crate-stack", 8, 7.5], ["packing-table", 1, 9.5]
+      ["pallet-stack", 8, 10], ["crate-stack", 3.5, 7.5], ["packing-table", 1, 9.5]
     ]),
     presetObstacle("gallery-stairs", "stairs-straight", -8, 8.5, 90),
     presetObstacle("gallery-ground-elevator", "elevator", -6.2, 8.5, 90),
@@ -707,9 +707,9 @@ function neighbourhoodSupermarketPlan(): BuildingPlan {
       ["checkout-counter", -9, 8.8], ["checkout-counter", -4, 8.8],
       ["checkout-counter", 4, 8.8], ["checkout-counter", 9, 8.8]
     ]),
-    ...gridPresets("market-aisles", ["shelving-unit"], [-17, -10, -3, 4, 11, 18], [-7, -2.5, 2]),
+    ...gridPresets("market-aisles", ["shelving-unit"], [-17, -10, -3, 4, 11, 18], [-4, 0.5, 5]),
     ...presetObstacles("market-high-value", [
-      ["display-stand", -18, 5], ["display-stand", -14, 5],
+      ["display-stand", -20, 7.5], ["display-stand", -15, 7.5],
       ["display-fridge", 22.5, -5, 90], ["display-fridge", 22.5, -1, 90], ["display-fridge", 22.5, 3, 90]
     ]),
     ...presetObstacles("market-coldstore", [
@@ -781,10 +781,10 @@ function secureJewelleryBranchPlan(): BuildingPlan {
       ["filing-cabinet", -11, -5.4, 90], ["equipment-rack", -11, -7, 90]
     ]),
     ...presetObstacles("jewellery-vault", [
-      ["storage-rack", 7, -5], ["tool-cabinet", 11, -5.5, 90], ["filing-cabinet", 7, -7]
+      ["storage-rack", 8, -7], ["tool-cabinet", 11, -5.5, 90], ["filing-cabinet", 4, -7]
     ]),
     ...presetObstacles("jewellery-street", [
-      ["road", 0, 10], ["bollard", -5, 9.2], ["bollard", 0, 9.2], ["bollard", 5, 9.2], ["light-pole", 10, 11]
+      ["road", 0, 10], ["bollard", -8, 9.2], ["bollard", -5, 9.2], ["bollard", 5, 9.2], ["light-pole", 10, 11]
     ])
   ];
   return building([floor("jewellery-ground", "شعبه فروش، خزانه و کنترل ورودی", 0, walls, doors, obstacles, 3.8)]);
@@ -826,11 +826,11 @@ function compactIndustrialWorkshopPlan(): BuildingPlan {
     ]),
     ...presetObstacles("compact-factory-admin", [
       ["office-desk", 15, 9], ["office-chair", 15, 10.2, 180],
-      ["filing-cabinet", 20.5, 9, 90], ["reception-desk", 15, 12.5]
+      ["filing-cabinet", 20.5, 9, 90], ["reception-desk", 11, 11]
     ]),
     ...presetObstacles("compact-factory-yard", [
       ["road", -12, -16], ["road", 0, -16], ["road", 12, -16], ["gate-sliding", 0, -18],
-      ["truck", -12, -18, 90], ["pickup", 10, -16, 90], ["guard-booth", 17, -15.5],
+      ["truck", -12, -18, 90], ["pickup", 10, -20, 90], ["guard-booth", 17, -15.5],
       ["fence-mesh", -18, -18], ["fence-wall", 18, -18],
       ["camera-pole", -21, -16], ["light-pole", 21, -16]
     ])
@@ -886,7 +886,7 @@ function neighbourhoodRestaurantPlan(): BuildingPlan {
     { ...door("restaurant-customer-entry", "restaurant-shell-south", 0.5, 2), variant: "double-glass", swingDirection: "inward" },
     door("restaurant-kitchen-door", "restaurant-service-spine", 0.3, 1.3),
     door("restaurant-store-door", "restaurant-service-spine", 0.78, 1.1),
-    { ...door("restaurant-backdoor", "restaurant-shell-north", 0.25, 1.2), swingDirection: "outward" },
+    { ...door("restaurant-backdoor", "restaurant-shell-north", 0.5, 1.2), swingDirection: "outward" },
     windowOpening("restaurant-front-window-a", "restaurant-shell-south", 0.2, 2.6),
     windowOpening("restaurant-front-window-b", "restaurant-shell-south", 0.8, 2.6),
     windowOpening("restaurant-side-window-east", "restaurant-shell-east", 0.32, 2.2),
@@ -944,7 +944,7 @@ function primarySchoolPlan(): BuildingPlan {
   const obstacles = [
     ...classroomCentres.flatMap(([cx, cz], roomIndex) => [
       ...gridPresets(`primary-school-desks-${roomIndex + 1}`, ["student-desk"], [cx - 4, cx, cx + 4], [cz - 2, cz + 2]),
-      presetObstacle(`primary-school-board-${roomIndex + 1}`, "whiteboard", cx, cz - 5)
+      presetObstacle(`primary-school-board-${roomIndex + 1}`, "whiteboard", cx, cz < 0 ? cz - 5 : cz + 5)
     ]),
     ...gridPresets("primary-school-lab", ["lab-bench"], [12, 16, 20], [-10, -6]),
     presetObstacle("primary-school-lab-board", "whiteboard", 16, -13),
@@ -989,7 +989,7 @@ function outpatientClinicPlan(): BuildingPlan {
   ];
   const obstacles = [
     ...presetObstacles("clinic-emergency", [
-      ["stretcher", -15, 7], ["stretcher", -10, 7], ["nurse-station", -13, 10],
+      ["stretcher", -15, 7], ["stretcher", -10, 7], ["nurse-station", -10, 4],
       ["medical-cart", -18, 10], ["privacy-screen", -8, 9, 90]
     ]),
     ...presetObstacles("clinic-reception", [
@@ -1102,7 +1102,7 @@ function neighbourhoodFuelStationPlan(): BuildingPlan {
   ], [
     ...presetObstacles("fuel-station-shop-assets", [
       ["shelving-unit", -11, 0, 90], ["shelving-unit", -11, 5, 90], ["display-fridge", 9.5, 2, 90],
-      ["checkout-counter", 4, 7], ["queue-barrier", 0, 7], ["storage-rack", -6, -5]
+      ["checkout-counter", 4, 7], ["queue-barrier", 0, 7], ["storage-rack", 0, -4]
     ]),
     ...[-10, 0, 10].flatMap((x, island) => [
       obstacle(`fuel-station-pump-${island + 1}-a`, "پمپ سوخت", "counter", x - 1.1, -17, 0.8, 1.6, 1.8, true),
@@ -1391,7 +1391,7 @@ function conferenceCentrePlan(): BuildingPlan {
     ...gridPresets("conference-seating", ["gym-bleacher"], [-15, -5, 5, 15], [0, 5]),
     ...presetObstacles("conference-registration", [
       ["reception-desk", -7, 14], ["service-counter", 0, 14], ["queue-barrier", -7, 11.5],
-      ["waiting-bench", 8, 14], ["vending-machine", 21.5, 14, 90]
+      ["waiting-bench", 8, 14], ["vending-machine", 18, 14, 90]
     ]),
     ...presetObstacles("conference-av-assets", [
       ["equipment-rack", 20, -11, 90], ["office-desk", 16, -10], ["office-chair", 16, -8.8, 180], ["filing-cabinet", 13.5, -10, 90]
@@ -1431,8 +1431,8 @@ function carShowroomPlan(): BuildingPlan {
       ["office-desk", -11, -2], ["office-chair", -11, -0.8, 180], ["filing-cabinet", -23.5, -3, 90]
     ]),
     ...presetObstacles("car-showroom-parts", [
-      ["storage-rack", -23.5, 9, 90], ["storage-rack", -18, 9, 90], ["storage-rack", -12, 9, 90],
-      ["crate-stack", -20, 14], ["packing-table", -12, 14]
+      ["storage-rack", -19, 12.5, 90], ["storage-rack", -17, 9, 90], ["storage-rack", -12, 9, 90],
+      ["crate-stack", -17, 14], ["packing-table", -10, 14]
     ]),
     ...presetObstacles("car-showroom-yard", [
       ["sedan", -18, 25, 90], ["suv", -10, 25, 90], ["van", 0, 25, 90], ["pickup", 10, 25, 90],
@@ -1640,7 +1640,7 @@ function neighbourhoodMallPlan(): BuildingPlan {
     windowOpening("neighbourhood-mall-ground-window-b", "neighbourhood-mall-ground-envelope-5", 0.8, 3)
   ], [
     ...presetObstacles("neighbourhood-mall-entry-assets", [
-      ["reception-desk", -17, 12], ["queue-barrier", -17, 9], ["waiting-bench", -12, 12]
+      ["reception-desk", -17, 12], ["queue-barrier", -21, 11], ["waiting-bench", -12, 12]
     ]),
     ...presetObstacles("neighbourhood-mall-control-assets", [
       ["equipment-rack", -22.5, -7, 90], ["office-desk", -16, -7], ["office-chair", -16, -5.8, 180],
@@ -3071,18 +3071,18 @@ function hospitalFloor(id: string, name: string, index: number, specialty: "emer
   ];
   const specialtyAssets: PlanObstacle[] = specialty === "emergency" ? [
     ...clinicalFixtures(`${id}-exam`, "exam-table", [-27, -16, -5, 7, 18, 29], [-14]),
-    ...clinicalFixtures(`${id}-stretcher`, "stretcher", [-25, -13, -1, 11, 23], [14]),
+    ...clinicalFixtures(`${id}-stretcher`, "stretcher", [-28, -17, -5.5, 5.5, 17, 28], [14]),
     ...gridPresets(`${id}-waiting`, ["waiting-bench"], [-26, -17, -8, 8, 17, 26], [0]),
-    ...gridPresets(`${id}-medical-carts`, ["medical-cart"], [-22, 0, 22], [-7, 7])
+    ...gridPresets(`${id}-medical-carts`, ["medical-cart"], [-17, 5.5, 17], [-7, 7])
   ] : specialty === "surgery" ? [
-    ...clinicalFixtures(`${id}-surgery-tables`, "exam-table", [-26, -13, 0, 13, 26], [-14]),
+    ...clinicalFixtures(`${id}-surgery-tables`, "exam-table", [-28, -17, -5.5, 5.5, 17, 28], [-14]),
     ...clinicalFixtures(`${id}-icu-beds`, "hospital-bed", [-26, -17, -8, 8, 17, 26], [14]),
     ...gridPresets(`${id}-screens`, ["privacy-screen"], [-22, -11, 11, 22], [10]),
-    ...gridPresets(`${id}-carts`, ["medical-cart"], [-26, -13, 0, 13, 26], [-8, 8])
+    ...gridPresets(`${id}-carts`, ["medical-cart"], [-28, -17, -5.5, 5.5, 17, 28], [-8, 8])
   ] : specialty === "ward" || specialty === "maternity" ? [
     ...clinicalFixtures(`${id}-beds-north`, "hospital-bed", [-29, -21, -13, -5, 5, 13, 21, 29], [-14]),
     ...clinicalFixtures(`${id}-beds-south`, "hospital-bed", [-29, -21, -13, -5, 5, 13, 21, 29], [14]),
-    ...gridPresets(`${id}-screens`, ["privacy-screen"], [-25, -17, -9, 9, 17, 25], [-10, 10]),
+    ...gridPresets(`${id}-screens`, ["privacy-screen"], [-29.75, -21.25, -12.75, -4.25, 4.25, 12.75, 21.25, 29.75], [-10, 10]),
     ...gridPresets(`${id}-carts`, ["medical-cart"], [-28, -14, 14, 28], [-5, 5])
   ] : [
     ...gridPresets(`${id}-desks`, ["office-desk", "office-chair"], [-27, -18, -9, 9, 18, 27], [-14, 14]),
@@ -3131,7 +3131,7 @@ function secureOfficeFloor(id: string, name: string, index: number, top = false,
     ...gridPresets(`${id}-lockers`, ["locker-row"], [-23, -8, 8, 23], [-18, 18]),
     ...tableChairs(`${id}-briefing-west`, -15, 0),
     ...tableChairs(`${id}-briefing-east`, 15, 0),
-    presetObstacle(`${id}-rack`, "equipment-rack", 26, 18)
+    presetObstacle(`${id}-rack`, "equipment-rack", shellHalfWidth - 2, shellHalfDepth - 4)
   ], 3.6);
 }
 

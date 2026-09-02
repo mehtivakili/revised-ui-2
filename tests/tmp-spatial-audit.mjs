@@ -73,8 +73,8 @@ for (const id of ids) {
 }
 
 const focused = findings.filter((finding) => {
-  const text = finding.join(" ");
-  return text.includes("stairs-straight") || text.includes("elevator") || text.includes("BLOCKS_DOOR");
+  return finding[0] !== "kourosh-mall" && finding[0] !== "mega-mall"
+    && finding[2] === "CROSSES_WALL";
 });
 for (const finding of focused) console.log(JSON.stringify(finding));
 console.log(`FOCUSED ${focused.length} / TOTAL ${findings.length}`);
