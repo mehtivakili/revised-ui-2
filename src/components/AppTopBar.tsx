@@ -5,6 +5,7 @@ import { ToolsMenu } from "@/src/components/ToolsMenu";
 import { TopSearch } from "@/src/components/TopSearch";
 import { TopBarLayout } from "@/src/components/TopBarLayout";
 import { OnlinePresence } from "@/src/components/OnlinePresence";
+import { LoginLink } from "@/src/components/LoginLink";
 import { getUserById } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
@@ -71,10 +72,10 @@ export async function AppTopBar() {
           {session ? (
             <ProfileMenu username={session.username} plan={access.plan} isAdmin={session?.role === "admin"} />
           ) : (
-            <Link className="profile-button" href="/login">
+            <LoginLink className="profile-button">
               <LogIn size={18} aria-hidden="true" />
               <span>ورود</span>
-            </Link>
+            </LoginLink>
           )}
           {!session ? (
             <Link className="app-download-button" href="/downloads/hamyardoorbin.apk" download aria-label="دانلود اپلیکیشن">

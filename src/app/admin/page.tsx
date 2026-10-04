@@ -8,7 +8,7 @@ export default async function AdminPage() {
   const session = await getCurrentSession();
 
   if (!session) {
-    redirect("/login");
+    redirect("/login?next=%2Fadmin");
   }
 
   if (session.role !== "admin") {

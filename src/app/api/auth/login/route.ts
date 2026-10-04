@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sessionCookieName, sessionCookieOptions } from "@/src/lib/session";
 import { rateLimit, signSession, verifyPassword } from "@/src/lib/authStore";
+import { safeAuthRedirect } from "@/src/lib/authRedirect";
 
 function getClientKey(request: Request) {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
@@ -14,7 +15,8 @@ async function readCredentials(request: Request) {
     return {
       isFormPost: false,
       username: String(body?.username ?? "").trim(),
-      password: String(body?.password ?? "")
+      password: String(body?.password ?? ""),
+      next: safeAuthRedirect(body?.next)
     };
   }
 
@@ -22,7 +24,8 @@ async function readCredentials(request: Request) {
   return {
     isFormPost: true,
     username: String(formData?.get("username") ?? "").trim(),
-    password: String(formData?.get("password") ?? "")
+    password: String(formData?.get("password") ?? ""),
+    next: safeAuthRedirect(formData?.get("next"))
   };
 }
 
@@ -35,7 +38,8 @@ function failedLoginResponse(request: Request, isFormPost: boolean, error: strin
     return NextResponse.json({ ok: false, error }, { status });
   }
 
-  const searchParams = new URLSearchParams({ mode: "password", error });
+  const next = safeAuthRedirect(new URL(request.url).searchParams.get("next"));
+  const searchParams = new URLSearchParams({ mode: "password", error, next });
   return formRedirect(`/login?${searchParams.toString()}`);
 }
 
@@ -45,7 +49,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Request body is too large." }, { status: 413 });
   }
 
-  const { isFormPost, username, password } = await readCredentials(request);
+  const { isFormPost, username, password, next } = await readCredentials(request);
 
   if (username.length > 100 || password.length > 256) {
     return failedLoginResponse(request, isFormPost, "Invalid credentials.", 400);
@@ -77,7 +81,7 @@ export async function POST(request: Request) {
   }
 
   const response = isFormPost
-    ? formRedirect("/calculators")
+    ? formRedirect(next)
     : NextResponse.json({ ok: true, role: result.user.role });
   response.cookies.set(sessionCookieName, signSession(result.user), sessionCookieOptions());
   return response;

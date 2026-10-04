@@ -6,7 +6,7 @@ import { getSourceCatalogPage } from "@/src/lib/catalog/source-repository";
 import { getCurrentSession } from "@/src/lib/session";
 
 export default async function CatalogPage() {
-  if (!(await getCurrentSession())) redirect("/login");
+  if (!(await getCurrentSession())) redirect("/login?next=%2Fcatalog");
   const [catalog, sourceCatalog] = await Promise.all([getCatalogSnapshot(), getSourceCatalogPage({ page: 1, limit: 24, inStockOnly: true })]);
   return <main className="app-shell catalog-page">
     <section className="page-intro"><div><p className="eyebrow">آینه فقط‌خواندنی پرشیا سیستم</p><h1>همه محصولات و ویژگی‌های واقعی</h1><p>فهرست WooCommerce، تصاویر و ویژگی‌ها در دیتابیس داخلی اپ نگهداری و برای محاسبات استاندارد می‌شوند.</p></div><div className="sync-status"><span className="live-dot" /><div><strong>{catalog.dataMode === "woocommerce-live" ? "کاتالوگ واقعی متصل است" : catalog.dataMode === "database-mock" ? "متصل به PostgreSQL" : "داده نمایشی آماده"}</strong><small>آخرین داده: {new Intl.DateTimeFormat("fa-IR").format(new Date(catalog.updatedAt))}</small></div></div></section>

@@ -13,13 +13,16 @@ type SearchPageProps = {
 };
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
+  const params = await searchParams;
+  const query = Array.isArray(params.q) ? params.q[0] : params.q ?? "";
   const session = await getCurrentSession();
-  if (!session) redirect("/login");
+  if (!session) {
+    const destination = query ? `/search?${new URLSearchParams({ q: query }).toString()}` : "/search";
+    redirect(`/login?next=${encodeURIComponent(destination)}`);
+  }
 
   const user = await getUserById(session.id);
   const access = getSubscriptionAccess(user);
-  const params = await searchParams;
-  const query = Array.isArray(params.q) ? params.q[0] : params.q ?? "";
   const normalizedQuery = normalizeText(query);
   const results = searchTools(query, access.lockedToolSlugs, 12);
 

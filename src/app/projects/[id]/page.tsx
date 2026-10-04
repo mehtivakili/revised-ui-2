@@ -4,10 +4,10 @@ import { getProject } from "@/src/lib/projects/store";
 import { ProjectViewer } from "@/src/components/smart/ProjectViewer";
 
 export default async function ProjectViewPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await getCurrentSession();
-  if (!session) redirect("/login");
-
   const { id } = await params;
+  const session = await getCurrentSession();
+  if (!session) redirect(`/login?next=${encodeURIComponent(`/projects/${id}`)}`);
+
   const project = await getProject(session.id, id);
   if (!project) redirect("/planner");
 

@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { KeyRound, MessageSquareText, ShieldCheck } from "lucide-react";
+import { safeAuthRedirect } from "@/src/lib/authRedirect";
 
 export type LoginMode = "otp" | "password";
 
@@ -30,7 +31,18 @@ async function postAuth(path: string, body: object) {
   return { response, data };
 }
 
-export function LoginForm({ initialMode, initialError = "" }: { initialMode: LoginMode; initialError?: string }) {
+export function LoginForm({
+  initialMode,
+  initialError = "",
+  redirectTo = "/"
+}: {
+  initialMode: LoginMode;
+  initialError?: string;
+  redirectTo?: string;
+}) {
+  const destination = safeAuthRedirect(redirectTo);
+  const otpHref = `/login?${new URLSearchParams({ next: destination }).toString()}`;
+  const passwordHref = `/login?${new URLSearchParams({ mode: "password", next: destination }).toString()}`;
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [username, setUsername] = useState("");
@@ -47,12 +59,12 @@ export function LoginForm({ initialMode, initialError = "" }: { initialMode: Log
     setMessage("");
 
     try {
-      const { response, data } = await postAuth("/api/auth/login", { username, password });
+      const { response, data } = await postAuth("/api/auth/login", { username, password, next: destination });
       if (!response.ok || !data.ok) {
         setError(data.error || "ورود انجام نشد.");
         return;
       }
-      window.location.href = "/calculators";
+      window.location.assign(destination);
     } catch {
       setError("ارتباط با سرویس ورود برقرار نشد.");
     } finally {
@@ -92,7 +104,7 @@ export function LoginForm({ initialMode, initialError = "" }: { initialMode: Log
         setError(data.error || "کد تایید نشد.");
         return;
       }
-      window.location.href = "/calculators";
+      window.location.assign(destination);
     } catch {
       setError("ارتباط با سرویس ورود برقرار نشد.");
     } finally {
@@ -110,12 +122,12 @@ export function LoginForm({ initialMode, initialError = "" }: { initialMode: Log
         </p>
 
         <div className="auth-tabs" role="tablist" aria-label="روش ورود">
-          <a href="/login" role="tab" aria-selected={initialMode === "otp"} className={initialMode === "otp" ? "active" : ""}>
+          <a href={otpHref} role="tab" aria-selected={initialMode === "otp"} className={initialMode === "otp" ? "active" : ""}>
             <MessageSquareText size={16} aria-hidden="true" />
             پیامک
           </a>
           <a
-            href="/login?mode=password"
+            href={passwordHref}
             role="tab"
             aria-selected={initialMode === "password"}
             className={initialMode === "password" ? "active" : ""}
@@ -165,7 +177,13 @@ export function LoginForm({ initialMode, initialError = "" }: { initialMode: Log
             ) : null}
           </div>
         ) : (
-          <form className="form-stack" method="post" action="/api/auth/login" onSubmit={submitPassword}>
+          <form
+            className="form-stack"
+            method="post"
+            action={`/api/auth/login?next=${encodeURIComponent(destination)}`}
+            onSubmit={submitPassword}
+          >
+            <input type="hidden" name="next" value={destination} />
             <label htmlFor="username">نام کاربری</label>
             <input id="username" name="username" value={username} onChange={(event) => setUsername(event.target.value)} required />
             <label htmlFor="password">رمز عبور</label>
