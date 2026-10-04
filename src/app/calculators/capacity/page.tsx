@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { Download, Plus, Trash2 } from "lucide-react";
 import { CalculatorShell, RequiredNumberInput, ResultGrid, formatNumber } from "@/src/components/calculators/CalculatorUi";
@@ -517,6 +518,17 @@ export default function CapacityPage() {
           </p>
         </header>
 
+        <figure className="calculator-guide-media">
+          <Image
+            src="/images/guides/cctv-storage-control-room.webp"
+            alt="سامانه ضبط دوربین مداربسته شامل مانیتورها، دستگاه NVR و هاردهای ذخیره‌سازی"
+            width={1672}
+            height={941}
+            sizes="(max-width: 720px) 100vw, 1100px"
+          />
+          <figcaption>ظرفیت ذخیره‌سازی باید در کنار تعداد کانال‌ها، بیت‌ریت جریان‌ها و توان ورودی دستگاه ضبط بررسی شود.</figcaption>
+        </figure>
+
         <section className="calculator-guide-section" aria-labelledby="capacity-formula-title">
           <div className="calculator-guide-heading">
             <span>۰۱</span>
@@ -548,6 +560,17 @@ export default function CapacityPage() {
             </div>
           </div>
         </section>
+
+        <figure className="calculator-guide-media">
+          <Image
+            src="/images/guides/cctv-recording-data-flow.webp"
+            alt="مسیر انتقال ویدئو از دوربین‌های مداربسته به سوئیچ شبکه، دستگاه NVR و هاردها"
+            width={1672}
+            height={941}
+            sizes="(max-width: 720px) 100vw, 1100px"
+          />
+          <figcaption>بیت‌ریت هر دوربین وارد شبکه می‌شود، در NVR پردازش و در نهایت به مصرف فضای هارد تبدیل می‌شود.</figcaption>
+        </figure>
 
         <section className="calculator-guide-section guide-example" aria-labelledby="capacity-example-title">
           <div className="calculator-guide-heading">
