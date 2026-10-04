@@ -3,8 +3,7 @@
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
-import { Anchor, ArrowLeft, ArrowRight, Bookmark, BriefcaseBusiness, Bus, BusFront, Cable, CarFront, Check, ChevronLeft, CircleAlert, CircleParking, Droplets, Factory, FileDown, Flame, FolderOpen, Fuel, Gem, GraduationCap, HardHat, HeartPulse, Hotel, House, Info, Landmark, LoaderCircle, LockKeyhole, Mic, Milestone, MonitorCog, Moon, PencilRuler, Pickaxe, Plane, Presentation, Rocket, RotateCcw, Save, Search, Server, ShieldCheck, Ship, ShoppingBag, ShoppingCart, Siren, Sparkles, Sprout, SquareStack, Store, SunMedium, TowerControl, TrafficCone, TrainFront, Trash2, UtensilsCrossed, Volleyball, Warehouse, Waves, Waypoints, X, Zap } from "lucide-react";
+import { Anchor, ArrowLeft, ArrowRight, Bookmark, BriefcaseBusiness, Bus, BusFront, Cable, CarFront, Check, ChevronLeft, CircleAlert, CircleParking, Droplets, Factory, FileDown, Flame, FolderOpen, Fuel, Gem, GraduationCap, HardHat, HeartPulse, Hotel, House, Info, Landmark, LoaderCircle, LockKeyhole, Mic, Milestone, MonitorCog, Moon, PencilRuler, Pickaxe, Plane, Presentation, RotateCcw, Save, Search, Server, ShieldCheck, Ship, ShoppingBag, ShoppingCart, Siren, Sparkles, Sprout, SquareStack, Store, SunMedium, TowerControl, TrafficCone, TrainFront, Trash2, UtensilsCrossed, Volleyball, Warehouse, Waves, Waypoints, X, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ProjectBrief, ProjectCameraTemplate, ProjectZone, RecommendationPlan, RecommendationResult } from "@/src/domain/catalog/types";
 import { createEmptyPlan, type BuildingPlan } from "@/src/domain/planner/types";
@@ -28,6 +27,8 @@ import {
 import { useRouter } from "next/navigation";
 
 const formatFaCount = (value: number) => new Intl.NumberFormat("fa-IR").format(value);
+/** Shown wherever a project type would be, for a design started without one. */
+const blankDesignLabel = "طراحی ساده (بدون نوع کاربری)";
 
 /**
  * A readable name for a project the user never named.
@@ -68,45 +69,43 @@ const initialBrief: ProjectBrief = {
 const projectTypes = [["shop", "فروشگاه"], ["office", "اداری"], ["factory", "کارخانه"], ["parking", "پارکینگ"], ["residential", "مسکونی"]] as const;
 const taskOptions = Object.entries(TASK_LABELS) as Array<[ProjectZone["goal"], string]>;
 
-/**
- * A stable, individual accent for every venue card.
- *
- * The golden-angle step keeps neighbouring catalogue entries visually distinct while
- * deriving the same colour from the venue order on every render (including searches).
- */
-const venueCardAccents = new Map<VenueTypeId, string>(
-  venueTypes.map((venue, index) => [
-    venue.id,
-    `hsl(${Math.round((207 + index * 137.508) % 360)} 82% 62%)`
-  ])
-);
-
 type VenueCategoryId = "living-retail" | "public" | "transport" | "industrial" | "energy";
 
-const venueCategories: Array<{ id: VenueCategoryId; label: string; venueIds: VenueTypeId[] }> = [
+/** Tones reuse the toolbox's `tool-icon-*` gradients so both catalogues read as one system. */
+const venueCategories: Array<{ id: VenueCategoryId; label: string; icon: LucideIcon; tone: "violet" | "blue" | "teal" | "orange" | "sky"; venueIds: VenueTypeId[] }> = [
   {
     id: "living-retail",
     label: "مسکونی و تجاری",
+    icon: Store,
+    tone: "violet",
     venueIds: ["residential", "apartment", "hotel", "shop", "supermarket", "jewellery", "restaurant", "mall", "car-showroom"]
   },
   {
     id: "public",
     label: "اداری و عمومی",
+    icon: BriefcaseBusiness,
+    tone: "blue",
     venueIds: ["office", "school", "hospital", "conference", "sports-complex", "control-room", "data-centre"]
   },
   {
     id: "transport",
     label: "شهری و حمل‌ونقل",
+    icon: TrainFront,
+    tone: "teal",
     venueIds: ["parking", "urban-road", "highway", "bus-station", "transit-fleet", "safe-city", "airport", "port", "railway"]
   },
   {
     id: "industrial",
     label: "صنعتی و تولیدی",
+    icon: Factory,
+    tone: "orange",
     venueIds: ["industrial", "construction", "warehouse", "mine", "farm"]
   },
   {
     id: "energy",
     label: "انرژی و زیرساخت",
+    icon: Zap,
+    tone: "sky",
     venueIds: ["fuel", "substation", "pipeline", "transmission-line", "onshore-oil", "offshore-oil", "solar-farm", "hydro-plant", "water-plant"]
   }
 ];
@@ -162,7 +161,7 @@ const samplePresets: WizardPreset[] = [
   {
     id: "family-villa-sample",
     title: "ویلای خانوادگی دو طبقه",
-    description: "نشیمن، آشپزخانه، اتاق کار، سه اتاق خواب، حیاط و ورودی خودرو",
+    description: "نشیمن، آشپزخانه، اتاق کار، سه اتاق خواب، حیاط، فضای بازی و پارکینگ",
     planId: "family-villa",
     brief: { projectType: "residential", siteAreaM2: 504, floors: 2, entrances: 2, archiveDays: 30, lowLightPriority: true },
     zones: [
@@ -185,7 +184,7 @@ const samplePresets: WizardPreset[] = [
   {
     id: "luxury-villa-sample",
     title: "عمارت مجلل کامل",
-    description: "زیرزمین خدماتی، باغ، استخر، سوئیت‌ها، گالری و روف‌گاردن",
+    description: "پارکینگ و موتورخانه زیرزمین، باغ و استخر، اتاق‌خواب‌ها، سینمای خانگی و روف‌گاردن",
     planId: "luxury-villa",
     brief: { projectType: "residential", siteAreaM2: 3048, floors: 5, entrances: 4, archiveDays: 45, lowLightPriority: true },
     zones: [
@@ -210,7 +209,7 @@ const samplePresets: WizardPreset[] = [
   {
     id: "retail-gallery-sample",
     title: "گالری و فروشگاه دوبلکس",
-    description: "ویترین، قفسه‌ها، صندوق، انبار لجستیک و نیم‌طبقه اداری",
+    description: "ویترین، قفسه و رگال، صندوق، اتاق پرو، انبار و نیم‌طبقه اداری",
     planId: "retail-gallery",
     brief: { projectType: "shop", siteAreaM2: 1392, floors: 2, entrances: 2, archiveDays: 30 },
     zones: [
@@ -222,7 +221,7 @@ const samplePresets: WizardPreset[] = [
   {
     id: "neighbourhood-supermarket-sample",
     title: "سوپرمارکت محله‌ای کامل",
-    description: "ورودی کنترل‌شده، شش راهروی فروش، چهار صندوق، سردخانه، اتاق پول و بارانداز",
+    description: "ورودی کنترل‌شده، هشت ردیف قفسه، شش صندوق، سردخانه، اتاق پول، اتاق سرور و بارانداز",
     planId: "neighbourhood-supermarket",
     brief: { projectType: "shop", siteAreaM2: 1440, floors: 1, entrances: 3, archiveDays: 30, lowLightPriority: true },
     zones: [
@@ -235,7 +234,7 @@ const samplePresets: WizardPreset[] = [
   {
     id: "secure-jewellery-branch-sample",
     title: "شعبه امن طلا و صرافی",
-    description: "ورودی دو مرحله‌ای، ویترین‌ها، چهار پیشخوان، خزانه، کنترل کارکنان و خروج اضطراری",
+    description: "ورودی دو مرحله‌ای، ویترین‌ها، خط پیشخوان، خزانه، اتاق کنترل، اتاق سرور و خروج اضطراری",
     planId: "secure-jewellery-branch",
     brief: { projectType: "shop", siteAreaM2: 384, floors: 1, entrances: 2, archiveDays: 60, redundancyRequired: true },
     zones: [
@@ -272,7 +271,7 @@ const samplePresets: WizardPreset[] = [
   {
     id: "neighbourhood-restaurant-sample",
     title: "رستوران محله‌ای",
-    description: "سالن شش‌میزه، صندوق، آشپزخانه، انبار مواد، در پشتی و تحویل بیرون‌بر",
+    description: "سالن یازده‌میزه، صندوق کنار ورودی، آشپزخانه، انبار مواد، در پشتی و تحویل بیرون‌بر",
     planId: "neighbourhood-restaurant",
     brief: { projectType: "shop", siteAreaM2: 560, floors: 1, entrances: 2, archiveDays: 30 },
     zones: [
@@ -309,7 +308,7 @@ const samplePresets: WizardPreset[] = [
   {
     id: "boutique-hotel-sample",
     title: "هتل بوتیک دو طبقه",
-    description: "لابی پخ‌دار، پذیرش، صندوق امانات، رستوران، اتاق‌های میهمان و راهروی ستون‌دار",
+    description: "لابی و پذیرش، صندوق امانات، اتاق سرور، رستوران، هشت اتاق میهمان و پارکینگ کارکنان",
     planId: "boutique-hotel",
     brief: { projectType: "office", siteAreaM2: 1040, floors: 2, entrances: 2, archiveDays: 45, lowLightPriority: true },
     zones: [
@@ -334,7 +333,7 @@ const samplePresets: WizardPreset[] = [
   {
     id: "courtyard-apartment-sample",
     title: "مجتمع مسکونی حیاط‌دار",
-    description: "پارکینگ زیرزمین، انباری، موتورخانه، لابی پخ‌دار، مشاعات و هسته دسترسی",
+    description: "پارکینگ زیرزمین، انباری، اتاق سرور، لابی و نگهبانی، مشاعات و هسته دسترسی",
     planId: "courtyard-apartment",
     brief: { projectType: "residential", siteAreaM2: 1584, floors: 2, entrances: 2, archiveDays: 30, lowLightPriority: true },
     zones: [
@@ -478,7 +477,7 @@ const samplePresets: WizardPreset[] = [
   {
     id: "neighbourhood-mall-sample",
     title: "مرکز خرید محله‌ای سه‌تراز",
-    description: "پارکینگ زیرزمین، ورودی اصلی، گالری تجاری، حراست، پله‌برقی و فودکورت کوچک",
+    description: "پارکینگ زیرزمین، ورودی اصلی، نه واحد تجاری، اتاق کنترل، پله‌برقی و فودکورت",
     planId: "neighbourhood-mall",
     brief: { projectType: "shop", siteAreaM2: 3300, floors: 3, entrances: 4, archiveDays: 45, lowLightPriority: true, redundancyRequired: true },
     zones: [
@@ -837,7 +836,6 @@ export function ProjectWizard() {
   const [buildingPlan, setBuildingPlan] = useState<BuildingPlan>(() => createEmptyPlan());
   const [designFocusActive, setDesignFocusActive] = useState(false);
   const [venueQuery, setVenueQuery] = useState("");
-  const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [cameraSelectionAnalysis, setCameraSelectionAnalysis] = useState<CameraSelectionAnalysis | null>(null);
 
   /* ── Saved-project state ──────────────────────────────────────────── */
@@ -876,10 +874,9 @@ export function ProjectWizard() {
   }, []);
 
   useEffect(() => {
-    // The project gateway is a focused, viewport-sized experience too. Locking the
-    // document here removes the outer page scrollbar; the catalogue keeps its own
-    // bounded scrollbar so every project type remains reachable.
-    if (step !== 1 && !designFocusActive && !cameraFocusActive) return;
+    // Only the full-screen studios lock the document. The project gateway is a normal
+    // page that scrolls with the window, so it must never be locked.
+    if (!designFocusActive && !cameraFocusActive) return;
     const bodyOverflow = document.body.style.overflow;
     const rootOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = "hidden";
@@ -906,7 +903,7 @@ export function ProjectWizard() {
   // Null until the user picks one. Everything downstream that needs a venue is gated on
   // this, so an unchosen project cannot silently inherit a shop's defaults.
   const selectedVenueId = (buildingPlan.venueTypeId as VenueTypeId | undefined) ?? null;
-  const selectedVenue = venueTypes.find((venue) => venue.id === selectedVenueId) ?? venueTypes[1]!;
+  const selectedVenue = venueTypes.find((venue) => venue.id === selectedVenueId) ?? null;
   const filteredVenues = useMemo(() => {
     const query = venueQuery.trim().toLocaleLowerCase("fa");
     if (!query) return venueTypes;
@@ -915,7 +912,6 @@ export function ProjectWizard() {
 
   const selectVenue = useCallback((venueId: VenueTypeId) => {
     const experience = venueExperiences[venueId];
-    setSelectedSampleId(null);
     setBrief((current) => ({ ...current, ...experience.defaults, projectType: experience.projectType }));
     setBuildingPlan((current) => ({ ...current, venueTypeId: venueId }));
   }, []);
@@ -997,12 +993,30 @@ export function ProjectWizard() {
     router.push(`/projects/${item.id}`);
   }, [router]);
 
-  const startFocusedDesign = useCallback(() => {
-    if (!selectedVenueId) return;
-    selectVenue(selectedVenueId);
+  const selectVenueAndStart = useCallback((venueId: VenueTypeId) => {
+    selectVenue(venueId);
     setSiteMode("designer");
     setDesignFocusActive(true);
-  }, [selectVenue, selectedVenueId]);
+  }, [selectVenue]);
+
+  /**
+   * A simple design: a new, empty plan with no project type.
+   *
+   * Nothing is inherited, neither a venue's checklist and device defaults nor the plan or
+   * project left over from an earlier session, so the user starts from a blank sheet. A
+   * project type can still be chosen later from the designer's venue panel.
+   */
+  const startBlankDesign = useCallback(() => {
+    setBuildingPlan(createEmptyPlan());
+    setBrief({ ...initialBrief, cameraTemplates: defaultCameraTemplates() });
+    setResult(null);
+    setProjectId(null);
+    setProjectName("");
+    setSaveState("idle");
+    dirtyRef.current = false;
+    setSiteMode("designer");
+    setDesignFocusActive(true);
+  }, []);
 
   /**
    * The drawn plan is the source of truth for area and storey count once the designer is
@@ -1114,7 +1128,6 @@ export function ProjectWizard() {
     if (preset.planId) {
       const venueTypeId = sampleVenueTypeIds[preset.planId];
       setBuildingPlan({ ...createSamplePlan(preset.planId), venueTypeId });
-      setSelectedSampleId(preset.id);
       setSiteMode("designer");
       setSavedMessage(`نمونه «${preset.title}» روی طراح بارگذاری شد؛ همه اجزا قابل ویرایش‌اند.`);
     }
@@ -1148,12 +1161,19 @@ export function ProjectWizard() {
     setStep(2);
   }
 
+  const goToPlannerHome = () => {
+    setDesignFocusActive(false);
+    setResult(null);
+    setStep(1);
+  };
+
   if (designFocusActive) return (
     <DesignFocusStage
       venue={selectedVenue}
       plan={buildingPlan}
       onPlanChange={setBuildingPlan}
       onSummaryChange={applyPlanSummary}
+      onHome={goToPlannerHome}
       onCancel={() => setDesignFocusActive(false)}
       onContinue={() => {
         setDesignFocusActive(false);
@@ -1170,6 +1190,7 @@ export function ProjectWizard() {
       placement={placement}
       onPlanChange={setBuildingPlan}
       onSummaryChange={applyPlanSummary}
+      onHome={goToPlannerHome}
       onBack={() => setStep(2)}
       onContinue={() => setStep(4)}
     />
@@ -1181,25 +1202,26 @@ export function ProjectWizard() {
       selectedVenueId={selectedVenueId}
       query={venueQuery}
       onQueryChange={setVenueQuery}
-      onSelect={selectVenue}
-      onStart={startFocusedDesign}
+      onSelect={selectVenueAndStart}
+      onStartBlank={startBlankDesign}
       onOpenProject={openSavedProject}
       onViewProject={viewSavedProject}
       galleryToken={galleryToken}
       samples={samplePresets}
-      selectedSampleId={selectedSampleId}
-      onApplySample={applyPreset}
       onOpenSample={openSample}
     />
   );
 
   // The drawn plan only reaches the results when it was actually used and completed.
-  if (step === 7 && result) return <RecommendationResults result={result} plan={planReady ? buildingPlan : undefined} onReset={() => { setResult(null); setStep(1); }} onUseCompatibleDefaults={retryWithCompatibleDefaults} />;
+  if (step === 7 && result) return <RecommendationResults result={result} plan={planReady ? buildingPlan : undefined} onReset={goToPlannerHome} onUseCompatibleDefaults={retryWithCompatibleDefaults} />;
 
   const stepTitles = ["شناخت محیط", "دستگاه‌های پیش‌فرض", "جانمایی دوربین‌ها", "مشخصات دقیق دوربین‌ها", "پروفایل ضبط و آرشیو", "زیرساخت و اولویت"];
   return <section ref={wizardTopRef} className="wizard-shell advanced-wizard">
     <div className="wizard-progress-head">
-      <div><span>مرحله {step} از ۶</span><strong>{stepTitles[step - 1]}</strong></div>
+      <div className="wizard-progress-title">
+        <button type="button" className="wizard-home-link" onClick={goToPlannerHome}><ShieldCheck size={16} />صفحه اصلی طراحی هوشمند</button>
+        <span>مرحله {step} از ۶</span><strong>{stepTitles[step - 1]}</strong>
+      </div>
       <div className="wizard-persistence">
         <label className="wizard-project-name">
           <FolderOpen size={14} aria-hidden="true" />
@@ -1447,13 +1469,11 @@ function ProjectTypeGateway({
   query,
   onQueryChange,
   onSelect,
-  onStart,
+  onStartBlank,
   onOpenProject,
   onViewProject,
   galleryToken,
   samples,
-  selectedSampleId,
-  onApplySample,
   onOpenSample
 }: {
   venues: VenueType[];
@@ -1461,13 +1481,11 @@ function ProjectTypeGateway({
   query: string;
   onQueryChange: (value: string) => void;
   onSelect: (venueId: VenueTypeId) => void;
-  onStart: () => void;
+  onStartBlank: () => void;
   onOpenProject: (project: ProjectListItem) => void;
   onViewProject: (project: ProjectListItem) => void;
   galleryToken: number;
   samples: WizardPreset[];
-  selectedSampleId: string | null;
-  onApplySample: (preset: WizardPreset) => void;
   onOpenSample: (preset: WizardPreset) => void;
 }) {
   /*
@@ -1565,25 +1583,33 @@ function ProjectTypeGateway({
     if (venueDismissTimerRef.current !== null) window.clearTimeout(venueDismissTimerRef.current);
   }, []);
 
+  // The popover is fixed to the viewport, so it would drift away from its card once the page scrolls.
+  useEffect(() => {
+    if (!venuePreview) return;
+    const dismiss = () => setVenuePreview(null);
+    window.addEventListener("scroll", dismiss, { passive: true });
+    return () => window.removeEventListener("scroll", dismiss);
+  }, [venuePreview]);
+
   return (
     <section className="project-type-gateway" dir="rtl">
-      <header className="project-gateway-header">
-        <div className="project-gateway-brand">
-          <span><ShieldCheck size={25} aria-hidden="true" /></span>
-          <div><strong>طراحی هوشمند پروژه</strong><small>جانمایی دقیق، متناسب با کاربری واقعی محیط</small></div>
+      <header className="project-gateway-hero">
+        <div className="project-gateway-intro">
+          <span className="project-gateway-eyebrow"><ShieldCheck size={15} aria-hidden="true" />صفحه اصلی طراحی هوشمند</span>
+          <h1>نوع محیط پروژه را انتخاب کنید</h1>
+          <p>جانمایی دقیق، متناسب با کاربری واقعی محیط. با انتخاب هر مورد، طراح نقشه در حالت تمام‌صفحه باز می‌شود.</p>
         </div>
+        <ol className="project-gateway-steps" aria-label="مراحل طراحی پروژه">
+          <li className="is-active" aria-current="step"><b>۱</b><span>انتخاب کاربری</span></li>
+          <li><b>۲</b><span>ترسیم نقشه</span></li>
+          <li><b>۳</b><span>جانمایی دوربین</span></li>
+          <li><b>۴</b><span>گزارش مهندسی</span></li>
+        </ol>
         <label className="project-venue-search">
-          <Search size={18} aria-hidden="true" />
-          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="جست‌وجوی نوع پروژه؛ مثل مدرسه، فروشگاه یا کارخانه" />
+          <Search size={19} aria-hidden="true" />
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="جست‌وجوی نوع پروژه؛ مثل مدرسه، فروشگاه یا کارخانه" aria-label="جست‌وجوی نوع پروژه" />
           {query && <button type="button" onClick={() => onQueryChange("")} aria-label="پاک کردن جست‌وجو"><X size={16} /></button>}
         </label>
-        <div className="project-gateway-steps" aria-label="مراحل شروع پروژه">
-          <span className="is-active"><b>۱</b>نوع پروژه</span>
-          <i aria-hidden="true" />
-          <span><b>۲</b>اطلاعات پروژه</span>
-          <i aria-hidden="true" />
-          <span><b>۳</b>تأیید و شروع</span>
-        </div>
       </header>
 
       <div className="project-gateway-content">
@@ -1598,45 +1624,26 @@ function ProjectTypeGateway({
           aria-live="polite"
           onMouseLeave={scheduleVenueDismiss}
         >
-          <details className="project-samples-panel">
-            <summary>
-              <span className="project-samples-summary-icon"><Sparkles size={18} aria-hidden="true" /></span>
-              <span><strong>نمونه‌های طراحی آماده</strong><small>پلان‌های کامل و قابل ویرایش برای شروع سریع</small></span>
-              <em>{formatFaCount(samples.length)} نمونه</em>
-              <ChevronLeft className="project-samples-chevron" size={18} aria-hidden="true" />
-            </summary>
-            <div className="project-samples-grid">
-              {samples.map((sample, index) => {
-                const venueId = sample.planId ? sampleVenueTypeIds[sample.planId] : undefined;
-                const venue = venueId ? venueTypes.find((item) => item.id === venueId) : undefined;
-                const selected = sample.id === selectedSampleId;
-                return (
-                  <button
-                    type="button"
-                    key={sample.id}
-                    className={`project-sample-card${selected ? " is-selected" : ""}`}
-                    style={{ "--sample-accent": `hsl(${(205 + index * 47) % 360} 82% 62%)` } as CSSProperties}
-                    onClick={() => onApplySample(sample)}
-                    aria-pressed={selected}
-                  >
-                    <span className="project-sample-card-icon"><SquareStack size={20} aria-hidden="true" /></span>
-                    <span className="project-sample-card-copy">
-                      <strong>{sample.title}</strong>
-                      <small>{sample.description}</small>
-                      <em>{venue?.label ?? "پروژه آماده"} · {formatFaCount(sample.brief.floors ?? 1)} طبقه</em>
-                    </span>
-                    {selected ? <span className="project-sample-card-check"><Check size={13} aria-hidden="true" /></span> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </details>
-
+          {!query.trim() && (
+            <section className="project-venue-section project-blank-section" aria-label="طراحی ساده">
+              <button type="button" className="project-blank-select" onClick={onStartBlank}>
+                <span className="tool-icon tool-icon-slate"><PencilRuler size={26} aria-hidden="true" /></span>
+                <span className="project-blank-copy">
+                  <span className="project-blank-title"><strong>طراحی ساده</strong><em>بدون پیش‌فرض</em></span>
+                  <small>صفحه سفید بدون نوع کاربری، چک‌لیست یا چیدمان آماده. نقشه را آزادانه بکشید، دوربین بگذارید و هر وقت خواستید نوع پروژه را از داخل طراح انتخاب کنید.</small>
+                </span>
+                <span className="project-venue-arrow"><ChevronLeft size={17} aria-hidden="true" /></span>
+              </button>
+            </section>
+          )}
           {venueGroups.map((category) => (
             <section key={category.id} className={`project-venue-section category-${category.id}`}>
               <header className="project-venue-section-head">
-                <strong>{category.label}</strong>
-                <span>{formatFaCount(category.venues.length)} نوع پروژه</span>
+                <span className="category-icon"><category.icon size={20} aria-hidden="true" /></span>
+                <div>
+                  <h2>{category.label}</h2>
+                  <p>{formatFaCount(category.venues.length)} نوع پروژه با چیدمان و اولویت‌های اختصاصی</p>
+                </div>
               </header>
               <div className="project-venue-section-grid">
                 {category.venues.map((venue) => {
@@ -1646,8 +1653,7 @@ function ProjectTypeGateway({
                   return (
                     <article
                       key={venue.id}
-                      className={`project-venue-card venue-${venue.id}${selected ? " is-selected" : ""}`}
-                      style={{ "--venue-accent": venueCardAccents.get(venue.id) } as CSSProperties}
+                      className={`project-venue-card${selected ? " is-selected" : ""}`}
                       onMouseEnter={(event) => scheduleVenuePreview(venue.id, event.clientX, event.clientY)}
                       onMouseMove={(event) => {
                         venuePointerRef.current = { venueId: venue.id, clientX: event.clientX, clientY: event.clientY };
@@ -1668,11 +1674,13 @@ function ProjectTypeGateway({
                         className="project-venue-select"
                         onClick={() => onSelect(venue.id)}
                         aria-pressed={selected}
-                        aria-label={`انتخاب ${experience.shortLabel}`}
+                        aria-label={`انتخاب ${experience.shortLabel} و ورود به طراحی`}
                       >
-                        <span className="project-venue-icon"><Icon size={28} strokeWidth={1.8} aria-hidden="true" /></span>
+                        <span className={`tool-icon tool-icon-${category.tone}`}><Icon size={20} aria-hidden="true" /></span>
                         <span className="project-venue-copy"><strong>{experience.shortLabel}</strong><small>{venue.blurb}</small></span>
-                        {selected && <span className="project-venue-check"><Check size={14} aria-hidden="true" /></span>}
+                        <span className={selected ? "project-venue-arrow is-selected" : "project-venue-arrow"}>
+                          {selected ? <Check size={15} aria-label="انتخاب فعلی" /> : <ChevronLeft size={15} aria-hidden="true" />}
+                        </span>
                       </button>
                     </article>
                   );
@@ -1711,20 +1719,6 @@ function ProjectTypeGateway({
           </aside>
         )}
       </div>
-
-      <footer className="project-gateway-footer">
-        <div className="project-gateway-help"><Info size={17} /><span>پس از ورود به طراحی، صفحه قفل می‌شود تا تمام تمرکز روی نقشه باشد.</span></div>
-        <div>
-          <button type="button" className="project-gateway-cancel" onClick={() => window.history.back()}>لغو</button>
-          <button
-            type="button"
-            className="project-gateway-start"
-            onClick={onStart}
-            disabled={!selectedVenueId}
-            title={selectedVenueId ? undefined : "ابتدا نوع پروژه را انتخاب کنید"}
-          >شروع طراحی<Rocket size={18} /><ArrowLeft size={17} /></button>
-        </div>
-      </footer>
     </section>
   );
 }
@@ -1734,25 +1728,26 @@ function DesignFocusStage({
   plan,
   onPlanChange,
   onSummaryChange,
+  onHome,
   onCancel,
   onContinue
 }: {
-  venue: VenueType;
+  venue: VenueType | null;
   plan: BuildingPlan;
   onPlanChange: (plan: BuildingPlan) => void;
   onSummaryChange: (summary: PlanSummary) => void;
+  onHome: () => void;
   onCancel: () => void;
   onContinue: () => void;
 }) {
-  const experience = venueExperiences[venue.id];
-  const Icon = experience.icon;
+  const Icon = venue ? venueExperiences[venue.id].icon : PencilRuler;
   return (
-    <section className={`design-focus-shell venue-${venue.id}`} dir="rtl">
+    <section className={`design-focus-shell venue-${venue?.id ?? "blank"}`} dir="rtl">
       <header className="design-focus-header">
-        <div className="design-focus-brand"><ShieldCheck size={22} /><strong>طراحی هوشمند پروژه</strong></div>
+        <button type="button" className="design-focus-brand design-focus-home" onClick={onHome}><ShieldCheck size={22} /><strong>صفحه اصلی طراحی هوشمند</strong></button>
         <div className="design-focus-project">
           <span><Icon size={20} aria-hidden="true" /></span>
-          <div><small>نوع پروژه فعال</small><strong>{venue.label}</strong></div>
+          <div><small>نوع پروژه فعال</small><strong>{venue?.label ?? blankDesignLabel}</strong></div>
         </div>
         <div className="design-focus-lock"><LockKeyhole size={15} /><span>حالت تمرکز فعال است</span></div>
       </header>
@@ -1777,32 +1772,33 @@ function CameraPlacementFocusStage({
   placement,
   onPlanChange,
   onSummaryChange,
+  onHome,
   onBack,
   onContinue
 }: {
-  venue: VenueType;
+  venue: VenueType | null;
   plan: BuildingPlan;
   cameraTemplates: ProjectCameraTemplate[];
   placement: { required: number; placed: number; complete: boolean };
   onPlanChange: (plan: BuildingPlan) => void;
   onSummaryChange: (summary: PlanSummary) => void;
+  onHome: () => void;
   onBack: () => void;
   onContinue: () => void;
 }) {
-  const experience = venueExperiences[venue.id];
-  const Icon = experience.icon;
+  const Icon = venue ? venueExperiences[venue.id].icon : PencilRuler;
   const remaining = Math.max(0, placement.required - placement.placed);
 
   return (
-    <section className={`design-focus-shell design-focus-camera venue-${venue.id}`} dir="rtl">
+    <section className={`design-focus-shell design-focus-camera venue-${venue?.id ?? "blank"}`} dir="rtl">
       <header className="design-focus-header">
-        <div className="design-focus-brand">
+        <button type="button" className="design-focus-brand design-focus-home" onClick={onHome}>
           <ShieldCheck size={22} />
-          <div><strong>طراحی هوشمند پروژه</strong><small>استودیوی جانمایی دوربین</small></div>
-        </div>
+          <div><strong>صفحه اصلی طراحی هوشمند</strong><small>استودیوی جانمایی دوربین</small></div>
+        </button>
         <div className="design-focus-project">
           <span><Icon size={20} aria-hidden="true" /></span>
-          <div><small>مرحله ۳ از ۶ · نوع پروژه فعال</small><strong>{venue.label}</strong></div>
+          <div><small>مرحله ۳ از ۶ · نوع پروژه فعال</small><strong>{venue?.label ?? blankDesignLabel}</strong></div>
         </div>
         <div className="design-focus-lock"><LockKeyhole size={15} /><span>حالت تمرکز فعال است</span></div>
       </header>
@@ -1903,7 +1899,7 @@ function RecommendationResults({ result, plan, onReset, onUseCompatibleDefaults 
   };
 
   return <section className="recommendation-results">
-    <div className="results-hero"><div><p className="eyebrow">پیشنهاد اولیه آماده است</p><h1>سناریوهای قابل ویرایش</h1><p>موتور {result.calculation.engineVersion} · ورودی {result.calculation.inputVersion} · {result.calculation.inputFingerprint}</p><small className="calculation-standards">{result.calculation.standardVersions.join(" · ")}</small></div><div className="result-actions"><button className="secondary-action" onClick={onReset}>ویرایش نیازها</button><button className="secondary-action" onClick={printEngineeringReport}><FileDown size={16} />خروجی PDF مهندسی</button><button className="primary-action" onClick={saveSolution} disabled={savingVersion}><Save size={16} />{savingVersion ? "در حال ذخیره نسخه..." : saved ? "ذخیره نسخه جدید" : "ذخیره پلن و نسخه محاسبه"}</button>{saveVersionMessage ? <small>{saveVersionMessage}</small> : null}</div></div>
+    <div className="results-hero"><div><p className="eyebrow">پیشنهاد اولیه آماده است</p><h1>سناریوهای قابل ویرایش</h1><p>موتور {result.calculation.engineVersion} · ورودی {result.calculation.inputVersion} · {result.calculation.inputFingerprint}</p><small className="calculation-standards">{result.calculation.standardVersions.join(" · ")}</small></div><div className="result-actions"><button className="secondary-action" onClick={onReset}><ShieldCheck size={16} />صفحه اصلی طراحی هوشمند</button><button className="secondary-action" onClick={printEngineeringReport}><FileDown size={16} />خروجی PDF مهندسی</button><button className="primary-action" onClick={saveSolution} disabled={savingVersion}><Save size={16} />{savingVersion ? "در حال ذخیره نسخه..." : saved ? "ذخیره نسخه جدید" : "ذخیره پلن و نسخه محاسبه"}</button>{saveVersionMessage ? <small>{saveVersionMessage}</small> : null}</div></div>
     {selected && <div className="metric-strip"><Metric label="PPM متوسط / حداقل" value={`${selected.metrics.averagePpm} / ${selected.metrics.minimumPpm}`} /><Metric label="Incoming / Remote" value={`${selected.metrics.bandwidthMbps} / ${selected.metrics.outgoingBandwidthMbps} Mbps`} /><Metric label="تقاضای Decode" value={`${selected.metrics.decodeDemandMp} MP`} /><Metric label="Storage پایه / نهایی" value={`${selected.metrics.storageBaseTb} / ${selected.metrics.storageRequiredTb} TB`} /><Metric label="فضای usable / خام" value={`${selected.metrics.storageUsableTb} / ${selected.metrics.storageRawTb} TB`} /><Metric label="آرایش دیسک" value={selected.metrics.raidLevel} /><Metric label="بار / بودجه PoE" value={`${selected.metrics.poeLoadW} / ${selected.metrics.poeBudgetW} W`} /><Metric label="نقاط توزیع شبکه" value={`${selected.metrics.switchLocations}`} /><Metric label="Duty Cycle ضبط" value={`${Math.round(selected.metrics.recordingDutyCycle * 100)}%`} /><Metric label="زمان پشتیبانی" value={selected.metrics.estimatedRuntimeMin ? `${selected.metrics.estimatedRuntimeMin} min` : "لحاظ نشده"} /><Metric label="وضوح بیشینه" value={`${selected.metrics.recommendedResolutionMp} MP`} /></div>}
     <div className="plan-tabs">{result.plans.map((plan) => <button key={plan.id} className={selected?.id === plan.id ? "active" : ""} onClick={() => setActivePlan(plan.id)}><span>{plan.title}</span><small>امتیاز محاسبه‌شده {new Intl.NumberFormat("fa-IR").format(plan.score)} از ۱۰۰</small></button>)}</div>
     {selected && <>{plan ? <PlanResultMaps plan={plan} recommendation={selected} /> : null}<div className="infrastructure-grid"><Metric label="کابل مسی با ذخیره" value={`${selected.infrastructure.copperCableM} m`} /><Metric label="Backbone فیبر" value={`${selected.infrastructure.fiberBackboneM} m`} /><Metric label="Rack" value={`${selected.infrastructure.rackCount} × ${selected.infrastructure.recommendedRackU}U`} /><Metric label="Patch Panel / SFP" value={`${selected.infrastructure.patchPanelCount} / ${selected.infrastructure.sfpModuleCount}`} /></div></>}

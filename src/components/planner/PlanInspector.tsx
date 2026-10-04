@@ -19,12 +19,13 @@ import { collectOccluders } from "@/src/lib/planner/geometry";
 import { sensorOptions } from "@/src/lib/chatbot/slots";
 import { housingLabels } from "@/src/lib/planner/camera-templates";
 import { formatFa } from "@/src/lib/chatbot/persian";
-import { applyObstaclePreset, obstaclePreset, obstaclePresets } from "@/src/lib/planner/obstacle-presets";
+import { applyObstaclePreset, obstacleGroupLabels, obstaclePreset, obstaclePresets, type ObstacleGroup } from "@/src/lib/planner/obstacle-presets";
 import { CoverageRequirementInspector, RoomInspector } from "@/src/components/planner/RoomInspector";
 import type { CustomSectionRecord } from "@/src/domain/planner/types";
 import { findSectionType } from "@/src/domain/planner/venues";
 import { roomAtPoint } from "@/src/lib/planner/rooms";
 import { constrainCameraMountHeight } from "@/src/lib/planner/placement-rules";
+import { drawsSingleWall, fenceWallStyles, isFenceMode } from "@/src/lib/planner/wall-styles";
 
 /**
  * Property editor for whatever is selected.
@@ -116,12 +117,14 @@ export function PlanInspector({
       return (
         <aside className="plan-inspector plan-tool-inspector">
           <header><BrickWall size={18} aria-hidden="true" /><strong>مشخصات دیوار در حال رسم</strong></header>
-          <p>{wallDrawMode === "line"
-            ? "با انتخاب دو نقطه، یک دیوار خطی ساخته می‌شود."
-            : "با انتخاب دو گوشه، چهار ضلع یک فضای مستطیلی ساخته می‌شود."} این مقادیر روی دیوارهای جدید اعمال خواهند شد.</p>
+          <p>{isFenceMode(wallDrawMode)
+            ? `با انتخاب دو نقطه، ${fenceWallStyles[wallDrawMode].label} به ارتفاع ${fenceWallStyles[wallDrawMode].heightM} متر ساخته می‌شود؛ ارتفاع و ضخامت پیش‌فرض دیوار روی آن اعمال نمی‌شود.`
+            : drawsSingleWall(wallDrawMode)
+              ? "با انتخاب دو نقطه، یک دیوار خطی ساخته می‌شود. این مقادیر روی دیوارهای جدید اعمال خواهند شد."
+              : "با انتخاب دو گوشه، چهار ضلع یک فضای مستطیلی ساخته می‌شود. این مقادیر روی دیوارهای جدید اعمال خواهند شد."}</p>
           <NumberField label="ارتفاع دیوار" unit="متر" value={defaults.wallHeightM} min={0.3} max={12} step={0.1} onChange={(wallHeightM) => onDefaultsChange({ wallHeightM })} />
           <NumberField label="ضخامت دیوار" unit="متر" value={defaults.wallThicknessM} min={0.05} max={1} step={0.05} onChange={(wallThicknessM) => onDefaultsChange({ wallThicknessM })} />
-          <div className="plan-tool-tip"><Ruler size={15} aria-hidden="true" /><span>{wallDrawMode === "line"
+          <div className="plan-tool-tip"><Ruler size={15} aria-hidden="true" /><span>{drawsSingleWall(wallDrawMode)
             ? "نقطه شروع را کلیک کنید؛ طول دیوار با حرکت ماوس نمایش داده می‌شود و کلیک دوم آن را می‌سازد."
             : "گوشه اول را کلیک کنید؛ با حرکت ماوس طول و عرض زنده نمایش داده می‌شود و کلیک دوم مستطیل را می‌سازد."}</span></div>
         </aside>
@@ -277,6 +280,26 @@ export function PlanInspector({
         <div className="plan-field-readout"><span>طول</span><strong>{span.toFixed(2)} متر</strong></div>
         <NumberField label="ارتفاع" unit="متر" value={wall.heightM} min={0.3} max={12} step={0.1} onChange={(value) => update({ heightM: value })} />
         <NumberField label="ضخامت" unit="متر" value={wall.thicknessM} min={0.05} max={1} step={0.05} onChange={(value) => update({ thicknessM: value })} />
+        <label className="plan-text-field">
+          <span>نوع دیوار</span>
+          <select
+            value={wall.variant ?? (wall.blocksView ? "masonry" : "glass")}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "fence-mesh" || value === "fence-wall") {
+                const style = fenceWallStyles[value];
+                update({ variant: value, heightM: style.heightM, thicknessM: style.thicknessM, blocksView: style.blocksView });
+              } else {
+                update({ variant: undefined, blocksView: value === "masonry" });
+              }
+            }}
+          >
+            <option value="masonry">دیوار ساختمان</option>
+            <option value="glass">جدار شیشه‌ای</option>
+            <option value="fence-mesh">{fenceWallStyles["fence-mesh"].label}</option>
+            <option value="fence-wall">{fenceWallStyles["fence-wall"].label}</option>
+          </select>
+        </label>
         <label className="plan-check">
           <input type="checkbox" checked={wall.blocksView} onChange={(event) => update({ blocksView: event.target.checked })} />
           <span>مانع دید است (شیشه را بردارید)</span>
@@ -446,15 +469,11 @@ export function PlanInspector({
             }}
           >
             <option value="custom">مانع سفارشی</option>
-            <optgroup label="خودروها">
-              {obstaclePresets.filter((item) => item.group === "vehicle").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-            </optgroup>
-            <optgroup label="درخت‌ها">
-              {obstaclePresets.filter((item) => item.group === "tree").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-            </optgroup>
-            <optgroup label="سازه‌ها">
-              {obstaclePresets.filter((item) => item.group === "structure").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-            </optgroup>
+            {(Object.keys(obstacleGroupLabels) as ObstacleGroup[]).map((group) => (
+              <optgroup key={group} label={obstacleGroupLabels[group]}>
+                {obstaclePresets.filter((item) => item.group === group).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              </optgroup>
+            ))}
           </select>
         </label>
         <label className="plan-text-field">

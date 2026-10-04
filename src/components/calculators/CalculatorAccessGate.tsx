@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { getUserById } from "@/src/lib/authStore";
 import { getToolBySlug } from "@/src/lib/dashboard";
@@ -8,7 +7,7 @@ import { getSubscriptionAccess, isToolLocked } from "@/src/lib/subscription";
 
 export async function CalculatorAccessGate({ slug, children }: { slug: string; children: ReactNode }) {
   const session = await getCurrentSession();
-  if (!session) redirect("/login");
+  if (!session) return children;
 
   const user = await getUserById(session.id);
   const access = getSubscriptionAccess(user);

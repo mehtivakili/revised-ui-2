@@ -13,6 +13,15 @@ import type { CameraHousing, CameraStreamConfig, SurveillanceTask } from "@/src/
 
 export type Vec2 = { x: number; z: number };
 
+/**
+ * What a wall is built as, when it is not ordinary masonry or glazing.
+ *
+ * Site boundaries are drawn with the wall tool so they snap, join and carry gates like any
+ * other wall: a mesh fence is see-through, a boundary wall is solid but lower than a
+ * building wall.
+ */
+export type PlanWallVariant = "fence-mesh" | "fence-wall";
+
 export type PlanWall = {
   id: string;
   a: Vec2;
@@ -21,6 +30,8 @@ export type PlanWall = {
   thicknessM: number;
   /** Glass and low partitions bound the space without blocking the camera's line of sight. */
   blocksView: boolean;
+  /** Fence or boundary wall; absent for building walls and glazing. */
+  variant?: PlanWallVariant;
 };
 
 /**
@@ -142,6 +153,22 @@ export type ObstacleVariant =
   | "tool-cabinet"
   | "welding-station"
   | "conveyor"
+  // Utilities and energy
+  | "transformer"
+  | "storage-tank"
+  | "chemical-tank"
+  | "generator-unit"
+  | "pump-unit"
+  | "pipeline"
+  | "pipe-valve"
+  | "solar-panel"
+  // Public transport and emergency vehicles
+  | "bus"
+  | "ambulance"
+  // Freight
+  | "shipping-container"
+  // Structure
+  | "stair-landing"
   // Warehouse and logistics
   | "storage-rack"
   | "pallet-stack"
@@ -451,9 +478,10 @@ export type PlanViewMode = "top" | "orbit" | "building";
  *
  * `glass` is a line partition that does not block the view — the see-through boundary a
  * shopfront or an internal glazed screen makes. It is a separate draw mode rather than a
- * checkbox so a transparent wall is a deliberate choice at the moment of drawing.
+ * checkbox so a transparent wall is a deliberate choice at the moment of drawing. The two
+ * fence modes draw a site boundary line by line, the same way.
  */
-export type WallDrawMode = "line" | "rectangle" | "glass";
+export type WallDrawMode = "line" | "rectangle" | "glass" | PlanWallVariant;
 
 export type PlanElementKind = "wall" | "door" | "obstacle" | "camera" | "room" | "requirement";
 

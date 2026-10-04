@@ -2,7 +2,7 @@ import type { ProjectBrief, ProjectCameraTemplate, SurveillanceTask } from "@/sr
 import type { BuildingPlan, FloorPlan, PlanRoom } from "@/src/domain/planner/types";
 import { findSectionType, type SectionEnvironment, type SectionType } from "@/src/domain/planner/venues";
 import { createTemplate } from "@/src/lib/planner/camera-templates";
-import { recipeFor, roomContext, type PlacementRecipe } from "@/src/lib/planner/placement-rules";
+import { recipeFor, requirementOpenAbove, roomContext, type PlacementRecipe } from "@/src/lib/planner/placement-rules";
 import { TASK_LABELS } from "@/src/lib/recommendation/camera-constraints";
 
 export type CameraSelectionAnalysis = {
@@ -174,7 +174,7 @@ export function recommendCameraSelection(plan: BuildingPlan, brief: ProjectBrief
         name: requirement.label,
         ceilingHeightM: floor.heightM,
         boundarySource: "drawn",
-        manual: { openAbove: section.environment === "outdoor" || section.environment === "perimeter" }
+        manual: { openAbove: requirementOpenAbove(section.environment, requirement.polygon, floor) }
       };
       const recipe = recipeFor(section, roomContext(zone, floor));
       if (!recipe) {

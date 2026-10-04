@@ -24,6 +24,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "شماره موبایل معتبر نیست." }, { status: 400 });
     }
 
+    const destinationLimited = rateLimit(`otp-destination:${phone.value}`, 3, 15 * 60 * 1000);
+    if (!destinationLimited.ok) {
+      return NextResponse.json({ ok: false, error: "Too many codes were requested for this number. Please try again later." }, { status: 429 });
+    }
+
     const existingUser = await getUser(phone.value);
     if (!existingUser) {
       return NextResponse.json({ ok: false, error: "این شماره هنوز ثبت‌نام نکرده است. ابتدا حساب بسازید." }, { status: 404 });

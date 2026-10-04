@@ -50,7 +50,23 @@ type AuthState = {
   smsConfig: SmsConfig;
 };
 
-const sessionSecret = process.env.AUTH_SECRET || "local-development-secret-change-before-production";
+const MAX_EPHEMERAL_AUTH_RECORDS = 10_000;
+
+function resolveSessionSecret() {
+  const configured = process.env.AUTH_SECRET?.trim();
+  if (configured) {
+    if (process.env.NODE_ENV === "production" && configured.length < 32) {
+      throw new Error("AUTH_SECRET must contain at least 32 characters in production.");
+    }
+    return configured;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("AUTH_SECRET is required in production.");
+  }
+  return "local-development-secret-change-before-production";
+}
+
+const sessionSecret = resolveSessionSecret();
 const passwordSecret = process.env.PASSWORD_SECRET || sessionSecret;
 
 export const seedPasswords = {
@@ -412,6 +428,16 @@ export function rateLimit(key: string, limit: number, windowMs: number) {
   const current = authState.ipHits.get(key);
 
   if (!current || current.resetAt < now) {
+    if (authState.ipHits.size >= MAX_EPHEMERAL_AUTH_RECORDS) {
+      for (const [storedKey, record] of authState.ipHits) {
+        if (record.resetAt <= now) authState.ipHits.delete(storedKey);
+      }
+      while (authState.ipHits.size >= MAX_EPHEMERAL_AUTH_RECORDS) {
+        const oldestKey = authState.ipHits.keys().next().value as string | undefined;
+        if (!oldestKey) break;
+        authState.ipHits.delete(oldestKey);
+      }
+    }
     authState.ipHits.set(key, { count: 1, resetAt: now + windowMs });
     return { ok: true as const };
   }
@@ -429,6 +455,17 @@ export async function createOtp(username: string, options: { ensureUser?: boolea
   const now = Date.now();
   const existing = authState.otps.get(username);
   const shouldEnsureUser = options.ensureUser ?? true;
+
+  if (authState.otps.size >= MAX_EPHEMERAL_AUTH_RECORDS) {
+    for (const [storedUsername, record] of authState.otps) {
+      if (record.expiresAt <= now) authState.otps.delete(storedUsername);
+    }
+    while (authState.otps.size >= MAX_EPHEMERAL_AUTH_RECORDS) {
+      const oldestUsername = authState.otps.keys().next().value as string | undefined;
+      if (!oldestUsername) break;
+      authState.otps.delete(oldestUsername);
+    }
+  }
 
   if (existing && existing.nextRequestAt > now) {
     return {
@@ -465,10 +502,20 @@ export function replaceOtpCode(username: string, code: string) {
 }
 
 function createRegistrationToken(username: string) {
+  const authState = state();
+  const now = Date.now();
+  for (const [storedToken, record] of authState.registrationTokens) {
+    if (record.expiresAt <= now) authState.registrationTokens.delete(storedToken);
+  }
+  while (authState.registrationTokens.size >= MAX_EPHEMERAL_AUTH_RECORDS) {
+    const oldestToken = authState.registrationTokens.keys().next().value as string | undefined;
+    if (!oldestToken) break;
+    authState.registrationTokens.delete(oldestToken);
+  }
   const token = randomBytes(24).toString("base64url");
-  state().registrationTokens.set(token, {
+  authState.registrationTokens.set(token, {
     username,
-    expiresAt: Date.now() + 10 * 60 * 1000
+    expiresAt: now + 10 * 60 * 1000
   });
   return token;
 }

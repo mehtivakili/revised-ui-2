@@ -54,7 +54,7 @@ export async function AppTopBar() {
         <TopSearch lockedToolSlugs={access.lockedToolSlugs} />
 
         <nav className="top-nav" aria-label="ناوبری اصلی">
-          <Link className="smart-nav-link" href="/planner"><Sparkles size={14} />طراحی هوشمند</Link>
+          <Link className="smart-nav-link" href="/planner"><Sparkles size={14} />صفحه اصلی طراحی هوشمند</Link>
           <Link href="/catalog">محصولات</Link>
           <ToolsMenu lockedToolSlugs={access.lockedToolSlugs} />
           <Link href="/">خانه</Link>

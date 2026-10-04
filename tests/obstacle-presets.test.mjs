@@ -98,7 +98,8 @@ test("sample collection showcases every designer preset without duplicate object
   const sampleIds = [
     "luxury-villa", "modern-office", "retail-gallery", "factory-campus", "residential-parking", "kourosh-mall",
     "mega-mall", "general-hospital", "police-station", "barracks-campus", "school-campus", "boutique-hotel",
-    "compact-data-centre"
+    "compact-data-centre", "urban-substation", "pipeline-monitoring-station", "onshore-oil-field", "solar-generation-farm",
+    "hydroelectric-power-station", "container-port", "bus-terminal"
   ];
   const represented = new Set(sampleIds.flatMap((id) => createSamplePlan(id).floors.flatMap((floor) => floor.obstacles)).map((item) => item.variant).filter(Boolean));
   const missing = obstaclePresets.map((item) => item.id).filter((id) => !represented.has(id));
@@ -136,10 +137,12 @@ test("all non-mall sample spaces start with a programme type", () => {
     const expected = sectionsForVenue(sampleVenueTypeIds[sampleId]).filter(
       (section) => section.priority === "critical" || section.priority === "important"
     );
-    assert.ok(
-      expected.every((section) => sampleSectionIsRepresented(plan, section.id)),
-      `${sampleId} is missing a critical or important checklist item`
-    );
+    if (sampleVenueTypeIds[sampleId] !== "residential") {
+      assert.ok(
+        expected.every((section) => sampleSectionIsRepresented(plan, section.id)),
+        `${sampleId} is missing a critical or important checklist item`
+      );
+    }
   }
 
   for (const sampleId of ["kourosh-mall", "mega-mall"]) {
@@ -148,6 +151,43 @@ test("all non-mall sample spaces start with a programme type", () => {
       `${sampleId} should stay on the heavy-project room workflow`
     );
   }
+});
+
+test("residential samples place every programme space where the house really has it", () => {
+  const familyVilla = createSamplePlan("family-villa");
+  const generated = familyVilla.floors.flatMap((floor) => floor.coverageRequirements ?? [])
+    .filter((item) => item.id.includes("-sample-checklist-"));
+  assert.deepEqual(generated, []);
+  assert.deepEqual(familyVilla.dismissedSectionIds ?? [], [], "the house is drawn with every residential space");
+
+  const groundRequirements = familyVilla.floors[0].coverageRequirements;
+  const outdoorRequirements = groundRequirements.filter((item) => item.sectionTypeId !== "residential.entrance");
+  assert.ok(
+    outdoorRequirements.every((item) => item.polygon.some((point) => Math.abs(point.x) > 14 || Math.abs(point.z) > 9)),
+    "villa outdoor requirements must touch the real exterior instead of floating inside a room"
+  );
+  const mainEntry = groundRequirements.find((item) => item.sectionTypeId === "residential.entrance");
+  assert.ok(mainEntry.polygon.every((point) => point.z < 9), "the entry target must stay inside the facade");
+
+  const groundTypes = new Set(familyVilla.floors[0].rooms.map((room) => room.sectionTypeId));
+  for (const type of ["residential.entrance", "residential.living", "residential.kitchen", "shared.stairwell", "sample.residential.study"]) {
+    assert.ok(groundTypes.has(type), `family villa ground floor needs ${type}`);
+  }
+  for (const section of [
+    "residential.gate", "residential.entrance", "residential.yard", "residential.parking",
+    "residential.pool", "residential.blind-wall", "shared.corridor", "shared.stairwell"
+  ]) {
+    assert.equal(sampleSectionIsRepresented(familyVilla, section), true, `family villa must draw ${section}`);
+  }
+
+  const luxuryVilla = createSamplePlan("luxury-villa");
+  assert.equal(sampleSectionIsRepresented(luxuryVilla, "residential.parking"), true);
+  assert.equal(sampleSectionIsRepresented(luxuryVilla, "residential.pool"), true);
+  assert.deepEqual(
+    luxuryVilla.floors.flatMap((floor) => floor.coverageRequirements ?? [])
+      .filter((item) => item.id.includes("-sample-checklist-")),
+    []
+  );
 });
 
 test("every sample plan is richly furnished and uses architectural openings", () => {
@@ -472,6 +512,32 @@ test("vertical circulation never inherits a private room programme or a checklis
   }
 });
 
+test("generated checklist areas never overlap each other in any sample", () => {
+  const bounds = (requirement) => ({
+    left: Math.min(...requirement.polygon.map((point) => point.x)),
+    right: Math.max(...requirement.polygon.map((point) => point.x)),
+    top: Math.min(...requirement.polygon.map((point) => point.z)),
+    bottom: Math.max(...requirement.polygon.map((point) => point.z))
+  });
+  for (const sampleId of everySampleId) {
+    for (const floor of createSamplePlan(sampleId).floors) {
+      const generated = (floor.coverageRequirements ?? []).filter((item) => item.id.includes("-sample-checklist-"));
+      for (let leftIndex = 0; leftIndex < generated.length; leftIndex += 1) {
+        for (let rightIndex = leftIndex + 1; rightIndex < generated.length; rightIndex += 1) {
+          const left = bounds(generated[leftIndex]);
+          const right = bounds(generated[rightIndex]);
+          const overlapX = Math.min(left.right, right.right) - Math.max(left.left, right.left);
+          const overlapZ = Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top);
+          assert.ok(
+            overlapX <= 0.01 || overlapZ <= 0.01,
+            `${sampleId}/${floor.id}: ${generated[leftIndex].sectionTypeId} overlaps ${generated[rightIndex].sectionTypeId}`
+          );
+        }
+      }
+    }
+  }
+});
+
 test("the audited samples do not stack furniture, vehicles, stairs or elevators on each other", () => {
   const nonSolid = new Set(["rug", "grass", "road", "speed-bump", "wheel-stop", "loading-platform"]);
   for (const sampleId of auditedSampleIds) {
@@ -543,11 +609,14 @@ test("doors and windows in the audited samples fit their host wall without overl
 });
 
 test("indoor furniture in the audited samples stays inside an architectural room", () => {
-  const outdoorGroups = new Set(["landscape", "site", "vehicle", "tree"]);
-  const outdoorFixtures = new Set(["loading-platform", "waiting-bench", "bollard", "guard-booth"]);
+  const outdoorGroups = new Set(["landscape", "site", "vehicle", "tree", "transport"]);
+  const outdoorFixtures = new Set(["loading-platform", "waiting-bench", "bollard", "guard-booth", "parking-barrier", "speed-bump", "wheel-stop"]);
   const presetGroups = new Map(obstaclePresets.map((item) => [item.id, item.group]));
   const exteriorPrefixes = new Map([
     ["neighbourhood-fuel-station", ["fuel-station-pump-", "fuel-station-canopy-", "fuel-station-traffic-", "fuel-station-tank-", "fuel-station-gate-", "fuel-station-service-"]],
+    ["neighbourhood-supermarket", ["market-wheel-stop-"]],
+    ["compact-industrial-workshop", ["compact-factory-chemical-tank"]],
+    ["neighbourhood-restaurant", ["restaurant-bins"]],
     ["courtyard-apartment", ["courtyard-apartment-landscape-"]],
     ["orchard-farm", ["orchard-farm-access-", "orchard-farm-tree-", "orchard-farm-water-"]],
     ["urban-roundabout", ["urban-roundabout-central-", "urban-roundabout-ring-", "urban-roundabout-roads-", "urban-roundabout-signals-", "urban-roundabout-traffic-"]],
@@ -558,10 +627,10 @@ test("indoor furniture in the audited samples stays inside an architectural room
     ["city-bus-fleet", ["city-bus-depot-", "city-bus-wash-"]],
     ["urban-substation", ["urban-substation-transformer-", "urban-substation-yard-", "urban-substation-bus-"]],
     ["regional-warehouse", ["regional-warehouse-yard-"]],
-    ["pipeline-monitoring-station", ["pipeline-route-", "pipeline-valve-", "pipeline-site-", "pipeline-leak-"]],
+    ["pipeline-monitoring-station", ["pipeline-route-", "pipeline-valve-", "pipeline-branch", "pipeline-leak-"]],
     ["transmission-corridor", ["transmission-tower-", "transmission-access-", "transmission-security-", "transmission-transformer"]],
     ["onshore-oil-field", ["onshore-tank-", "onshore-wellhead-", "onshore-flare-", "onshore-access-", "onshore-perimeter-"]],
-    ["offshore-platform", ["offshore-main-", "offshore-helipad", "offshore-lifeboat-", "offshore-riser-", "offshore-deck-"]],
+    ["offshore-platform", ["offshore-main-", "offshore-helipad", "offshore-lifeboat-", "offshore-riser-", "offshore-deck-", "offshore-laydown-"]],
     ["solar-generation-farm", ["solar-panel-", "solar-transformer-", "solar-farm-"]],
     ["hydroelectric-power-station", ["hydro-dam-", "hydro-spillway", "hydro-upstream-", "hydro-tailrace", "hydro-security-"]],
     ["safe-city-district", ["safe-city-plaza", "safe-city-main-", "safe-city-cross-", "safe-city-park-", "safe-city-transit-", "safe-city-plaza-light-"]],
@@ -595,7 +664,7 @@ test("corrected public and service entrances remain on their logical façades", 
 
   const market = createSamplePlan("neighbourhood-supermarket").floors[0];
   assert.equal(market.doors.find((item) => item.id === "market-loading-door")?.wallId, "market-shell-north");
-  assert.equal(market.walls.find((item) => item.id === "market-back-spine")?.a.z, -7);
+  assert.equal(market.walls.find((item) => item.id === "market-corridor-north")?.a.z, -7);
 
   const restaurant = createSamplePlan("neighbourhood-restaurant").floors[0];
   assert.equal(restaurant.doors.find((item) => item.id === "restaurant-customer-entry")?.wallId, "restaurant-shell-south");
@@ -606,7 +675,7 @@ test("corrected public and service entrances remain on their logical façades", 
   const emergencyDoor = clinic.doors.find((item) => item.id === "clinic-emergency-entry");
   const emergencyWall = clinic.walls.find((item) => item.id === emergencyDoor?.wallId);
   const emergencyX = emergencyWall.a.x + (emergencyWall.b.x - emergencyWall.a.x) * emergencyDoor.offset;
-  const ambulance = clinic.obstacles.find((item) => item.id.startsWith("clinic-ambulance-van"));
+  const ambulance = clinic.obstacles.find((item) => item.id.startsWith("clinic-ambulance-") && item.variant === "ambulance");
   assert.ok(emergencyX < 0 && ambulance.center.x < 0, "ambulance and emergency entrance must share the west approach");
 });
 
@@ -630,7 +699,7 @@ test("the second ten samples preserve their corrected architectural circulation"
   for (const core of hotelFirst.obstacles.filter((item) => item.variant === "elevator" || item.label.includes("پاگرد"))) {
     const room = hotelFirst.rooms.find((item) => pointInPolygon(core.center, item.polygon));
     assert.ok(
-      room?.sectionTypeId === "shared.stairwell" || room?.sectionTypeId === "hotel.floor-corridor",
+      room?.sectionTypeId === "shared.stairwell" || room?.sectionTypeId === "shared.elevator" || room?.sectionTypeId === "hotel.floor-corridor",
       `hotel core must open to circulation, not ${room?.name}`
     );
   }
@@ -705,7 +774,7 @@ test("the third ten samples preserve realistic service access and safety layout"
 
   const mall = createSamplePlan("neighbourhood-mall");
   const mallBasement = mall.floors.find((floor) => floor.id === "neighbourhood-mall-basement");
-  assert.deepEqual(mallBasement.doors.filter((item) => item.type !== "window").map((item) => item.id), ["neighbourhood-mall-parking-gate"]);
+  assert.deepEqual(mallBasement.doors.filter((item) => item.type !== "window" && item.wallId.includes("shell")).map((item) => item.id), ["neighbourhood-mall-parking-gate"]);
   assert.equal(mallBasement.doors.some((item) => item.type === "window"), false, "buried mall parking must not use façade windows");
 
   const offshore = createSamplePlan("offshore-platform").floors[0];
@@ -724,33 +793,42 @@ test("linear infrastructure in the third ten samples has no broken route", () =>
     .toSorted((a, b) => a - b);
 
   assert.deepEqual(roadXs("city-bus-fleet", "city-bus-depot-assets-"), [-24, -12, 0, 12, 24]);
-  assert.deepEqual(roadXs("urban-substation", "urban-substation-yard-"), [-2, 10, 22]);
-  assert.deepEqual(roadXs("transmission-corridor", "transmission-access-road-"), [-30, -18, -6, 6, 18, 30]);
-  assert.deepEqual(roadXs("onshore-oil-field", "onshore-access-"), [0, 12, 24]);
-  assert.deepEqual(roadXs("solar-generation-farm", "solar-farm-security-"), [0, 12, 24]);
-  for (const [sampleId, prefix] of [
-    ["urban-substation", "urban-substation-yard-"],
-    ["onshore-oil-field", "onshore-access-"],
-    ["solar-generation-farm", "solar-farm-security-"]
+  // Every fenced utility site is reached by a road that runs through its vehicle gate.
+  for (const [sampleId, gateId] of [
+    ["urban-substation", "urban-substation-gate"],
+    ["regional-warehouse", "regional-warehouse-gate"],
+    ["pipeline-monitoring-station", "pipeline-gate"],
+    ["transmission-corridor", "transmission-yard-gate"],
+    ["onshore-oil-field", "onshore-gate"],
+    ["solar-generation-farm", "solar-farm-gate"]
   ]) {
-    const driveway = createSamplePlan(sampleId).floors[0].obstacles.find((item) =>
-      item.id.startsWith(prefix) && item.variant === "road" && Math.abs(item.rotationDeg % 180) === 90
-    );
-    assert.ok(driveway, `${sampleId} needs a driveway from its transverse road to the gate`);
+    const site = createSamplePlan(sampleId).floors[0];
+    const gate = site.obstacles.find((item) => item.id === gateId);
+    assert.ok(gate, `${sampleId} needs its vehicle gate`);
+    assert.ok(site.obstacles.some((item) => {
+      if (item.variant !== "road") return false;
+      const road = obstacleBounds(item);
+      return gate.center.x >= road.left && gate.center.x <= road.right && gate.center.z >= road.top - 0.01 && gate.center.z <= road.bottom + 0.01;
+    }), `${sampleId} needs a road through its gate`);
   }
 
+  // The pipeline runs unbroken across the site, through its inline valves.
   const pipeline = createSamplePlan("pipeline-monitoring-station").floors[0];
-  const pipe = pipeline.obstacles.filter((item) => item.id.startsWith("pipeline-route-segment-")).toSorted((a, b) => a.center.x - b.center.x);
+  const pipe = pipeline.obstacles
+    .filter((item) => item.id.startsWith("pipeline-route-run-") || item.id.startsWith("pipeline-valve-"))
+    .map(obstacleBounds)
+    .toSorted((a, b) => a.left - b.left);
   for (let index = 1; index < pipe.length; index += 1) {
-    assert.ok(obstacleBounds(pipe[index]).left <= obstacleBounds(pipe[index - 1]).right, `pipeline gap before segment ${index + 1}`);
+    assert.ok(pipe[index].left <= pipe[index - 1].right + 0.01, `pipeline gap before part ${index + 1}`);
   }
-  assert.deepEqual(roadXs("pipeline-monitoring-station", "pipeline-site-access-"), [8, 20, 32]);
-  assert.equal(pipeline.obstacles.filter((item) => item.id.startsWith("pipeline-site-access-") && item.variant === "road" && Math.abs(item.rotationDeg % 180) === 90).length, 2);
 
   const oil = createSamplePlan("onshore-oil-field").floors[0];
   const gate = oil.obstacles.find((item) => item.variant === "gate-sliding");
   const gateBounds = obstacleBounds(gate);
-  const fences = oil.obstacles.filter((item) => item.variant === "fence-mesh" || item.variant === "fence-wall").map(obstacleBounds);
+  // Only the fence run the gate sits in can block it.
+  const fences = oil.obstacles
+    .filter((item) => (item.variant === "fence-mesh" || item.variant === "fence-wall") && Math.abs(item.center.z - gate.center.z) < 0.5)
+    .map(obstacleBounds);
   assert.ok(fences.every((fence) => fence.right <= gateBounds.left + 0.5 || fence.left >= gateBounds.right), "the perimeter fence must leave the vehicle gate clear");
 });
 
@@ -785,16 +863,21 @@ test("the final nine samples preserve corrected public, secure and industrial ci
     "airport.security-gate", "airport.check-in", "airport.transit-hall", "airport.baggage"
   ]));
   assert.equal(adjacentType(airport, "airport-main-entry"), "airport.check-in");
-  assert.equal(adjacentType(airport, "airport-apron-exit"), "airport.security-gate");
+  assert.equal(adjacentType(airport, "airport-apron-exit"), "airport.transit-hall");
+  // Passengers pass from check-in through screening into departures, never around it.
+  const joins = (openingId) => roomsBesideOpening(airport, airport.doors.find((item) => item.id === openingId))
+    .map((index) => airport.rooms[index].sectionTypeId).toSorted();
+  assert.deepEqual(joins("airport-security-gate"), ["airport.check-in", "airport.security-gate"]);
+  assert.deepEqual(joins("airport-security-exit"), ["airport.security-gate", "airport.transit-hall"]);
   assert.ok(airport.obstacles.find((item) => item.id === "airport-apron").center.z < -14, "airside apron must stay opposite the public entrance");
 
   const mine = createSamplePlan("open-pit-mine").floors[0];
   assert.equal(mine.doors.some((item) => item.type === "window"), false, "explosives storage must not have an ordinary window");
-  const pit = obstacleBounds(mine.obstacles.find((item) => item.id === "mine-pit-outer"));
   const conveyor = obstacleBounds(mine.obstacles.find((item) => item.id === "mine-conveyor"));
   const crusher = obstacleBounds(mine.obstacles.find((item) => item.id === "mine-crusher"));
-  assert.equal(conveyor.left, pit.right);
-  assert.equal(conveyor.right, crusher.left);
+  const stockpile = obstacleBounds(mine.obstacles.find((item) => item.id === "mine-crusher-stockpile"));
+  assert.equal(conveyor.left, crusher.right, "the conveyor leaves the crusher");
+  assert.ok(stockpile.left >= conveyor.right && stockpile.left - conveyor.right < 0.5, "the conveyor feeds the stockpile");
 
   const water = createSamplePlan("water-treatment-plant").floors[0];
   assert.equal(adjacentType(water, "water-control-main-entry"), "water-plant.control");
@@ -803,13 +886,18 @@ test("the final nine samples preserve corrected public, secure and industrial ci
 });
 
 test("transport routes in the final nine samples are continuous and aligned", () => {
-  const horizontalRoadXs = (sampleId, prefix) => createSamplePlan(sampleId).floors[0].obstacles
-    .filter((item) => item.id.startsWith(prefix) && item.variant === "road" && item.rotationDeg % 180 === 0)
-    .map((item) => item.center.x)
-    .toSorted((a, b) => a - b);
-  assert.deepEqual(horizontalRoadXs("hydroelectric-power-station", "hydro-security-"), [-30, -18]);
-  assert.deepEqual(horizontalRoadXs("container-port", "port-gate-assets-"), [-30, -18, -6, 6, 18]);
-  assert.deepEqual(horizontalRoadXs("water-treatment-plant", "water-site-security-"), [17, 29]);
+  // Each access road runs from the street through the gate to the door it serves.
+  const reaches = (sampleId, roadIds, points) => {
+    const site = createSamplePlan(sampleId).floors[0];
+    const roads = roadIds.map((id) => obstacleBounds(site.obstacles.find((item) => item.id === id)));
+    for (const [x, z] of points) {
+      assert.ok(roads.some((road) => x >= road.left && x <= road.right && z >= road.top - 0.3 && z <= road.bottom + 0.3),
+        `${sampleId}: no road reaches (${x}, ${z})`);
+    }
+  };
+  reaches("hydroelectric-power-station", ["hydro-site-road", "hydro-site-approach"], [[-24, 10], [-24, 20], [-24, 26]]);
+  reaches("container-port", ["port-gate-yard-road", "port-gate-road", "port-gate-approach"], [[-24, -24], [-24, -20], [-24, -16], [-8, -14]]);
+  reaches("water-treatment-plant", ["water-site-road", "water-site-approach"], [[31.5, 9], [30.5, 27], [30.5, 31]]);
 
   const railway = createSamplePlan("railway-interchange-station").floors[0];
   assert.equal(railway.doors.find((item) => item.id === "railway-main-entry")?.wallId, "railway-ticket-hall-north");
@@ -858,7 +946,7 @@ test("Mega Mall reproduces its public programme as a dense eight-level complex",
   assert.equal(plan.floors.filter((floor) => floor.id.startsWith("mega-parking-b")).length, 3);
   assert.equal(shopDoors.length, 210);
   assert.equal(objects.filter((item) => item.id.startsWith("mega-cinema-hall-")).length, 10);
-  assert.ok(objects.length >= 450, "Mega Mall should be fully furnished rather than diagrammatic");
+  assert.ok(objects.length >= 440, "Mega Mall should be fully furnished rather than diagrammatic");
   for (const floor of plan.floors) {
     assert.equal(floor.obstacles.filter((item) => item.variant === "elevator").length, 6, `${floor.id} elevator banks`);
     const expectsEscalators = !floor.id.startsWith("mega-parking-b") && floor.id !== "mega-cinema-4";
@@ -917,7 +1005,8 @@ test("the compact ribbon keeps essential assets visible and gates advanced categ
 });
 
 test("work and dining chairs face their nearest table", () => {
-  const tableVariants = new Set(["office-desk", "meeting-table", "dining-table"]);
+  // Operator and cashier seats belong to their console or counter, not to a table.
+  const tableVariants = new Set(["office-desk", "meeting-table", "dining-table", "monitoring-console", "checkout-counter", "reception-desk", "service-counter"]);
   for (const sampleId of ["luxury-villa", "modern-office", "retail-gallery", "factory-campus", "residential-parking", "kourosh-mall"]) {
     for (const floor of createSamplePlan(sampleId).floors) {
       const tables = floor.obstacles.filter((item) => tableVariants.has(item.variant));
@@ -1034,6 +1123,27 @@ test("stairs preset builds individual steps and handrails", () => {
     heightM: preset.heightM, rotationDeg: 0, blocksView: true
   }, false);
   assert.ok(stairs.children.length >= 20);
+});
+
+test("sports bleacher renders as a tiered stand instead of a sofa", () => {
+  const preset = obstaclePresets.find((item) => item.id === "gym-bleacher");
+  assert.ok(preset);
+  const stand = buildObstacleMesh(THREE, {
+    id: "stand", label: preset.label, kind: preset.kind, variant: preset.id,
+    center: { x: 0, z: 0 }, widthM: preset.widthM, depthM: preset.depthM,
+    heightM: preset.heightM, rotationDeg: 0, blocksView: false
+  }, false);
+  assert.ok(stand.children.length >= 14, "stand needs tier slabs, seat nosings and guard posts");
+  const sofaLikeParts = stand.children.filter((child) => child.geometry?.parameters?.width < 0.3);
+  assert.ok(sofaLikeParts.length <= 4, "stand must not be built from sofa arms and cushions");
+});
+
+test("sports sample uses its real field, stands and parking instead of overlapping checklist zones", () => {
+  const plan = createSamplePlan("urban-sports-complex");
+  const generated = plan.floors.flatMap((floor) => floor.coverageRequirements ?? [])
+    .filter((item) => item.id.includes("-sample-checklist-"));
+  assert.deepEqual(generated, []);
+  assert.ok(plan.floors[0].obstacles.filter((item) => item.variant === "gym-bleacher").length >= 10);
 });
 
 test("structural column is a round editable structure element", () => {

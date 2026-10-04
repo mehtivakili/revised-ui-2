@@ -26,7 +26,7 @@
     "@mlightcad/libredwg-web": "^0.7.10",
     "@types/three": "^0.185.0",
     "lucide-react": "latest",
-    "next": "latest",
+    "next": "^16.3.6",
     "pdfjs-dist": "^6.2.108",
     "pg": "^8.22.0",
     "react": "latest",
@@ -40,7 +40,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "eslint": "latest",
-    "eslint-config-next": "latest",
+    "eslint-config-next": "^16.3.6",
     "typescript": "latest"
   }
 }

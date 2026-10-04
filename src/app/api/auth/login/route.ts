@@ -26,11 +26,8 @@ async function readCredentials(request: Request) {
   };
 }
 
-function formRedirect(request: Request, path: string) {
-  const host = request.headers.get("host");
-  const protocol = request.headers.get("x-forwarded-proto") || "http";
-  const baseUrl = host ? `${protocol}://${host}` : request.url;
-  return NextResponse.redirect(new URL(path, baseUrl), { status: 303 });
+function formRedirect(path: string) {
+  return new NextResponse(null, { status: 303, headers: { Location: path } });
 }
 
 function failedLoginResponse(request: Request, isFormPost: boolean, error: string, status: number) {
@@ -39,11 +36,20 @@ function failedLoginResponse(request: Request, isFormPost: boolean, error: strin
   }
 
   const searchParams = new URLSearchParams({ mode: "password", error });
-  return formRedirect(request, `/login?${searchParams.toString()}`);
+  return formRedirect(`/login?${searchParams.toString()}`);
 }
 
 export async function POST(request: Request) {
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > 16 * 1024) {
+    return NextResponse.json({ ok: false, error: "Request body is too large." }, { status: 413 });
+  }
+
   const { isFormPost, username, password } = await readCredentials(request);
+
+  if (username.length > 100 || password.length > 256) {
+    return failedLoginResponse(request, isFormPost, "Invalid credentials.", 400);
+  }
 
   const limited = rateLimit(`login:${getClientKey(request)}:${username}`, 12, 15 * 60 * 1000);
   if (!limited.ok) {
@@ -71,7 +77,7 @@ export async function POST(request: Request) {
   }
 
   const response = isFormPost
-    ? formRedirect(request, "/calculators")
+    ? formRedirect("/calculators")
     : NextResponse.json({ ok: true, role: result.user.role });
   response.cookies.set(sessionCookieName, signSession(result.user), sessionCookieOptions());
   return response;

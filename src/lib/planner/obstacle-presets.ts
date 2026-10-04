@@ -14,6 +14,8 @@ export type ObstacleGroup =
   | "retail"
   | "industrial"
   | "warehouse"
+  | "utility"
+  | "transport"
   | "parking"
   | "hospitality"
   | "medical"
@@ -29,6 +31,8 @@ export const obstacleGroupLabels: Record<ObstacleGroup, string> = {
   retail: "فروشگاهی",
   industrial: "کارگاه و کارخانه",
   warehouse: "انبار و لجستیک",
+  utility: "تأسیسات و انرژی",
+  transport: "حمل‌ونقل عمومی و امدادی",
   parking: "پارکینگ و تردد",
   hospitality: "هتل و فضای عمومی",
   medical: "پزشکی و درمانی",
@@ -72,6 +76,7 @@ export const obstaclePresets: ObstaclePreset[] = [
   { id: "stairs-straight", group: "structure", label: "راه‌پله مستقیم", description: "اتصال عمودی طبقات", kind: "stairs", widthM: 4.2, depthM: 1.4, heightM: 3.2 },
   { id: "structural-column", group: "structure", label: "ستون سازه‌ای", description: "ستون گرد قابل تغییر برای راهرو و سالن", kind: "pillar", widthM: 0.45, depthM: 0.45, heightM: 3.2, blocksView: true },
   { id: "elevator", group: "structure", label: "آسانسور", description: "کابین و درِ آسانسور کنار هسته راه‌پله", kind: "equipment", widthM: 2.2, depthM: 2.2, heightM: 3.2, blocksView: true },
+  { id: "stair-landing", group: "structure", label: "پاگرد نهایی", description: "پاگرد بالای آخرین راه‌پله با نرده", kind: "block", widthM: 4.2, depthM: 1.4, heightM: 0.18, blocksView: false },
   { id: "escalator", group: "structure", label: "پله‌برقی", description: "مسیر متحرک رفت‌وآمد طبقات تجاری", kind: "stairs", widthM: 5.2, depthM: 1.5, heightM: 3.2, blocksView: false },
 
   // Ground cover: drawn flat and deliberately non-blocking.
@@ -169,7 +174,27 @@ export const obstaclePresets: ObstaclePreset[] = [
   { id: "pallet-stack", group: "warehouse", label: "پالت کالا", description: "بار پالت‌شده", kind: "block", widthM: 1.2, depthM: 1, heightM: 1.5, blocksView: true },
   { id: "crate-stack", group: "warehouse", label: "جعبه‌های انبار", description: "چیدمان کارتن و صندوق", kind: "block", widthM: 1.6, depthM: 1.2, heightM: 1.8, blocksView: true },
   { id: "packing-table", group: "warehouse", label: "میز بسته‌بندی", description: "ایستگاه آماده‌سازی سفارش", kind: "furniture", widthM: 2, depthM: 0.9, heightM: 0.9, blocksView: false },
+  { id: "shipping-container", group: "warehouse", label: "کانتینر حمل بار", description: "کانتینر ۲۰ فوت بندر و محوطه", kind: "block", widthM: 6.06, depthM: 2.44, heightM: 2.59, blocksView: true },
   { id: "loading-platform", group: "warehouse", label: "سکوی بارگیری", description: "لبه تحویل و دریافت کالا", kind: "equipment", widthM: 5, depthM: 2.2, heightM: 1.1, blocksView: false },
+
+  /*
+   * Utilities and energy.
+   *
+   * The plant that power, oil, water and pipeline sites are built around. Most of it is
+   * tall and solid enough to hide a person, so it blocks the view; a solar table is seen
+   * over and under, so it does not.
+   */
+  { id: "transformer", group: "utility", label: "ترانسفورماتور", description: "ترانس قدرت پست برق با رادیاتور و بوشینگ", kind: "equipment", widthM: 6, depthM: 5, heightM: 4.5, blocksView: true },
+  { id: "storage-tank", group: "utility", label: "مخزن ذخیره استوانه‌ای", description: "مخزن ایستاده سوخت، نفت یا آب", kind: "equipment", widthM: 7, depthM: 7, heightM: 5, blocksView: true },
+  { id: "chemical-tank", group: "utility", label: "مخزن سوخت و مواد شیمیایی", description: "مخزن افقی روی پایه با دیواره ایمنی", kind: "equipment", widthM: 3, depthM: 2.4, heightM: 2.4, blocksView: true },
+  { id: "generator-unit", group: "utility", label: "ژنراتور و توربین", description: "واحد تولید برق یا دیزل ژنراتور", kind: "equipment", widthM: 4, depthM: 5, heightM: 4.2, blocksView: true },
+  { id: "pump-unit", group: "utility", label: "پمپ صنعتی", description: "پمپ و موتور روی شاسی", kind: "equipment", widthM: 3, depthM: 1.6, heightM: 1.8, blocksView: true },
+  { id: "pipeline", group: "utility", label: "خط لوله", description: "قطعه لوله روی پایه؛ طول را تغییر دهید", kind: "equipment", widthM: 8, depthM: 0.7, heightM: 1.1, blocksView: false },
+  { id: "pipe-valve", group: "utility", label: "ایستگاه شیر", description: "مجموعه شیر و فلنج روی خط", kind: "equipment", widthM: 2.5, depthM: 2.5, heightM: 2.2, blocksView: true },
+  { id: "solar-panel", group: "utility", label: "میز پنل خورشیدی", description: "ردیف پنل شیب‌دار روی سازه", kind: "surface", widthM: 8, depthM: 3.4, heightM: 1.8, blocksView: false },
+
+  { id: "bus", group: "transport", label: "اتوبوس شهری", description: "اتوبوس ۱۲ متری ناوگان عمومی", kind: "vehicle", widthM: 12, depthM: 2.55, heightM: 3.2, blocksView: true },
+  { id: "ambulance", group: "transport", label: "آمبولانس", description: "خودروی امدادی اورژانس", kind: "vehicle", widthM: 5.7, depthM: 2.1, heightM: 2.6, blocksView: true },
 
   { id: "parking-barrier", group: "parking", label: "راهبند پارکینگ", description: "کنترل ورود خودرو", kind: "gate", widthM: 4.5, depthM: 0.35, heightM: 1, blocksView: false },
   { id: "guard-booth", group: "parking", label: "اتاق نگهبانی", description: "کنترل ورودی و خروجی", kind: "equipment", widthM: 2.4, depthM: 2.4, heightM: 2.6, blocksView: true },

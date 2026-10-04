@@ -5,9 +5,11 @@ import path from "node:path";
 import { Dwg_File_Type, LibreDwg } from "@mlightcad/libredwg-web";
 import { NextResponse } from "next/server";
 
-import { validateDwgUpload } from "@/src/lib/planner/dwg-import";
+import { rateLimit } from "@/src/lib/authStore";
+import { MAX_DWG_BYTES, validateDwgUpload } from "@/src/lib/planner/dwg-import";
 import { dwgEntityTypeSummary, recoverDxfFromDwgDatabase } from "@/src/lib/planner/dwg-database-to-dxf";
 import { importDxfWalls } from "@/src/lib/planner/dxf-import";
+import { getCurrentSession } from "@/src/lib/session";
 
 export const runtime = "nodejs";
 
@@ -35,6 +37,26 @@ function errorResponse(message: string, status: number) {
 }
 
 export async function POST(request: Request) {
+  const session = await getCurrentSession();
+  if (!session) return errorResponse("Authentication is required.", 401);
+
+  const limited = rateLimit(`dwg-conversion:${session.id}`, 5, 15 * 60 * 1000);
+  if (!limited.ok) {
+    return NextResponse.json(
+      { error: "Too many DWG conversion requests. Please try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.max(1, Math.ceil(limited.retryAfterMs / 1000))) }
+      }
+    );
+  }
+
+  // Reject oversized multipart bodies before request.formData() buffers them in memory.
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_DWG_BYTES + 1024 * 1024) {
+    return errorResponse("DWG upload is too large.", 413);
+  }
+
   const returnCompactWalls = new URL(request.url).searchParams.get("format") === "walls";
   let form: FormData;
   try {

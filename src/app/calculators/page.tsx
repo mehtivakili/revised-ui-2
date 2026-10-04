@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import {
   Activity,
   Aperture,
@@ -57,9 +56,7 @@ const lensCategory = categoryById("lens");
 
 export default async function CalculatorsPage() {
   const session = await getCurrentSession();
-  if (!session) redirect("/login");
-
-  const user = await getUserById(session.id);
+  const user = session ? await getUserById(session.id) : null;
   const access = getSubscriptionAccess(user);
 
   return (

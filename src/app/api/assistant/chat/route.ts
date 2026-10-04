@@ -162,6 +162,9 @@ const systemPrompt = `
 `.trim();
 
 export async function GET() {
+  if (!(await getCurrentSession())) {
+    return Response.json({ error: "Authentication is required." }, { status: 401, headers: noStoreHeaders() });
+  }
   try {
     const response = await fetch(`${ollamaBaseUrl}/api/tags`, {
       cache: "no-store",
@@ -201,7 +204,15 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  if (!withinRateLimit(request)) {
+  const session = await getCurrentSession();
+  if (!session) {
+    return Response.json(
+      { error: "Authentication is required.", code: "UNAUTHENTICATED" },
+      { status: 401, headers: noStoreHeaders() }
+    );
+  }
+
+  if (!withinRateLimit(request, session.id)) {
     return Response.json(
       { error: "درخواست‌های زیادی ارسال شده است. یک دقیقه دیگر دوباره تلاش کنید.", code: "RATE_LIMITED" },
       { status: 429, headers: noStoreHeaders() }
@@ -229,7 +240,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const session = await getCurrentSession();
   const memoryCommand = parseMemoryCommand(message);
   if (memoryCommand.kind !== "none" && !session) {
     return staticNdjsonResponse("برای ذخیره یا مشاهده حافظه باید وارد حساب کاربری شوید.", "user-memory");
@@ -680,10 +690,11 @@ function isReasoningMode(value: unknown): value is AssistantReasoningMode {
   return value === "low" || value === "medium" || value === "high";
 }
 
-function withinRateLimit(request: NextRequest) {
-  const key = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+function withinRateLimit(request: NextRequest, userId: string) {
+  const clientKey = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
     || request.headers.get("x-real-ip")
     || "local";
+  const key = `${userId}:${clientKey}`;
   const now = Date.now();
   const current = requestWindows.get(key);
   if (!current || current.resetAt <= now) {

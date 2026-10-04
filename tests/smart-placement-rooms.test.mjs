@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { describe } from "node:test";
 import { defaultCameraOptics } from "@/src/domain/planner/types";
 import { pointInPolygon } from "@/src/lib/planner/geometry";
+import { createSamplePlan } from "@/src/lib/planner/sample-plans";
 import {
   definitionsFromRooms,
   optimiseCameraPlacement,
@@ -254,4 +255,23 @@ describe("semantic validation", () => {
     assert.ok(errors.some((error) => error.includes("نوع این فضاها")));
     assert.ok(errors.some((error) => error.includes("فضای ممنوع")));
   });
+});
+
+test("family villa outdoor requirements receive valid pole placements", () => {
+  const result = optimiseCameraPlacement(createSamplePlan("family-villa"));
+
+  assert.equal(result.report.accepted, true, JSON.stringify(result.report));
+  assert.deepEqual(result.report.unmetRequirements, []);
+  assert.ok(result.report.coverageAfterPercent >= 70);
+  const ground = result.plan.floors.find((floor) => floor.id === "family-villa-ground");
+  const outdoorSections = new Set(["residential.gate", "residential.yard", "residential.blind-wall"]);
+  const outdoorIds = new Set(
+    ground.coverageRequirements
+      .filter((item) => outdoorSections.has(item.sectionTypeId))
+      .map((item) => item.id)
+  );
+  const outdoorCameras = ground.cameras.filter((camera) => outdoorIds.has(camera.requirementId));
+  assert.ok(outdoorCameras.length >= outdoorIds.size);
+  assert.ok(outdoorCameras.every((camera) => camera.mountKind === "pole"));
+  assert.ok(ground.coverageRequirements.every((item) => item.satisfied === true));
 });

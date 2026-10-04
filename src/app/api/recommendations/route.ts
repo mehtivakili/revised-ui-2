@@ -4,8 +4,12 @@ import { mockProducts } from "@/src/lib/catalog/mock-products";
 import { recommendProducts } from "@/src/lib/recommendation/engine";
 import { parseProjectBrief } from "@/src/lib/recommendation/validation";
 import { getBitrateCalibrationFactors, saveBitrateCalibrationSamples } from "@/src/lib/calibration/bitrate";
+import { getCurrentSession } from "@/src/lib/session";
 
 export async function POST(request: NextRequest) {
+  if (!(await getCurrentSession())) {
+    return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+  }
   try {
     const brief = parseProjectBrief(await request.json());
     const snapshot = await getCatalogSnapshot();

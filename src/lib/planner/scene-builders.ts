@@ -71,6 +71,10 @@ export function disposeGroup(group: THREE_NS.Group) {
 }
 
 export function buildWallMesh(THREE: ThreeModule, wall: PlanWall, selected: boolean): THREE_NS.Object3D {
+  if (wall.variant) {
+    const span = Math.hypot(wall.b.x - wall.a.x, wall.b.z - wall.a.z);
+    return fenceSectionMesh(THREE, wall, 0, span, selected) ?? new THREE.Group();
+  }
   const dx = wall.b.x - wall.a.x;
   const dz = wall.b.z - wall.a.z;
   const span = Math.hypot(dx, dz) || 0.01;
@@ -91,6 +95,34 @@ export function buildWallMesh(THREE: ThreeModule, wall: PlanWall, selected: bool
   return mesh;
 }
 
+/**
+ * One run of a fence wall, drawn with the same posts and panel as the fence presets so a
+ * boundary looks the same whether it was drawn as a wall or placed as an object.
+ */
+function fenceSectionMesh(THREE: ThreeModule, wall: PlanWall, startM: number, endM: number, selected: boolean): THREE_NS.Object3D | null {
+  const span = Math.hypot(wall.b.x - wall.a.x, wall.b.z - wall.a.z);
+  const length = endM - startM;
+  if (span < 0.01 || length < 0.05) return null;
+  const ux = (wall.b.x - wall.a.x) / span;
+  const uz = (wall.b.z - wall.a.z) / span;
+  const centreM = (startM + endM) / 2;
+  const fence = buildBarrierObstacle(THREE, {
+    id: wall.id,
+    label: "",
+    kind: "fence",
+    variant: wall.variant,
+    center: { x: wall.a.x + ux * centreM, z: wall.a.z + uz * centreM },
+    widthM: length,
+    depthM: wall.thicknessM,
+    heightM: wall.heightM,
+    rotationDeg: (Math.atan2(uz, ux) * 180) / Math.PI,
+    blocksView: wall.blocksView
+  }, selected);
+  fence.userData = { kind: "wall", id: wall.id };
+  fence.traverse((child) => { child.userData = { kind: "wall", id: wall.id }; });
+  return fence;
+}
+
 function wallSectionMesh(
   THREE: ThreeModule,
   wall: PlanWall,
@@ -99,7 +131,9 @@ function wallSectionMesh(
   bottomM: number,
   heightM: number,
   selected: boolean
-): THREE_NS.Mesh | null {
+): THREE_NS.Object3D | null {
+  // A gate in a fence leaves the opening clear: no lintel or sill over it.
+  if (wall.variant) return bottomM > 0 ? null : fenceSectionMesh(THREE, wall, startM, endM, selected);
   const span = Math.hypot(wall.b.x - wall.a.x, wall.b.z - wall.a.z);
   const sectionLength = endM - startM;
   if (span < 0.01 || sectionLength < 0.01 || heightM < 0.01) return null;
@@ -518,6 +552,14 @@ export function buildObstacleMesh(
     }
     return equipment;
   }
+  if (obstacle.variant && plantVariants.has(obstacle.variant)) {
+    const plant = buildPlantObstacle(THREE, obstacle, selected);
+    if (renderScope) {
+      Object.assign(plant.userData, renderScope);
+      plant.traverse((child) => Object.assign(child.userData, renderScope));
+    }
+    return plant;
+  }
   if (obstacle.variant === "structural-column") {
     const radius = Math.max(0.08, Math.min(obstacle.widthM, obstacle.depthM) / 2);
     const geometry = new THREE.CylinderGeometry(radius, radius, obstacle.heightM, 24);
@@ -611,6 +653,141 @@ export function buildObstacleMesh(
   mesh.rotation.y = -(obstacle.rotationDeg * Math.PI) / 180;
   mesh.userData = { kind: "obstacle", id: obstacle.id, ...renderScope };
   return mesh;
+}
+
+const plantVariants = new Set<NonNullable<PlanObstacle["variant"]>>([
+  "transformer", "storage-tank", "chemical-tank", "generator-unit", "pump-unit", "pipeline", "pipe-valve",
+  "solar-panel", "shipping-container", "stair-landing"
+]);
+
+/**
+ * Site plant: utilities, energy, freight and the final stair landing.
+ *
+ * Each model is built to the obstacle's own size, so a resized pipe run or tank keeps its
+ * shape, and has one named main part the tests can find.
+ */
+function buildPlantObstacle(THREE: ThreeModule, obstacle: PlanObstacle, selected: boolean) {
+  const group = new THREE.Group();
+  const { widthM: w, depthM: d, heightM: h } = obstacle;
+  const material = (color: number, metalness = 0.3) => obstacleMaterial(THREE, color, obstacle, selected, metalness);
+  const add = (mesh: THREE_NS.Mesh, x: number, y: number, z: number, name?: string) => {
+    mesh.position.set(x, y, z);
+    if (name) mesh.name = name;
+    group.add(mesh);
+    return mesh;
+  };
+  const box = (bw: number, bh: number, bd: number, color: number, x: number, y: number, z: number, name?: string, metalness = 0.3) =>
+    add(new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.02, bw), Math.max(0.02, bh), Math.max(0.02, bd)), material(color, metalness)), x, y, z, name);
+  const cylinder = (radius: number, length: number, color: number, x: number, y: number, z: number, axis: "x" | "y" | "z", name?: string) => {
+    const mesh = add(new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 28), material(color, 0.45)), x, y, z, name);
+    if (axis === "x") mesh.rotation.z = Math.PI / 2;
+    if (axis === "z") mesh.rotation.x = Math.PI / 2;
+    return mesh;
+  };
+
+  switch (obstacle.variant) {
+    case "transformer": {
+      box(w * 0.62, h * 0.62, d * 0.7, 0x6b7f8e, 0, h * 0.31, 0, "transformer-tank");
+      // Radiator fins down both long sides, bushings and a conservator tank on top.
+      for (const side of [-1, 1]) {
+        for (let index = 0; index < 6; index += 1) {
+          box(0.06, h * 0.52, d * 0.13, 0x8597a4, -w * 0.25 + index * w * 0.1, h * 0.3, side * d * 0.42);
+        }
+      }
+      for (let index = -1; index <= 1; index += 1) {
+        cylinder(0.09, h * 0.3, 0xd6d3d1, index * w * 0.16, h * 0.77, -d * 0.12, "y", "transformer-bushing");
+      }
+      cylinder(h * 0.08, w * 0.42, 0x6b7f8e, 0, h * 0.8, d * 0.2, "x");
+      box(w, 0.12, d, 0x9ca3af, 0, 0.06, 0);
+      break;
+    }
+    case "storage-tank": {
+      const radius = Math.min(w, d) / 2;
+      cylinder(radius, h, 0xd4d9de, 0, h / 2, 0, "y", "storage-tank-shell");
+      add(new THREE.Mesh(new THREE.ConeGeometry(radius * 1.01, h * 0.12, 28), material(0xb6bec6)), 0, h * 1.06, 0, "storage-tank-roof");
+      for (let ring = 1; ring < 4; ring += 1) {
+        add(new THREE.Mesh(new THREE.TorusGeometry(radius * 1.005, 0.035, 6, 36), material(0x9aa5ae)), 0, (h * ring) / 4, 0).rotation.x = Math.PI / 2;
+      }
+      box(0.5, h, 0.08, 0x475569, radius * 0.72, h / 2, radius * 0.72);
+      break;
+    }
+    case "chemical-tank": {
+      const radius = Math.min(d, h) * 0.42;
+      cylinder(radius, w * 0.86, 0xe5e7eb, 0, radius + 0.35, 0, "x", "chemical-tank-shell");
+      for (const x of [-1, 1]) box(0.25, 0.4, d * 0.7, 0x64748b, x * w * 0.3, 0.2, 0);
+      box(0.06, 0.18, d * 0.5, 0xf59e0b, 0, radius * 2 + 0.36, 0);
+      // Low spill bund around the tank.
+      for (const z of [-1, 1]) box(w, 0.3, 0.08, 0x9ca3af, 0, 0.15, z * d * 0.48);
+      break;
+    }
+    case "generator-unit": {
+      box(w, h * 0.72, d * 0.9, 0x4d7c6f, 0, h * 0.36, 0, "generator-housing");
+      for (let index = 0; index < 5; index += 1) box(w * 0.7, 0.04, 0.03, 0x2f4f46, 0, h * (0.2 + index * 0.1), d * 0.45);
+      cylinder(Math.min(w, d) * 0.08, h * 0.35, 0x52525b, w * 0.3, h * 0.88, -d * 0.2, "y", "generator-exhaust");
+      break;
+    }
+    case "pump-unit": {
+      box(w, 0.18, d, 0x475569, 0, 0.09, 0);
+      cylinder(d * 0.34, w * 0.42, 0x2563eb, -w * 0.2, d * 0.34 + 0.18, 0, "x", "pump-casing");
+      box(w * 0.4, d * 0.62, d * 0.6, 0x1e3a8a, w * 0.25, d * 0.31 + 0.18, 0, "pump-motor");
+      cylinder(0.12, h - 0.2, 0x94a3b8, -w * 0.38, (h + 0.2) / 2, 0, "y");
+      break;
+    }
+    case "pipeline": {
+      const radius = Math.min(d, h) * 0.4;
+      cylinder(radius, w, 0x9ca3af, 0, h - radius, 0, "x", "pipeline-pipe");
+      const supports = Math.max(2, Math.round(w / 4) + 1);
+      for (let index = 0; index < supports; index += 1) {
+        box(0.16, h - radius * 2 + 0.05, d * 0.9, 0x57534e, -w / 2 + 0.2 + (index * (w - 0.4)) / (supports - 1), (h - radius * 2) / 2, 0);
+      }
+      break;
+    }
+    case "pipe-valve": {
+      const pipeRadius = Math.min(w, d) * 0.12;
+      cylinder(pipeRadius, w, 0x9ca3af, 0, h * 0.35, 0, "x");
+      box(w * 0.32, h * 0.4, d * 0.42, 0xb91c1c, 0, h * 0.35, 0, "valve-body", 0.4);
+      for (const x of [-1, 1]) cylinder(pipeRadius * 1.5, 0.1, 0x6b7280, x * w * 0.2, h * 0.35, 0, "x");
+      cylinder(0.05, h * 0.35, 0x52525b, 0, h * 0.72, 0, "y");
+      add(new THREE.Mesh(new THREE.TorusGeometry(Math.min(w, d) * 0.18, 0.04, 8, 24), material(0xdc2626)), 0, h * 0.92, 0, "valve-handwheel").rotation.x = Math.PI / 2;
+      box(w, 0.12, d, 0xa8a29e, 0, 0.06, 0);
+      break;
+    }
+    case "solar-panel": {
+      // Tilted to face south (+z): front edge low, back edge high, on two rows of legs.
+      const tilt = Math.atan2(h - 0.5, d * 0.9);
+      const slope = (d / Math.cos(tilt)) * 0.95;
+      box(w, 0.06, slope, 0x1e3a8a, 0, (h + 0.5) / 2, 0, "solar-panel-surface", 0.6).rotation.x = tilt;
+      const bays = Math.max(1, Math.round(w / 2.5));
+      for (let column = 0; column <= bays; column += 1) {
+        const x = -w / 2 + 0.2 + (column * (w - 0.4)) / bays;
+        box(0.06, 0.5, 0.06, 0x94a3b8, x, 0.25, d * 0.42);
+        box(0.06, h, 0.06, 0x94a3b8, x, h / 2, -d * 0.42);
+      }
+      for (let cell = 1; cell < Math.round(w / 1.1); cell += 1) {
+        box(0.02, 0.07, slope, 0xcbd5e1, -w / 2 + cell * 1.1, (h + 0.5) / 2 + 0.01, 0).rotation.x = tilt;
+      }
+      break;
+    }
+    case "shipping-container": {
+      box(w, h, d, 0xb45309, 0, h / 2, 0, "container-box", 0.4);
+      for (let index = 1; index < Math.round(w / 0.4); index += 1) {
+        for (const z of [-1, 1]) box(0.05, h * 0.9, 0.04, 0x92400e, -w / 2 + index * 0.4, h / 2, z * (d / 2 + 0.01));
+      }
+      box(0.04, h * 0.94, d * 0.94, 0x78350f, w / 2 + 0.01, h / 2, 0, "container-doors");
+      break;
+    }
+    default: {
+      // Final stair landing: the slab and a guard rail along its open edges.
+      box(w, h, d, 0xcbd5e1, 0, h / 2, 0, "landing-slab", 0.1);
+      box(w, 0.05, 0.05, 0x64748b, 0, 1.05, d / 2);
+      box(0.05, 0.05, d, 0x64748b, w / 2, 1.05, 0);
+      for (const x of [-w / 2, 0, w / 2]) box(0.04, 1.05, 0.04, 0x64748b, x, 0.52, d / 2);
+      break;
+    }
+  }
+
+  addSelectionFootprint(THREE, group, obstacle, selected);
+  return finishObstacleGroup(group, obstacle);
 }
 
 /** Recognisable server-room equipment instead of anonymous grey boxes. */
@@ -778,7 +955,22 @@ function buildFurnitureObstacle(THREE: ThreeModule, obstacle: PlanObstacle, sele
     return mesh;
   };
 
-  if (obstacle.kind === "seating" && variant !== "office-chair" && variant !== "dining-chair") {
+  if (variant === "gym-bleacher") {
+    // A spectator stand is not a sofa. Build four concrete/metal tiers with a seat
+    // nosing on each row so it reads correctly both from above and in perspective.
+    const rows = 4;
+    const rowDepth = depthM / rows;
+    for (let row = 0; row < rows; row += 1) {
+      const tierHeight = heightM * ((row + 1) / rows);
+      const z = depthM / 2 - rowDepth * (row + 0.5);
+      box(widthM, tierHeight, rowDepth - 0.025, 0, tierHeight / 2, z, body);
+      box(widthM * 0.96, 0.055, rowDepth * 0.72, 0, tierHeight + 0.028, z + rowDepth * 0.06, accent);
+      box(widthM, 0.06, 0.055, 0, tierHeight + 0.12, z - rowDepth * 0.28, dark);
+    }
+    for (const x of [-widthM / 2 + 0.08, widthM / 2 - 0.08]) {
+      box(0.055, heightM + 0.45, 0.055, x, (heightM + 0.45) / 2, -depthM / 2 + 0.05, dark);
+    }
+  } else if (obstacle.kind === "seating" && variant !== "office-chair" && variant !== "dining-chair") {
     // Seat pad, back and two arms — the silhouette that says "sofa" from above.
     const armW = Math.min(0.22, widthM * 0.14);
     const backD = Math.min(0.22, depthM * 0.25);
@@ -1534,6 +1726,8 @@ function buildVehicleObstacle(THREE: ThreeModule, obstacle: PlanObstacle, select
   const group = new THREE.Group();
   const { widthM: length, depthM: width, heightM: height } = obstacle;
   const bodyColor = obstacle.variant === "truck" ? 0xf59e0b
+    : obstacle.variant === "bus" ? 0x0e7490
+    : obstacle.variant === "ambulance" ? 0xf8fafc
     : obstacle.variant === "pickup" ? 0x64748b
       : obstacle.variant === "van" ? 0xe2e8f0
         : obstacle.variant === "suv" ? 0x2563eb : 0x0f766e;
@@ -1555,6 +1749,32 @@ function buildVehicleObstacle(THREE: ThreeModule, obstacle: PlanObstacle, select
       rib.position.set(-length * 0.15 + index * length * 0.1, height * 0.61, 0);
       group.add(rib);
     }
+  } else if (obstacle.variant === "bus") {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(length * 0.98, height * 0.8, width * 0.96), bodyMaterial);
+    body.position.y = height * 0.5;
+    body.name = "bus-body";
+    group.add(body);
+    const windows = new THREE.Mesh(new THREE.BoxGeometry(length * 0.8, height * 0.26, width * 0.98), glassMaterial);
+    windows.position.set(-length * 0.04, height * 0.66, 0);
+    group.add(windows);
+    const windshield = new THREE.Mesh(new THREE.BoxGeometry(0.04, height * 0.42, width * 0.86), glassMaterial);
+    windshield.position.set(length * 0.49, height * 0.62, 0);
+    group.add(windshield);
+    const roofUnit = new THREE.Mesh(new THREE.BoxGeometry(length * 0.22, height * 0.08, width * 0.6), obstacleMaterial(THREE, 0xcbd5e1, obstacle, selected, 0.3));
+    roofUnit.position.set(-length * 0.1, height * 0.94, 0);
+    group.add(roofUnit);
+  } else if (obstacle.variant === "ambulance") {
+    group.add(vehicleProfile(THREE, length, width, height, "van", bodyMaterial));
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(length * 0.9, height * 0.08, width * 1.01), obstacleMaterial(THREE, 0xdc2626, obstacle, selected, 0.2));
+    stripe.position.y = height * 0.45;
+    stripe.name = "ambulance-stripe";
+    group.add(stripe);
+    const beacon = new THREE.Mesh(
+      new THREE.BoxGeometry(length * 0.12, height * 0.06, width * 0.7),
+      new THREE.MeshStandardMaterial({ color: 0x3b82f6, emissive: 0x2563eb, emissiveIntensity: 1.6, roughness: 0.3 })
+    );
+    beacon.position.set(length * 0.18, height * 0.95, 0);
+    group.add(beacon);
   } else if (obstacle.variant === "pickup") {
     const body = vehicleProfile(THREE, length, width, height, "suv", bodyMaterial);
     group.add(body);
@@ -1574,7 +1794,9 @@ function buildVehicleObstacle(THREE: ThreeModule, obstacle: PlanObstacle, select
     group,
     obstacle,
     selected,
-    obstacle.variant === "truck" ? [-length * 0.32, -length * 0.08, length * 0.33] : [-length * 0.31, length * 0.31]
+    obstacle.variant === "truck" ? [-length * 0.32, -length * 0.08, length * 0.33]
+      : obstacle.variant === "bus" ? [-length * 0.3, length * 0.33]
+        : [-length * 0.31, length * 0.31]
   );
   addSelectionFootprint(THREE, group, obstacle, selected);
   return finishObstacleGroup(group, obstacle);

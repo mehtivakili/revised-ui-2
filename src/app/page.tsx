@@ -1,66 +1,105 @@
+import Image from "next/image";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { ArrowLeft, Calculator, Camera, Check, ChevronLeft, Database, HardDrive, Network, ShieldCheck, Sparkles, WandSparkles, Zap } from "lucide-react";
-import { getCurrentSession } from "@/src/lib/session";
-import { getCatalogSnapshot } from "@/src/lib/catalog/repository";
+import {
+  ArrowLeft,
+  Calculator,
+  Camera,
+  FileText,
+  LayoutGrid,
+  ScanEye,
+  WandSparkles,
+} from "lucide-react";
+import { dashboardCategories } from "@/src/lib/dashboard";
+import { venueTypes } from "@/src/domain/planner/venues";
 
-const categoryCounts = [
-  { id: "camera", label: "دوربین ساختاریافته", icon: Camera, tone: "blue" },
-  { id: "recorder", label: "ضبط‌کننده سازگار", icon: HardDrive, tone: "violet" },
-  { id: "switch", label: "تجهیزات شبکه", icon: Network, tone: "teal" },
-] as const;
+const formatFa = (value: number) => new Intl.NumberFormat("fa-IR").format(value);
 
-export default async function HomePage() {
-  if (!(await getCurrentSession())) redirect("/login");
-  const catalog = await getCatalogSnapshot();
+// Counts come from the live catalogues so the pitch never drifts from what the app offers.
+const toolCount = dashboardCategories.reduce((sum, category) => sum + category.tools.length, 0);
+const venueCount = venueTypes.length;
 
+const highlights = [
+  { icon: Calculator, title: `${formatFa(toolCount)} ابزار محاسباتی`, text: "ذخیره‌سازی، شبکه، لینک بی‌سیم و لنز" },
+  { icon: LayoutGrid, title: `${formatFa(venueCount)} نوع کاربری`, text: "با چیدمان و اولویت‌های اختصاصی هر محیط" },
+  { icon: ScanEye, title: "تحلیل پوشش دید", text: "جانمایی روی پلان و کشف نقاط کور" },
+  { icon: FileText, title: "گزارش مهندسی", text: "خروجی PDF آماده ارائه به کارفرما" },
+];
+
+export default function HomePage() {
   return (
-    <main className="app-shell smart-home">
-      <section className="smart-hero">
-        <div className="smart-hero-copy">
-          <span className="ai-kicker"><Sparkles size={16} />طراح هوشمند سیستم نظارت تصویری</span>
-          <h1>از چند نیاز ساده،<br /><em>یک راهکار کامل</em> بسازید.</h1>
-          <p>محیط، هدف نظارت و مدت آرشیو را مشخص کنید؛ همیار دوربین سازگاری فنی را بررسی می‌کند و سه سناریوی خرید قابل‌توضیح می‌سازد.</p>
-          <div className="hero-actions">
-            <Link className="primary-action large" href="/planner">شروع طراحی هوشمند<ArrowLeft size={18} /></Link>
-            <Link className="secondary-action large" href="/catalog">مشاهده کاتالوگ<ChevronLeft size={18} /></Link>
-          </div>
-          <div className="hero-trust">
-            <span><Check size={15} />کنترل سازگاری تجهیزات</span>
-            <span><Check size={15} />برآورد هزینه و ظرفیت</span>
-            <span><Check size={15} />دلیل انتخاب هر محصول</span>
-          </div>
-        </div>
-
-        <div className="solution-preview" aria-label="نمونه راهکار پیشنهادی">
-          <div className="preview-head"><div><span className="live-dot" /><small>تحلیل هوشمند تکمیل شد</small></div><strong>پلن متعادل</strong></div>
-          <div className="preview-score"><span>نوع خروجی</span><strong>پیشنهاد<small> اولیه</small></strong></div>
-          <div className="preview-metrics"><div><Camera size={18} /><span>دوربین</span><strong>۸ × ۵MP</strong></div><div><Database size={18} /><span>آرشیو</span><strong>۳۰ روز</strong></div><div><Zap size={18} /><span>PoE</span><strong>۱۶ پورت</strong></div></div>
-          <div className="preview-products"><div><span>TC-C54KS</span><small>لنز وریفوکال، تشخیص انسان</small></div><div><span>TC-R3116</span><small>۱۶ کانال، H.265+</small></div><div><span>WD Purple 10TB</span><small>ضبط ۲۴/۷</small></div></div>
-          <div className="preview-foot"><ShieldCheck size={18} /><span>قیود بررسی‌شده و موارد نیازمند بازبینی شفاف نمایش داده می‌شوند</span></div>
-        </div>
-      </section>
-
-      <section className="smart-shortcuts">
-        <div className="section-title"><div><p className="eyebrow">مسیرهای اصلی</p><h2>چطور می‌خواهید کار کنید؟</h2></div></div>
-        <div className="shortcut-grid">
-          <Link href="/planner" className="shortcut-card featured"><span className="shortcut-icon"><WandSparkles size={23} /></span><div><h3>طراحی خودکار پروژه</h3><p>با یک ویزارد کوتاه، دوربین، NVR، هارد، شبکه و UPS مناسب را یک‌جا دریافت کنید.</p></div><span className="shortcut-link">شروع طراحی<ChevronLeft size={15} /></span></Link>
-          <Link href="/catalog" className="shortcut-card"><span className="shortcut-icon"><Database size={23} /></span><div><h3>جست‌وجوی هوشمند محصول</h3><p>محصولات را بر اساس مشخصات واقعی و قابل‌مقایسه مرور کنید.</p></div><span className="shortcut-link">ورود به کاتالوگ<ChevronLeft size={15} /></span></Link>
-          <Link href="/calculators" className="shortcut-card"><span className="shortcut-icon"><Calculator size={23} /></span><div><h3>محاسبه‌گرهای مهندسی</h3><p>ظرفیت، DORI، لنز، شبکه و لینک وایرلس را مستقل محاسبه کنید.</p></div><span className="shortcut-link">همه ابزارها<ChevronLeft size={15} /></span></Link>
-        </div>
-      </section>
-
-      <section className="catalog-snapshot">
-        <div className="section-title"><div><p className="eyebrow">زیرساخت داده</p><h2>کاتالوگ آماده تصمیم‌گیری</h2><p>داده‌های نمایشی بر اساس دسته‌ها و الگوی مشخصات محصولات پرشیا سیستم ساختاریافته شده‌اند.</p></div><Link href="/catalog">مشاهده همه محصولات<ChevronLeft size={16} /></Link></div>
-        <div className="snapshot-grid">
-          {categoryCounts.map(({ id, label, icon: Icon, tone }) => (
-            <article key={id}>
-              <span className={`snapshot-icon ${tone}`}><Icon size={22} /></span>
-              <div><strong>{new Intl.NumberFormat("fa-IR").format(catalog.products.filter((product) => product.category === id).length)}</strong><span>{label}</span></div>
-              <small>آماده فیلتر و امتیازدهی</small>
-            </article>
+    <main className="landing-page portal-home">
+      <header className="portal-intro">
+        <h1>طراحی و محاسبه سیستم‌های نظارت تصویری، <span>دقیق و حرفه‌ای</span></h1>
+        <p>
+          همیار دوربین همراه تخصصی مهندسان، مجریان و فروشندگان سیستم‌های امنیتی است؛ از محاسبات سریع شبکه و ذخیره‌سازی
+          تا طراحی کامل پروژه روی پلان واقعی. دوربین‌ها را جانمایی کنید، پوشش و نقاط کور را ببینید، تجهیزات و ظرفیت را
+          برآورد کنید و گزارشی مهندسی و قابل دفاع به کارفرما تحویل دهید؛ همه در یک محیط و در چند دقیقه.
+        </p>
+        <ul className="portal-highlights" aria-label="قابلیت‌های همیار دوربین">
+          {highlights.map(({ icon: Icon, title, text }) => (
+            <li key={title}>
+              <span><Icon size={18} aria-hidden="true" /></span>
+              <div><strong>{title}</strong><small>{text}</small></div>
+            </li>
           ))}
-        </div>
+        </ul>
+      </header>
+
+      <div className="portal-section-title">
+        <h2>مسیر کاری خود را انتخاب کنید</h2>
+        <p>محاسبات سریع مهندسی یا طراحی کامل یک پروژه؛ هر دو مسیر با ابزارهای تخصصی در دسترس شماست.</p>
+      </div>
+
+      <section className="portal-grid" aria-label="انتخاب بخش همیار دوربین">
+        <article className="portal-card portal-card-tools">
+          <Link className="portal-visual" href="/calculators" aria-label="ورود به ابزارهای محاسباتی">
+            <Image
+              src="/images/شبکه و ابزارهای محاسباتی.png"
+              alt="نمای ابزارهای محاسبات شبکه و دوربین"
+              fill
+              priority
+              sizes="(max-width: 900px) 100vw, 520px"
+            />
+            <div className="portal-image-shade" />
+            <span className="portal-floating-badge portal-floating-top"><Calculator size={15} />بدون نیاز به ورود</span>
+          </Link>
+
+          <div className="portal-card-body">
+            <div className="portal-card-heading">
+              <span className="portal-card-icon"><Calculator size={24} /></span>
+              <div><small>جعبه‌ابزار رایگان</small><h2>ابزارهای محاسباتی</h2></div>
+            </div>
+            <p>محاسبه دقیق ظرفیت هارد، RAID، زاویه دید، DORI، زیرشبکه، Fresnel و بودجه لینک؛ سریع و بدون ساخت حساب.</p>
+            <Link className="portal-main-cta" href="/calculators">
+              مشاهده همه ابزارها <ArrowLeft size={18} />
+            </Link>
+          </div>
+        </article>
+
+        <article className="portal-card portal-card-smart">
+          <Link className="portal-visual" href="/planner" aria-label="ورود به طراحی هوشمند">
+            <Image
+              src="/images/Futuristic Isometric CCTV Store Diorama.png"
+              alt="نمای طراحی هوشمند جانمایی دوربین در فروشگاه"
+              fill
+              priority
+              sizes="(max-width: 900px) 100vw, 520px"
+            />
+            <div className="portal-image-shade" />
+            <span className="portal-floating-badge portal-floating-top"><WandSparkles size={15} />طراحی مبتنی بر پلان</span>
+          </Link>
+
+          <div className="portal-card-body">
+            <div className="portal-card-heading">
+              <span className="portal-card-icon"><Camera size={24} /></span>
+              <div><small>استودیوی طراحی پروژه</small><h2>طراحی هوشمند</h2></div>
+            </div>
+            <p>پلان را بسازید، دوربین‌ها را جانمایی کنید، نقاط کور را ببینید و پیشنهاد کامل تجهیزات و ظرفیت را دریافت کنید.</p>
+            <Link className="portal-main-cta" href="/planner">
+              ورود به طراحی هوشمند <ArrowLeft size={18} />
+            </Link>
+          </div>
+        </article>
       </section>
     </main>
   );

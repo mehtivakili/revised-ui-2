@@ -137,9 +137,11 @@ function FloorSvg({ floor, cameraProducts }: { floor: FloorPlan; cameraProducts:
             <line
               key={wall.id}
               x1={wall.a.x} y1={wall.a.z} x2={wall.b.x} y2={wall.b.z}
-              stroke={wall.blocksView ? "#334155" : "#93c5fd"}
+              stroke={wall.variant ? "#64748b" : wall.blocksView ? "#334155" : "#93c5fd"}
               strokeWidth={Math.max(0.12, wall.thicknessM)}
               strokeLinecap="square"
+              // Fences read as a boundary line rather than as building fabric.
+              strokeDasharray={wall.variant === "fence-mesh" ? "0.6 0.3" : undefined}
             />
           ))}
 

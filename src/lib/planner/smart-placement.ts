@@ -15,6 +15,7 @@ import { roomAreaM2 } from "@/src/lib/planner/rooms";
 import {
   constrainCameraMountHeight,
   recipeFor,
+  requirementOpenAbove,
   roomContext,
   type MountKind
 } from "@/src/lib/planner/placement-rules";
@@ -44,6 +45,8 @@ type Candidate = {
   /** Room and vertex retained so a second camera can prefer the diagonal corner. */
   roomId?: string;
   cornerIndex?: number;
+  /** Pole generated for one outdoor requirement; often the only mount that can see it. */
+  servesRequirement?: boolean;
 };
 
 type FloorContext = {
@@ -258,7 +261,7 @@ export function definitionsFromRooms(plan: BuildingPlan): PlanCameraDefinition[]
         ceilingHeightM: floor.heightM,
         boundarySource: "drawn",
         manual: {
-          openAbove: section.environment === "outdoor" || section.environment === "perimeter"
+          openAbove: requirementOpenAbove(section.environment, requirement.polygon, floor)
         }
       };
       const recipe = recipeFor(section, roomContext(zone, floor));
@@ -272,7 +275,7 @@ export function definitionsFromRooms(plan: BuildingPlan): PlanCameraDefinition[]
           groupName: requirement.label || section.label,
           name: `${requirement.label || section.label} — ${overview ? "دید کلی" : "نمای هدف"}`,
           housing: recipe.housing,
-          outdoor: section.environment === "outdoor" || section.environment === "perimeter",
+          outdoor: Boolean(zone.manual?.openAbove),
           goal: overview ? "monitor" : recipe.goal,
           optics: {
             ...defaultCameraOptics,
@@ -462,14 +465,54 @@ function buildCandidates(
 ): Candidate[] {
   const candidates: Candidate[] = [];
   const seen = new Set<string>();
-  const push = (candidate: Candidate) => {
-    if (!usablePoint(candidate.position, boundary, floor)) return;
+  const push = (candidate: Candidate, allowOutsideBoundary = false) => {
+    // A pole may stand on a lawn or a road; only solid objects rule a mount point out.
+    const clearOfObstacles = !floor.obstacles.some((obstacle) => obstacle.kind !== "surface" && pointInsideObstacle(candidate.position, obstacle));
+    if (allowOutsideBoundary ? !clearOfObstacles : !usablePoint(candidate.position, boundary, floor)) return;
     if (forbiddenAreas.some((area) => pointInPolygon(candidate.position, area))) return;
     const key = `${candidate.mounting}:${Math.round(candidate.position.x / 0.2)}:${Math.round(candidate.position.z / 0.2)}:${Math.round(candidate.yawDeg / 10)}`;
     if (seen.has(key)) return;
     seen.add(key);
     candidates.push(candidate);
   };
+
+  // Outdoor requirements can sit beyond the building's closed wall loop. Give
+  // those areas real pole candidates at their own corners; otherwise the solver
+  // only searches inside the house and can never serve a yard, gate or perimeter.
+  // The same holds for any area drawn under open sky, such as an open stadium's stands.
+  for (const requirement of floor.coverageRequirements ?? []) {
+    const section = resolve(requirement.sectionTypeId);
+    if (!section || requirement.polygon.length < 3) continue;
+    const permitsOutdoorMount = section.environment === "parking"
+      || requirementOpenAbove(section.environment, requirement.polygon, floor);
+    if (!permitsOutdoorMount) continue;
+    const centre = requirement.polygon.reduce(
+      (sum, point) => ({
+        x: sum.x + point.x / requirement.polygon.length,
+        z: sum.z + point.z / requirement.polygon.length
+      }),
+      { x: 0, z: 0 }
+    );
+    requirement.polygon.forEach((vertex) => {
+      const dx = centre.x - vertex.x;
+      const dz = centre.z - vertex.z;
+      const span = Math.max(0.01, Math.hypot(dx, dz));
+      const position = {
+        // Stand just outside the watched polygon and look inward. Mounting inside
+        // the polygon leaves the nearest sample behind the camera and makes an
+        // otherwise valid yard fail the all-points hard-constraint audit.
+        x: vertex.x - (dx / span) * 0.75,
+        z: vertex.z - (dz / span) * 0.75
+      };
+      push({
+        position,
+        yawDeg: (Math.atan2(centre.z - position.z, centre.x - position.x) * 180) / Math.PI,
+        facesDoor: section.id.includes("gate") || section.id.includes("entrance"),
+        mounting: "pole",
+        servesRequirement: true
+      }, true);
+    });
+  }
 
   for (const wall of floor.walls) {
     const span = distance(wall.a, wall.b);
@@ -596,8 +639,12 @@ function buildCandidates(
     const stride = items.length / limit;
     return Array.from({ length: limit }, (_, index) => items[Math.floor(index * stride)]);
   };
+  // Thinning must never drop the poles generated for a specific outdoor requirement:
+  // in a plan with many rooms the even stride would otherwise remove the only mounts
+  // that can see a yard, gate or perimeter strip, leaving it impossible to cover.
   return [
-    ...takeEvenly(candidates.filter((candidate) => candidate.mounting === "wall" || candidate.mounting === "corner" || candidate.mounting === "pole"), 110),
+    ...candidates.filter((candidate) => candidate.servesRequirement),
+    ...takeEvenly(candidates.filter((candidate) => !candidate.servesRequirement && (candidate.mounting === "wall" || candidate.mounting === "corner" || candidate.mounting === "pole")), 110),
     ...takeEvenly(candidates.filter((candidate) => candidate.mounting === "ceiling"), 72),
     ...candidates.filter((candidate) => candidate.mounting === "central")
   ];

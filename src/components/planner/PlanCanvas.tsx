@@ -29,6 +29,7 @@ import {
 import { findSectionType } from "@/src/domain/planner/venues";
 import { isCardinalAngle, snapRotationAngle } from "@/src/lib/planner/rotation";
 import { constrainCameraMountHeight } from "@/src/lib/planner/placement-rules";
+import { drawsSingleWall, fenceWallStyles, isFenceMode } from "@/src/lib/planner/wall-styles";
 import { computeCameraCoverage, type CameraCoverage } from "@/src/lib/planner/coverage";
 import {
   collectOccluders,
@@ -275,7 +276,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
       renderer.setSize(width, height);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       const studioPalette = props.palette === "studio";
-      renderer.setClearColor(studioPalette ? 0xf0f1f7 : 0xeaf3f7, 1);
+      renderer.setClearColor(studioPalette ? 0xeef3f7 : 0xeaf3f7, 1);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.08;
@@ -347,7 +348,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
 
       const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(200, 200),
-        new THREE.MeshStandardMaterial({ color: studioPalette ? 0xf7f7fb : 0xf3f8f7, roughness: 0.94, metalness: 0 })
+        new THREE.MeshStandardMaterial({ color: studioPalette ? 0xf8fafc : 0xf3f8f7, roughness: 0.94, metalness: 0 })
       );
       ground.rotation.x = -Math.PI / 2;
       ground.position.y = -0.035;
@@ -359,8 +360,8 @@ export function PlanCanvas(props: PlanCanvasProps) {
       const fineGrid = new THREE.GridHelper(
         200,
         200,
-        studioPalette ? 0x8e98c5 : 0x75a9c4,
-        studioPalette ? 0xd5d8e8 : 0xc3dce8
+        studioPalette ? 0x8fa9bd : 0x75a9c4,
+        studioPalette ? 0xd6e1e9 : 0xc3dce8
       );
       (fineGrid.material as THREE_NS.Material).transparent = true;
       (fineGrid.material as THREE_NS.Material).opacity = 0.82;
@@ -370,8 +371,8 @@ export function PlanCanvas(props: PlanCanvasProps) {
       const majorGrid = new THREE.GridHelper(
         200,
         40,
-        studioPalette ? 0x5968ae : 0x397fa5,
-        studioPalette ? 0xa9b0d1 : 0x82b5cd
+        studioPalette ? 0x4f7d9f : 0x397fa5,
+        studioPalette ? 0xadc2d2 : 0x82b5cd
       );
       (majorGrid.material as THREE_NS.Material).transparent = true;
       (majorGrid.material as THREE_NS.Material).opacity = 0.68;
@@ -903,7 +904,9 @@ export function PlanCanvas(props: PlanCanvasProps) {
           ? "نقطه پایان دیوار خطی را انتخاب کنید — Esc برای لغو"
           : current.wallDrawMode === "glass"
             ? "نقطه پایان جدار شیشه‌ای را انتخاب کنید — Esc برای لغو"
-            : "گوشه مقابل مستطیل را انتخاب کنید — Esc برای لغو"
+            : isFenceMode(current.wallDrawMode)
+              ? `نقطه پایان ${fenceWallStyles[current.wallDrawMode].label} را انتخاب کنید — Esc برای لغو`
+              : "گوشه مقابل مستطیل را انتخاب کنید — Esc برای لغو"
         : current.tool === "room"
           ? "گوشه مقابل فضا را بزنید — Esc برای لغو"
           : current.tool === "coverage"
@@ -913,25 +916,31 @@ export function PlanCanvas(props: PlanCanvasProps) {
     }
 
     if (draft.kind === "wall") {
-      const isGlass = current.wallDrawMode === "glass";
-      if (current.wallDrawMode === "line" || isGlass) {
+      const mode = current.wallDrawMode;
+      const isGlass = mode === "glass";
+      if (drawsSingleWall(mode)) {
         const lengthM = distance(draft.start, wallDrawPoint);
         if (lengthM >= 0.1) {
+          // A fence takes its own height, thickness and opacity rather than the building defaults.
+          const fence = isFenceMode(mode) ? fenceWallStyles[mode] : null;
           onFloorChange({
             ...current.floor,
             walls: [...current.floor.walls, {
               id: nextId("wall"),
               a: draft.start,
               b: wallDrawPoint,
-              heightM: current.defaults.wallHeightM,
+              heightM: fence ? fence.heightM : current.defaults.wallHeightM,
               // Glazing is thinner than masonry and, crucially, is not an occluder.
-              thicknessM: isGlass ? Math.min(0.08, current.defaults.wallThicknessM) : current.defaults.wallThicknessM,
-              blocksView: !isGlass
+              thicknessM: fence ? fence.thicknessM : isGlass ? Math.min(0.08, current.defaults.wallThicknessM) : current.defaults.wallThicknessM,
+              blocksView: fence ? fence.blocksView : !isGlass,
+              ...(isFenceMode(mode) ? { variant: mode } : {})
             }]
           });
-          onHint(isGlass
-            ? `جدار شیشه‌ای به طول ${lengthM.toFixed(2)} متر رسم شد — دید دوربین از آن عبور می‌کند`
-            : `دیوار خطی به طول ${lengthM.toFixed(2)} متر رسم شد`);
+          onHint(fence
+            ? `${fence.label} به طول ${lengthM.toFixed(2)} متر رسم شد${fence.blocksView ? "" : " — دید دوربین از آن عبور می‌کند"}`
+            : isGlass
+              ? `جدار شیشه‌ای به طول ${lengthM.toFixed(2)} متر رسم شد — دید دوربین از آن عبور می‌کند`
+              : `دیوار خطی به طول ${lengthM.toFixed(2)} متر رسم شد`);
         } else {
           onHint("طول دیوار باید حداقل ۱۰ سانتی‌متر باشد");
         }

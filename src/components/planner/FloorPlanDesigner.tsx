@@ -6,6 +6,7 @@ import {
   BedDouble,
   Blinds,
   BrickWall,
+  Bus,
   Building2,
   CarFront,
   ChartNoAxesGantt,
@@ -24,6 +25,7 @@ import {
   Sprout,
   TreePine,
   Warehouse,
+  Zap,
   Copy,
   Cuboid,
   Camera as CameraIcon,
@@ -70,6 +72,7 @@ import {
 } from "@/src/domain/planner/types";
 import { PlanCanvas } from "@/src/components/planner/PlanCanvas";
 import { PlanInspector } from "@/src/components/planner/PlanInspector";
+import { drawsSingleWall, fenceWallStyles, isFenceMode } from "@/src/lib/planner/wall-styles";
 import { VenuePanel } from "@/src/components/planner/VenuePanel";
 import { computeFloorCoverage } from "@/src/lib/planner/coverage";
 import { floorAreaM2, largestClosedWallLoop } from "@/src/lib/planner/geometry";
@@ -858,9 +861,11 @@ export function FloorPlanDesigner({
                       setWallDrawMode(nextMode);
                       setTool("wall");
                       setSelection(emptySelection);
-                      setHint(nextMode === "line"
-                        ? "گوشه اول و دوم را انتخاب کنید تا یک دیوار خطی رسم شود"
-                        : "گوشه اول و مقابل را انتخاب کنید تا چهار دیوار مستطیلی رسم شود");
+                      setHint(isFenceMode(nextMode)
+                        ? `دو سر ${fenceWallStyles[nextMode].label} را انتخاب کنید؛ برای گیت، روی آن در بگذارید`
+                        : drawsSingleWall(nextMode)
+                          ? "گوشه اول و دوم را انتخاب کنید تا یک دیوار خطی رسم شود"
+                          : "گوشه اول و مقابل را انتخاب کنید تا چهار دیوار مستطیلی رسم شود");
                     }}
                   />
                 );
@@ -1042,6 +1047,8 @@ export function FloorPlanDesigner({
             <ObstacleToolMenu group="education" label="آموزشی" icon={GraduationCap} onPick={addPresetObstacle} />
             <ObstacleToolMenu group="industrial" label="کارگاه" icon={Factory} onPick={addPresetObstacle} />
             <ObstacleToolMenu group="warehouse" label="انبار" icon={Warehouse} onPick={addPresetObstacle} />
+            <ObstacleToolMenu group="utility" label="تأسیسات" icon={Zap} onPick={addPresetObstacle} />
+            <ObstacleToolMenu group="transport" label="حمل‌ونقل" icon={Bus} onPick={addPresetObstacle} />
             <ObstacleToolMenu group="parking" label="پارکینگ" icon={CircleParking} onPick={addPresetObstacle} />
             <ObstacleToolMenu group="landscape" label="محوطه" icon={Sprout} onPick={addPresetObstacle} />
             <ObstacleToolMenu group="site" label="تجهیزات" icon={Fence} onPick={addPresetObstacle} />
@@ -1474,6 +1481,14 @@ function WallToolMenu({
         <button type="button" className={mode === "glass" ? "active" : ""} role="menuitem" onClick={() => onSelect("glass")}>
           <span><strong>جدار شیشه‌ای</strong><small>مرز شفاف؛ دید دوربین از آن عبور می‌کند</small></span>
           <Blinds size={17} aria-hidden="true" />
+        </button>
+        <button type="button" className={mode === "fence-mesh" ? "active" : ""} role="menuitem" onClick={() => onSelect("fence-mesh")}>
+          <span><strong>{fenceWallStyles["fence-mesh"].label}</strong><small>{fenceWallStyles["fence-mesh"].description}</small></span>
+          <Fence size={17} aria-hidden="true" />
+        </button>
+        <button type="button" className={mode === "fence-wall" ? "active" : ""} role="menuitem" onClick={() => onSelect("fence-wall")}>
+          <span><strong>{fenceWallStyles["fence-wall"].label}</strong><small>{fenceWallStyles["fence-wall"].description}</small></span>
+          <BrickWall size={17} aria-hidden="true" />
         </button>
       </div>
     </div>

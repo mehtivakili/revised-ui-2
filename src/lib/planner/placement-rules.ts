@@ -1,7 +1,8 @@
 import type { CameraHousing, SurveillanceTask } from "@/src/domain/catalog/types";
 import type { CoverageRequirement, FloorPlan, PlanObstacle, PlanRoom, Vec2 } from "@/src/domain/planner/types";
-import type { CameraFeature, SectionType } from "@/src/domain/planner/venues";
+import type { CameraFeature, SectionEnvironment, SectionType } from "@/src/domain/planner/venues";
 import { focalForTask } from "@/src/lib/planner/coverage";
+import { pointInPolygon } from "@/src/lib/planner/geometry";
 import { roomAreaM2, roomCentroid } from "@/src/lib/planner/rooms";
 
 /**
@@ -115,6 +116,21 @@ const PLATE_LENSES = [8, 12, 16];
  * `spanM` is the diagonal rather than the longer side: a corner-mounted camera looks
  * across the room, so the diagonal is the distance the lens actually has to resolve.
  */
+/**
+ * Whether a drawn checklist area is open to the sky.
+ *
+ * Outdoor and perimeter areas always are. Any other area is when it lies outside every
+ * room on its floor: a parking yard or forecourt rather than a covered garage, or the
+ * stands and pitch of an open stadium. It then gets the open-air recipe: a bullet on an
+ * exterior wall or, failing that, a pole.
+ */
+export function requirementOpenAbove(environment: SectionEnvironment, polygon: Vec2[], floor: FloorPlan): boolean {
+  if (environment === "outdoor" || environment === "perimeter") return true;
+  if (polygon.length < 3) return false;
+  const centre = roomCentroid(polygon);
+  return !(floor.rooms ?? []).some((room) => pointInPolygon(centre, room.polygon));
+}
+
 export function roomContext(room: PlanRoom, floor: FloorPlan): RoomContext {
   const xs = room.polygon.map((point) => point.x);
   const zs = room.polygon.map((point) => point.z);
@@ -144,6 +160,9 @@ function chooseHousing(section: SectionType, context: RoomContext): {
   alternative?: CameraHousing;
   reason: string;
 } {
+  if (context.openAbove && (section.environment === "indoor-room" || section.environment === "indoor-corridor")) {
+    return { housing: "bullet", alternative: "turret", reason: "فضای بدون سقف: بدنه بولت روی دیوار یا پایه" };
+  }
   switch (section.environment) {
     case "indoor-room":
       return {
@@ -201,9 +220,9 @@ function chooseMountHeight(
   mountKind: MountKind
 ): { heightM: number; reasons: string[] } {
   const reasons: string[] = [];
-  const indoor = section.environment === "indoor-room"
+  const indoor = !context.openAbove && (section.environment === "indoor-room"
     || section.environment === "indoor-corridor"
-    || (section.environment === "parking" && !context.openAbove);
+    || section.environment === "parking");
 
   let height: number;
   if (mountKind === "pole") {
@@ -246,7 +265,8 @@ function chooseMount(section: SectionType, context: RoomContext): {
       reason: "روی خط پیرامونی معمولاً دکل یا پایه در دسترس است"
     };
   }
-  if (section.environment === "outdoor" || (section.environment === "parking" && context.openAbove)) {
+  // An area without a roof (an open yard, car park or stadium stand) has no ceiling to use.
+  if (section.environment === "outdoor" || context.openAbove) {
     return {
       mountKind: "wall-edge",
       fallbacks: ["pole"],
@@ -290,9 +310,9 @@ function chooseLens(section: SectionType, context: RoomContext): { focalMm: numb
     return { focalMm: lens, reasons };
   }
 
-  const indoor = section.environment === "indoor-room"
+  const indoor = !context.openAbove && (section.environment === "indoor-room"
     || section.environment === "indoor-corridor"
-    || (section.environment === "parking" && !context.openAbove);
+    || section.environment === "parking");
 
   if (indoor) {
     const preferred = pickLens(INDOOR_LENSES, required);
