@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Download, Plus, Trash2 } from "lucide-react";
 import { CalculatorShell, RequiredNumberInput, ResultGrid, formatNumber } from "@/src/components/calculators/CalculatorUi";
 import { DECIMAL_GIGABYTE, DECIMAL_TERABYTE, decimalDiskBytes, kbpsToMbps, storageBytesFromKbps } from "@/src/lib/calculators/storage";
@@ -504,6 +505,133 @@ export default function CapacityPage() {
           </div>
         ) : null}
       </section>
+
+      <article className="calculator-guide" aria-labelledby="capacity-guide-title">
+        <header className="calculator-guide-hero">
+          <p className="eyebrow">راهنمای کاربردی محاسبات</p>
+          <h2 id="capacity-guide-title">محاسبه ظرفیت ذخیره‌سازی دوربین مداربسته چگونه انجام می‌شود؟</h2>
+          <p>
+            برای انتخاب هارد NVR یا سرور ضبط، فقط تعداد دوربین‌ها کافی نیست. بیت‌ریت واقعی هر کانال، ساعات ضبط روزانه و مدت
+            نگهداری تعیین می‌کنند چه مقدار فضا و پهنای‌باند لازم دارید. ابزار بالا این متغیرها را برای چند پروفایل متفاوت با هم
+            جمع می‌کند تا برآورد پروژه به شرایط واقعی نزدیک‌تر باشد.
+          </p>
+        </header>
+
+        <section className="calculator-guide-section" aria-labelledby="capacity-formula-title">
+          <div className="calculator-guide-heading">
+            <span>۰۱</span>
+            <div>
+              <p className="eyebrow">فرمول‌های اصلی</p>
+              <h3 id="capacity-formula-title">از بیت‌ریت تا فضای دیسک</h3>
+            </div>
+          </div>
+          <div className="formula-grid">
+            <div className="formula-card">
+              <strong>بیت‌ریت کل</strong>
+              <code dir="ltr">Total Kbps = Σ (Channel count × Channel bitrate)</code>
+              <p>برای هر پروفایل، تعداد کانال در بیت‌ریت همان کانال ضرب و سپس همه گروه‌ها با هم جمع می‌شوند.</p>
+            </div>
+            <div className="formula-card">
+              <strong>پهنای‌باند</strong>
+              <code dir="ltr">Mbps = Total Kbps ÷ 1,000</code>
+              <p>این عدد ترافیک تقریبی جریان‌های ویدئویی را نشان می‌دهد و مبنای بررسی شبکه و ظرفیت ورودی NVR است.</p>
+            </div>
+            <div className="formula-card">
+              <strong>فضای ذخیره‌سازی</strong>
+              <code dir="ltr">TB = (Kbps × 1,000 ÷ 8 × 3,600 × Hours × Days) ÷ 10¹²</code>
+              <p>تقسیم بر ۸، بیت را به بایت تبدیل می‌کند؛ ابزار برای نمایش TB از واحد ده‌دهی استفاده می‌کند.</p>
+            </div>
+            <div className="formula-card">
+              <strong>مدت نگهداری</strong>
+              <code dir="ltr">Days = Disk bytes ÷ Daily recording bytes</code>
+              <p>با ثابت‌بودن ظرفیت دیسک، افزایش بیت‌ریت یا ساعات ضبط باعث کاهش مستقیم روزهای آرشیو می‌شود.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="calculator-guide-section guide-example" aria-labelledby="capacity-example-title">
+          <div className="calculator-guide-heading">
+            <span>۰۲</span>
+            <div>
+              <p className="eyebrow">مثال واقعی همین ابزار</p>
+              <h3 id="capacity-example-title">یک دوربین 1080p با بیت‌ریت 2048 Kbps</h3>
+            </div>
+          </div>
+          <div className="guide-example-layout">
+            <div>
+              <p>
+                اگر یک کانال به‌صورت ۲۴ ساعته با بیت‌ریت <bdi>2048 Kbps</bdi> ضبط شود، پهنای‌باند آن
+                <bdi> 2.048 Mbps</bdi> و مصرف روزانه تقریباً <bdi>22.12 GB</bdi> است. بنابراین یک دیسک
+                <bdi> 4 TB</bdi> در محاسبه ایدئال حدود <bdi>180.84</bdi> روز آرشیو ایجاد می‌کند.
+              </p>
+              <div className="guide-equation" dir="ltr">
+                2,048 × 1,000 ÷ 8 × 3,600 × 24 = 22,118,400,000 bytes/day
+              </div>
+            </div>
+            <div className="guide-table-wrap">
+              <table>
+                <thead>
+                  <tr><th>ورودی یا خروجی</th><th>مقدار</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>تعداد کانال</td><td>۱</td></tr>
+                  <tr><td>بیت‌ریت کل</td><td><bdi>2048 Kbps</bdi></td></tr>
+                  <tr><td>فضای روزانه</td><td><bdi>22.12 GB</bdi></td></tr>
+                  <tr><td>آرشیو روی <bdi>4 TB</bdi></td><td>حدود ۱۸۰ روز</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section className="calculator-guide-section" aria-labelledby="capacity-usage-title">
+          <div className="calculator-guide-heading">
+            <span>۰۳</span>
+            <div>
+              <p className="eyebrow">روش استفاده</p>
+              <h3 id="capacity-usage-title">چطور نتیجه دقیق‌تری بگیریم؟</h3>
+            </div>
+          </div>
+          <ol className="guide-steps">
+            <li><strong>کانال‌ها را گروه‌بندی کنید.</strong><span>دوربین‌هایی با رزولوشن، کُدگذاری و بیت‌ریت مشابه را در یک ردیف قرار دهید.</span></li>
+            <li><strong>بیت‌ریت واقعی را وارد کنید.</strong><span>پیشنهاد ابزار نقطه شروع است؛ مقدار تنظیم‌شده در دوربین یا NVR اولویت دارد.</span></li>
+            <li><strong>نوع محاسبه را انتخاب کنید.</strong><span>می‌توانید فضای لازم، مدت نگهداری یا پهنای‌باند کل را جداگانه ببینید.</span></li>
+            <li><strong>برای اجرای واقعی حاشیه بگذارید.</strong><span>صدا، نوسان VBR، سربار فایل‌سیستم و ساختار RAID می‌توانند فضای قابل‌استفاده را تغییر دهند.</span></li>
+          </ol>
+        </section>
+
+        <section className="calculator-guide-section" aria-labelledby="capacity-faq-title">
+          <div className="calculator-guide-heading">
+            <span>۰۴</span>
+            <div>
+              <p className="eyebrow">پرسش‌های متداول</p>
+              <h3 id="capacity-faq-title">نکات مهم پیش از انتخاب هارد</h3>
+            </div>
+          </div>
+          <div className="guide-faq">
+            <details>
+              <summary>چرا ظرفیت واقعی ضبط ممکن است با نتیجه ابزار فرق کند؟</summary>
+              <p>بیت‌ریت متغیر تصویر، ضبط صدا، تشخیص حرکت، فضای رزروشده سیستم و ظرفیت قابل‌استفاده RAID روی نتیجه نهایی اثر می‌گذارند. خروجی ابزار یک برآورد مهندسی بر پایه ورودی‌های شماست.</p>
+            </details>
+            <details>
+              <summary>آیا انتخاب H.265 همیشه فضای ذخیره‌سازی را نصف می‌کند؟</summary>
+              <p>خیر. میزان صرفه‌جویی به صحنه، حرکت، کیفیت تصویر و تنظیمات سازنده وابسته است. برای خرید نهایی، بیت‌ریت واقعی یا میانگین ثبت‌شده دستگاه را وارد کنید.</p>
+            </details>
+            <details>
+              <summary>برای چند مدل دوربین چه کار کنیم؟</summary>
+              <p>برای هر گروه دوربین یک پروفایل جدا بسازید. ابزار حاصل ضرب تعداد و بیت‌ریت هر گروه را محاسبه و همه را در خروجی نهایی جمع می‌کند.</p>
+            </details>
+          </div>
+        </section>
+
+        <footer className="calculator-guide-footer">
+          <div>
+            <strong>گام بعدی طراحی ذخیره‌سازی</strong>
+            <p>بعد از تعیین ظرفیت خام، آرایش دیسک‌ها و ظرفیت قابل‌استفاده را بررسی کنید.</p>
+          </div>
+          <Link href="/calculators/raid">محاسبه ظرفیت RAID</Link>
+        </footer>
+      </article>
     </CalculatorShell>
   );
 }
