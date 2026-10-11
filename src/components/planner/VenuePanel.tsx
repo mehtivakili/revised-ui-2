@@ -153,7 +153,7 @@ export function VenuePanel({
 
   return (
     <div className={compact ? "plan-venue-panel is-compact" : "plan-venue-panel"}>
-      {!compact ? <section className="plan-venue-card">
+      {!compact || !venueTypeId ? <section className="plan-venue-card">
         <h3><Building2 size={15} aria-hidden="true" /> کاربری پروژه</h3>
         <VenuePicker value={venueTypeId} onPick={(picked) => onVenueChange(picked.id)} />
         {venue && <p className="plan-venue-blurb">{venue.blurb}</p>}

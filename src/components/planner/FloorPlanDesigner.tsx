@@ -59,6 +59,7 @@ import {
   defaultPlanDefaults,
   duplicateFloor,
   emptySelection,
+  soleSelection,
   type BuildingPlan,
   type CustomSectionRecord,
   type FloorPlan,
@@ -72,13 +73,14 @@ import {
 } from "@/src/domain/planner/types";
 import { PlanCanvas } from "@/src/components/planner/PlanCanvas";
 import { PlanInspector } from "@/src/components/planner/PlanInspector";
+import { RoomTypeQuickPicker, assignRoomSection } from "@/src/components/planner/RoomTypeQuickPicker";
 import { drawsSingleWall, fenceWallStyles, isFenceMode } from "@/src/lib/planner/wall-styles";
 import { VenuePanel } from "@/src/components/planner/VenuePanel";
 import { computeFloorCoverage } from "@/src/lib/planner/coverage";
 import { floorAreaM2, largestClosedWallLoop } from "@/src/lib/planner/geometry";
 import { reconcileRooms, roomAtPoint, unassignedRooms, type OpenRegion } from "@/src/lib/planner/rooms";
 import { constrainCameraMountHeight, syncEquipmentRequirements } from "@/src/lib/planner/placement-rules";
-import { findSectionType } from "@/src/domain/planner/venues";
+import { createCustomSectionType, findSectionType, type SectionType } from "@/src/domain/planner/venues";
 import {
   optimiseCameraPlacement,
   resetCameraPlacements,
@@ -173,11 +175,16 @@ export function FloorPlanDesigner({
   const [buildingFloorFilter, setBuildingFloorFilter] = useState<BuildingFloorFilter>("above");
   const [selection, setSelection] = useState<PlanSelection>(emptySelection);
   const [showCoverage, setShowCoverage] = useState(true);
+  const [showRoomNames, setShowRoomNames] = useState(true);
+  const [showRoomTypes, setShowRoomTypes] = useState(true);
   const [showAdvancedElements, setShowAdvancedElements] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [pendingBackdrop, setPendingBackdrop] = useState<PlanBackdrop | null>(null);
   const [showDefaults, setShowDefaults] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
+  /* The in-place type picker for the space last clicked, at the click's screen position. */
+  const [roomPicker, setRoomPicker] = useState<{ roomId: string; x: number; y: number } | null>(null);
+  const closeRoomPicker = useCallback(() => setRoomPicker(null), []);
   const [smartPlacementReport, setSmartPlacementReport] = useState<SmartPlacementReport | null>(null);
   const [isOptimisingPlacement, setIsOptimisingPlacement] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -764,6 +771,15 @@ export function FloorPlanDesigner({
 
   if (!activeFloor) return null;
   const activeTool = tools.find((item) => item.id === tool);
+  // Shown only while that space is still the selection on the plan view.
+  const pickerRoomId = roomPicker && viewMode !== "building" && soleSelection(selection)?.id === roomPicker.roomId
+    ? roomPicker.roomId
+    : null;
+  const pickerRoom = pickerRoomId ? (activeFloor.rooms ?? []).find((room) => room.id === pickerRoomId) : undefined;
+  const assignedSectionIds = new Set(plan.floors.flatMap((floor) => [
+    ...(floor.rooms ?? []).map((room) => room.sectionTypeId),
+    ...(floor.coverageRequirements ?? []).map((requirement) => requirement.sectionTypeId)
+  ]).filter((id): id is string => Boolean(id)));
 
   return (
     <section className={`plan-designer plan-designer-${mode} plan-designer-${variant}${readOnly ? " plan-designer-readonly" : ""}`}>
@@ -1203,6 +1219,8 @@ export function FloorPlanDesigner({
           referenceFloor={viewMode !== "building" && mode === "environment" ? referenceFloor : null}
           pendingBackdrop={pendingBackdrop}
           showCoverage={mode === "cameras" && showCoverage}
+          showRoomNames={showRoomNames}
+          showRoomTypes={showRoomTypes}
           palette={variant === "focus" ? "studio" : "classic"}
           customSectionTypes={plan.customSectionTypes}
           onSelect={setSelection}
@@ -1221,7 +1239,36 @@ export function FloorPlanDesigner({
             setTool("select");
             setHint(null);
           }}
+          onRoomClick={mode === "environment" && !readOnly ? (roomId, at) => setRoomPicker({ roomId, ...at }) : undefined}
         />
+        {pickerRoom && roomPicker ? (
+          <RoomTypeQuickPicker
+            key={`${pickerRoom.id}-${roomPicker.x}-${roomPicker.y}`}
+            room={pickerRoom}
+            anchor={roomPicker}
+            venueTypeId={plan.venueTypeId}
+            custom={(plan.customSectionTypes ?? []) as unknown as SectionType[]}
+            assignedIds={assignedSectionIds}
+            onPick={(section) => {
+              updateFloor(assignRoomSection(activeFloor, pickerRoom.id, section.id));
+              setRoomPicker(null);
+              setHint(`نوع فضا «${section.label}» شد؛ تنظیمات بیشتر در پنل مشخصات است`);
+            }}
+            onCreate={(label) => {
+              const created = createCustomSectionType(label);
+              const floor = assignRoomSection(activeFloor, pickerRoom.id, created.id);
+              // One commit for both, so a single Undo takes back the new type and its use.
+              commit({
+                ...plan,
+                customSectionTypes: [...(plan.customSectionTypes ?? []), created as unknown as CustomSectionRecord],
+                floors: plan.floors.map((item) => (item.id === floor.id ? floor : item))
+              });
+              setRoomPicker(null);
+              setHint(`نوع سفارشی «${label}» ساخته شد و به این فضا داده شد`);
+            }}
+            onClose={closeRoomPicker}
+          />
+        ) : null}
         <div className="plan-workspace-sidebar">
           {viewMode === "building" ? (
             <BuildingPreviewPanel
@@ -1304,18 +1351,40 @@ export function FloorPlanDesigner({
 
       <div className="plan-statusbar">
         <span className="plan-hint">{hint ?? activeTool?.hint}</span>
-        {mode === "cameras" ? (
+        <div className="plan-visibility-toggles" aria-label="نمایش برچسب‌های نقشه">
           <button
             type="button"
-            className={showCoverage ? "plan-coverage-toggle active" : "plan-coverage-toggle"}
-            onClick={() => setShowCoverage((value) => !value)}
-            aria-pressed={showCoverage}
+            className={showRoomNames ? "plan-coverage-toggle active" : "plan-coverage-toggle"}
+            onClick={() => setShowRoomNames((value) => !value)}
+            aria-pressed={showRoomNames}
+            title="نمایش یا پنهان‌سازی نام فضاها و ناحیه‌های اجباری"
           >
             <span className="plan-toggle-track" aria-hidden="true"><i /></span>
-            <Eye size={14} aria-hidden="true" />
-            پوشش DORI
+            نام‌ها
           </button>
-        ) : null}
+          <button
+            type="button"
+            className={showRoomTypes ? "plan-coverage-toggle active" : "plan-coverage-toggle"}
+            onClick={() => setShowRoomTypes((value) => !value)}
+            aria-pressed={showRoomTypes}
+            title="نمایش یا پنهان‌سازی نوع فضاها و برچسب پوشش اجباری"
+          >
+            <span className="plan-toggle-track" aria-hidden="true"><i /></span>
+            نوع‌ها
+          </button>
+          {mode === "cameras" ? (
+            <button
+              type="button"
+              className={showCoverage ? "plan-coverage-toggle active" : "plan-coverage-toggle"}
+              onClick={() => setShowCoverage((value) => !value)}
+              aria-pressed={showCoverage}
+            >
+              <span className="plan-toggle-track" aria-hidden="true"><i /></span>
+              <Eye size={14} aria-hidden="true" />
+              پوشش DORI
+            </button>
+          ) : null}
+        </div>
         <div className="plan-metrics">
           <span className="plan-grid-readout" title="خطوط پررنگ شبکه هر ۵ متر تکرار می‌شوند">
             <Grid3x3 size={13} aria-hidden="true" />

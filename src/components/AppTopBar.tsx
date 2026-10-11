@@ -57,7 +57,7 @@ export async function AppTopBar() {
         <nav className="top-nav" aria-label="ناوبری اصلی">
           <Link className="smart-nav-link" href="/planner"><Sparkles size={14} />صفحه اصلی طراحی هوشمند</Link>
           <Link href="/catalog">محصولات</Link>
-          <ToolsMenu lockedToolSlugs={access.lockedToolSlugs} />
+          <ToolsMenu lockedToolSlugs={access.lockedToolSlugs} isAdmin={session?.role === "admin"} />
           <Link href="/">خانه</Link>
           {session?.role === "admin" ? <Link href="/admin">مدیریت</Link> : null}
         </nav>

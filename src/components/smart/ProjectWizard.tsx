@@ -17,6 +17,7 @@ import { recommendCameraSelection, type CameraSelectionAnalysis } from "@/src/li
 import { createSamplePlan, sampleVenueTypeIds, type SamplePlanId } from "@/src/lib/planner/sample-plans";
 import { venueTypes, type VenueType, type VenueTypeId } from "@/src/domain/planner/venues";
 import { ProjectGallery, VenueComposition } from "@/src/components/smart/ProjectGallery";
+import { StudioHelpButton, StudioTour, useStudioTour } from "@/src/components/smart/StudioTour";
 import {
   createProject as createStoredProject,
   fetchProject,
@@ -1741,6 +1742,7 @@ function DesignFocusStage({
   onContinue: () => void;
 }) {
   const Icon = venue ? venueExperiences[venue.id].icon : PencilRuler;
+  const tour = useStudioTour("design");
   return (
     <section className={`design-focus-shell venue-${venue?.id ?? "blank"}`} dir="rtl">
       <header className="design-focus-header">
@@ -1749,11 +1751,15 @@ function DesignFocusStage({
           <span><Icon size={20} aria-hidden="true" /></span>
           <div><small>نوع پروژه فعال</small><strong>{venue?.label ?? blankDesignLabel}</strong></div>
         </div>
-        <div className="design-focus-lock"><LockKeyhole size={15} /><span>حالت تمرکز فعال است</span></div>
+        <div className="design-focus-tools">
+          <StudioHelpButton onClick={tour.start} />
+          <div className="design-focus-lock"><LockKeyhole size={15} /><span>حالت تمرکز فعال است</span></div>
+        </div>
       </header>
       <main className="design-focus-content">
         <FloorPlanDesigner plan={plan} mode="environment" variant="focus" onPlanChange={onPlanChange} onSummaryChange={onSummaryChange} />
       </main>
+      {tour.open ? <StudioTour tourId="design" onClose={tour.close} /> : null}
       <footer className="design-focus-footer">
         <div><Info size={16} /><span>تغییرات نقشه در همین فرایند حفظ می‌شود.</span></div>
         <div className="design-focus-actions">
@@ -1788,6 +1794,7 @@ function CameraPlacementFocusStage({
 }) {
   const Icon = venue ? venueExperiences[venue.id].icon : PencilRuler;
   const remaining = Math.max(0, placement.required - placement.placed);
+  const tour = useStudioTour("cameras");
 
   return (
     <section className={`design-focus-shell design-focus-camera venue-${venue?.id ?? "blank"}`} dir="rtl">
@@ -1800,7 +1807,10 @@ function CameraPlacementFocusStage({
           <span><Icon size={20} aria-hidden="true" /></span>
           <div><small>مرحله ۳ از ۶ · نوع پروژه فعال</small><strong>{venue?.label ?? blankDesignLabel}</strong></div>
         </div>
-        <div className="design-focus-lock"><LockKeyhole size={15} /><span>حالت تمرکز فعال است</span></div>
+        <div className="design-focus-tools">
+          <StudioHelpButton onClick={tour.start} />
+          <div className="design-focus-lock"><LockKeyhole size={15} /><span>حالت تمرکز فعال است</span></div>
+        </div>
       </header>
       <main className="design-focus-content">
         <FloorPlanDesigner
@@ -1812,6 +1822,7 @@ function CameraPlacementFocusStage({
           onSummaryChange={onSummaryChange}
         />
       </main>
+      {tour.open ? <StudioTour tourId="cameras" onClose={tour.close} /> : null}
       <footer className="design-focus-footer">
         <div className={`camera-focus-progress${placement.complete ? " is-complete" : ""}`}>
           {placement.complete ? <Check size={16} aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" />}

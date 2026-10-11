@@ -77,9 +77,10 @@ export default async function CalculatorsPage() {
 
 function CategorySection({ category, variant, locked = false }: { category: DashboardCategory; variant?: "wide"; locked?: boolean }) {
   const CategoryIcon = iconMap[category.icon];
+  const tone = toneByCategory[category.id];
 
   return (
-    <section className={`category-section ${variant === "wide" ? "category-section-wide" : ""}`} aria-labelledby={`${category.id}-title`}>
+    <section className={`category-section category-tone-${tone} ${variant === "wide" ? "category-section-wide" : ""}`} aria-labelledby={`${category.id}-title`}>
       <div className="category-section-content">
         <div className="category-heading">
           <div className="category-title">
@@ -95,7 +96,7 @@ function CategorySection({ category, variant, locked = false }: { category: Dash
 
         <div className="tool-card-grid">
           {category.tools.map((tool) => (
-            <ToolCard key={tool.slug} tool={tool} tone={toneByCategory[category.id]} locked={locked} />
+            <ToolCard key={tool.slug} tool={tool} tone={tone} locked={locked} />
           ))}
         </div>
       </div>

@@ -104,6 +104,39 @@ describe("must-cover badges", () => {
     );
     assert.ok(labels[0].subtext.includes("صندوق فروش"));
   });
+
+  test("name and type toggles independently control required-area labels", () => {
+    const floor = floorWith([], [{
+      id: "c3", polygon: square, label: "صندوق کوچک", origin: "user", sectionTypeId: "shop.checkout"
+    }]);
+
+    const nameOnly = collectRoomLabels(floor, resolve, { showNames: true, showTypes: false });
+    assert.equal(nameOnly[0].text, "صندوق کوچک");
+    assert.equal(nameOnly[0].subtext, undefined);
+
+    const typeOnly = collectRoomLabels(floor, resolve, { showNames: false, showTypes: true });
+    assert.equal(typeOnly[0].text, "پوشش اجباری • صندوق فروش");
+    assert.equal(typeOnly[0].subtext, undefined);
+
+    assert.deepEqual(
+      collectRoomLabels(floor, resolve, { showNames: false, showTypes: false }),
+      []
+    );
+  });
+
+  test("turning both toggles off hides spaces and required areas together", () => {
+    const floor = floorWith(
+      [{
+        id: "r2", polygon: square, name: "اتاق کنترل", sectionTypeId: "control-room.operator", boundarySource: "drawn"
+      }],
+      [{ id: "c4", polygon: square, label: "ورودی اصلی", origin: "user" }]
+    );
+
+    assert.deepEqual(
+      collectRoomLabels(floor, resolve, { showNames: false, showTypes: false }),
+      []
+    );
+  });
 });
 
 describe("degenerate input", () => {

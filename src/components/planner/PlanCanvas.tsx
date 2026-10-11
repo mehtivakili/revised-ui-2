@@ -120,9 +120,13 @@ function configureControlBindings(bundle: Bundle) {
 
 function configureViewMode(
   bundle: Bundle,
-  props: Pick<PlanCanvasProps, "viewMode" | "floor" | "buildingFloors">
+  props: Pick<PlanCanvasProps, "viewMode" | "floor" | "buildingFloors" | "presentation">
 ) {
   const { topControls, orbitControls, topCamera, orbitCamera } = bundle;
+  if (props.presentation?.topZoom && topCamera.zoom !== props.presentation.topZoom) {
+    topCamera.zoom = props.presentation.topZoom;
+    topCamera.updateProjectionMatrix();
+  }
   if (props.viewMode === "top") {
     topControls.target.set(orbitControls.target.x, 0, orbitControls.target.z);
     topCamera.position.set(orbitControls.target.x, 100, orbitControls.target.z);
@@ -142,7 +146,7 @@ function configureViewMode(
   const verticalSpan = Math.max(maxElevation - minElevation, 3.2);
   const targetY = props.viewMode === "building" ? (minElevation + maxElevation) / 2 : 0;
   orbitControls.target.set(topControls.target.x, targetY, topControls.target.z);
-  const radius = props.viewMode === "building" ? Math.max(28, verticalSpan * 2.25) : 24;
+  const radius = (props.viewMode === "building" ? Math.max(28, verticalSpan * 2.25) : 24) * (props.presentation?.orbitScale ?? 1);
   orbitCamera.position.set(
     topControls.target.x + radius * 0.72,
     targetY + radius * 0.62,
@@ -191,6 +195,8 @@ export type PlanCanvasProps = {
   defaults: PlanDefaults;
   pendingBackdrop?: PlanBackdrop | null;
   showCoverage: boolean;
+  showRoomNames: boolean;
+  showRoomTypes: boolean;
   palette?: "classic" | "studio";
   readOnly?: boolean;
   buildingFloors?: FloorPlan[];
@@ -209,6 +215,13 @@ export type PlanCanvasProps = {
   onCancelBackdropPlacement?: () => void;
   /** Clears the selected item and retires the active drawing/placement tool. */
   onCancelInteraction?: () => void;
+  /** A click (not a drag) that picked or drew a space, with where it landed on screen. */
+  onRoomClick?: (roomId: string, at: { x: number; y: number }) => void;
+  /**
+   * Guided-tour playback only: a fixed framing (plan zoom, orbit distance) and a slow
+   * automatic orbit, so a demo shows the real rendering without anyone driving it.
+   */
+  presentation?: { topZoom?: number; orbitScale?: number; autoRotate?: boolean };
 };
 
 type DragState =
@@ -232,7 +245,7 @@ const nextId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.
 
 export function PlanCanvas(props: PlanCanvasProps) {
   const {
-    floor, tool, viewMode, selection, showCoverage, readOnly, buildingFloors,
+    floor, tool, viewMode, selection, showCoverage, showRoomNames, showRoomTypes, readOnly, buildingFloors,
     focusedFloorId, referenceFloor, customSectionTypes, onSelect, onFloorChange, onHint
   } = props;
 
@@ -244,6 +257,8 @@ export function PlanCanvas(props: PlanCanvasProps) {
   const dragRef = useRef<DragState>(null);
   const rightPointerRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const roomClickCycleRef = useRef<{ clientX: number; clientY: number; at: number } | null>(null);
+  /* The space a press landed on; it becomes a room click if the pointer comes up in place. */
+  const roomPressRef = useRef<{ id: string; x: number; y: number } | null>(null);
 
   const latest = useRef(props);
   useEffect(() => { latest.current = props; });
@@ -276,7 +291,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
       renderer.setSize(width, height);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       const studioPalette = props.palette === "studio";
-      renderer.setClearColor(studioPalette ? 0xeef3f7 : 0xeaf3f7, 1);
+      renderer.setClearColor(studioPalette ? 0xf4f5f7 : 0xf3f5f6, 1);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.08;
@@ -329,8 +344,10 @@ export function PlanCanvas(props: PlanCanvasProps) {
         RIGHT: THREE.MOUSE.PAN
       };
 
-      scene.add(new THREE.HemisphereLight(0xdff4ff, 0x8aa181, 1.35));
-      const sun = new THREE.DirectionalLight(0xfff4df, 2.2);
+      // Keep the architectural workspace colour-neutral. A coloured ground light
+      // tints every wall and floor, which makes even white surfaces look green.
+      scene.add(new THREE.HemisphereLight(0xf7f9fb, 0xb9c0c7, 1.25));
+      const sun = new THREE.DirectionalLight(0xffffff, 2.05);
       sun.position.set(18, 32, 14);
       sun.castShadow = true;
       sun.shadow.mapSize.set(2048, 2048);
@@ -342,13 +359,13 @@ export function PlanCanvas(props: PlanCanvasProps) {
       sun.shadow.camera.far = 90;
       sun.shadow.bias = -0.0005;
       scene.add(sun);
-      const fill = new THREE.DirectionalLight(0x9edcff, 0.7);
+      const fill = new THREE.DirectionalLight(0xe2e8ee, 0.58);
       fill.position.set(-16, 12, -10);
       scene.add(fill);
 
       const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(200, 200),
-        new THREE.MeshStandardMaterial({ color: studioPalette ? 0xf8fafc : 0xf3f8f7, roughness: 0.94, metalness: 0 })
+        new THREE.MeshStandardMaterial({ color: studioPalette ? 0xf9fafb : 0xf7f8f9, roughness: 0.94, metalness: 0 })
       );
       ground.rotation.x = -Math.PI / 2;
       ground.position.y = -0.035;
@@ -360,19 +377,19 @@ export function PlanCanvas(props: PlanCanvasProps) {
       const fineGrid = new THREE.GridHelper(
         200,
         200,
-        studioPalette ? 0x8fa9bd : 0x75a9c4,
-        studioPalette ? 0xd6e1e9 : 0xc3dce8
+        studioPalette ? 0x4f93c2 : 0x478bb9,
+        studioPalette ? 0xb9d7ea : 0xb3d2e6
       );
       (fineGrid.material as THREE_NS.Material).transparent = true;
-      (fineGrid.material as THREE_NS.Material).opacity = 0.82;
+      (fineGrid.material as THREE_NS.Material).opacity = 0.88;
       (fineGrid.material as THREE_NS.Material).depthWrite = false;
       scene.add(fineGrid);
 
       const majorGrid = new THREE.GridHelper(
         200,
         40,
-        studioPalette ? 0x4f7d9f : 0x397fa5,
-        studioPalette ? 0xadc2d2 : 0x82b5cd
+        studioPalette ? 0x2f78a8 : 0x286f9d,
+        studioPalette ? 0x86b8d6 : 0x7faecb
       );
       (majorGrid.material as THREE_NS.Material).transparent = true;
       (majorGrid.material as THREE_NS.Material).opacity = 0.68;
@@ -412,7 +429,11 @@ export function PlanCanvas(props: PlanCanvasProps) {
       const renderLoop = () => {
         bundle.frame = requestAnimationFrame(renderLoop);
         if (latest.current.viewMode === "top") topControls.update();
-        else orbitControls.update();
+        else {
+          orbitControls.autoRotate = Boolean(latest.current.presentation?.autoRotate);
+          orbitControls.autoRotateSpeed = 1.4;
+          orbitControls.update();
+        }
         renderer.render(scene, activeCamera());
         updateLabelPositions(bundle, activeCamera(), labelHostRef.current);
         updateLabelPositions(bundle, activeCamera(), smartGuideLabelHostRef.current);
@@ -468,8 +489,8 @@ export function PlanCanvas(props: PlanCanvasProps) {
       { floor, selection, viewMode, buildingFloors, focusedFloorId, referenceFloor, customSectionTypes },
       coverages
     );
-    renderLabels(labelHostRef.current, labelsFor({ floor, selection, viewMode, customSectionTypes }));
-  }, [floor, selection, coverages, buildingFloors, focusedFloorId, referenceFloor, viewMode, customSectionTypes]);
+    renderLabels(labelHostRef.current, labelsFor({ floor, selection, viewMode, customSectionTypes, showRoomNames, showRoomTypes }));
+  }, [floor, selection, coverages, buildingFloors, focusedFloorId, referenceFloor, viewMode, customSectionTypes, showRoomNames, showRoomTypes]);
 
   useEffect(() => {
     const bundle = bundleRef.current;
@@ -644,6 +665,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
     roomClickCycleRef.current = picked?.kind === "room"
       ? { clientX: event.clientX, clientY: event.clientY, at: now }
       : null;
+    roomPressRef.current = null;
     const activeDraft = draftRef.current;
     const openingTool = current.tool === "door" || current.tool === "window";
     const openingHostWall = openingTool ? openingHostWallAtPoint(current.floor.walls, point) : undefined;
@@ -677,6 +699,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
       const kind = picked.kind === "camera-yaw" ? "camera" : picked.kind;
       if (kind === "wall" || kind === "door" || kind === "obstacle" || kind === "camera" || kind === "room" || kind === "requirement") {
         onSelect([{ kind, id: picked.id }]);
+        if (kind === "room") roomPressRef.current = { id: picked.id, x: event.clientX, y: event.clientY };
         onHint("مشخصات آیتم در پنل سمت راست باز شد؛ برای ادامه طراحی روی فضای خالی کلیک کنید");
         return;
       }
@@ -780,6 +803,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
       // Dragging one of several selected items keeps the group, so a multi-selection can
       // be nudged without collapsing back to a single element.
       if (!alreadySelected) onSelect([ref]);
+      if (picked.kind === "room") roomPressRef.current = { id: picked.id, x: event.clientX, y: event.clientY };
       if (picked.kind === "room" && (picked.roomLayerCount ?? 0) > 1) {
         onHint(`محدوده هم‌پوشان ${picked.roomLayer} از ${picked.roomLayerCount} انتخاب شد؛ برای انتخاب محدوده بعدی دوباره همین‌جا کلیک کنید`);
       } else if (pickedRoomThroughContent) {
@@ -1012,7 +1036,8 @@ export function PlanCanvas(props: PlanCanvasProps) {
           };
           onFloorChange({ ...current.floor, rooms: [...(current.floor.rooms ?? []), room] });
           onSelect([{ kind: "room", id: room.id }]);
-          onHint("فضا رسم شد — نوع آن را از پنل سمت راست انتخاب کنید تا مرز قرمز برداشته شود");
+          roomPressRef.current = { id: room.id, x: event.clientX, y: event.clientY };
+          onHint("فضا رسم شد — نوع آن را همین‌جا یا از پنل سمت راست انتخاب کنید تا مرز قرمز برداشته شود");
         } else {
           const requirement = {
             id: nextId("cover"),
@@ -1330,7 +1355,6 @@ export function PlanCanvas(props: PlanCanvasProps) {
       || draft.kind === "coverage"
       || (draft.kind === "wall" && latest.current.wallDrawMode === "rectangle");
     if (rectangleDraft) {
-      clearSmartGuideLabel(smartGuideLabelHostRef.current);
       const previewColour = draft.kind === "wall"
         ? 0xe6572f
         : draft.kind === "room"
@@ -1341,6 +1365,29 @@ export function PlanCanvas(props: PlanCanvasProps) {
       bundle.groups.preview.add(buildPreviewRect(bundle.THREE, draft.start, snapped, previewColour));
       const widthM = Math.abs(snapped.x - draft.start.x).toFixed(2);
       const depthM = Math.abs(snapped.z - draft.start.z).toFixed(2);
+      const horizontalDirection = Math.sign(snapped.z - draft.start.z || 1);
+      const verticalDirection = Math.sign(snapped.x - draft.start.x || 1);
+      renderDraftDimensionLabels(
+        smartGuideLabelHostRef.current,
+        [
+          {
+            text: `طول: ${widthM} متر`,
+            world: {
+              x: (draft.start.x + snapped.x) / 2,
+              y: 0.28,
+              z: snapped.z + horizontalDirection * 0.5
+            }
+          },
+          {
+            text: `عرض: ${depthM} متر`,
+            world: {
+              x: snapped.x + verticalDirection * 0.5,
+              y: 0.28,
+              z: (draft.start.z + snapped.z) / 2
+            }
+          }
+        ]
+      );
       onHint(draft.kind === "wall"
         ? `طول ${widthM} متر × عرض ${depthM} متر — کلیک برای ساخت چهار دیوار`
         : draft.kind === "room"
@@ -1352,10 +1399,24 @@ export function PlanCanvas(props: PlanCanvasProps) {
       const line = buildPreviewLine(bundle.THREE, draft.start, snapped);
       (line as THREE_NS.Line).computeLineDistances();
       bundle.groups.preview.add(line);
-      clearSmartGuideLabel(smartGuideLabelHostRef.current);
+      const lengthM = distance(draft.start, snapped);
+      const dx = snapped.x - draft.start.x;
+      const dz = snapped.z - draft.start.z;
+      const labelOffsetM = 0.45;
+      renderDraftDimensionLabels(
+        smartGuideLabelHostRef.current,
+        [{
+          text: `طول: ${lengthM.toFixed(2)} متر`,
+          world: {
+            x: (draft.start.x + snapped.x) / 2 - (lengthM > 0 ? dz / lengthM : 0) * labelOffsetM,
+            y: 0.28,
+            z: (draft.start.z + snapped.z) / 2 + (lengthM > 0 ? dx / lengthM : 0) * labelOffsetM
+          }
+        }]
+      );
       onHint(draft.kind === "wall"
-        ? `طول دیوار ${distance(draft.start, snapped).toFixed(2)} متر — کلیک برای رسم`
-        : `فاصله ${distance(draft.start, snapped).toFixed(2)} متر`);
+        ? `طول دیوار ${lengthM.toFixed(2)} متر — کلیک برای رسم`
+        : `فاصله ${lengthM.toFixed(2)} متر`);
     }
   }, [onFloorChange, onHint, planPointAt]);
 
@@ -1404,7 +1465,13 @@ export function PlanCanvas(props: PlanCanvasProps) {
 
   const finishPointerInteraction = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 2) {
+      const press = roomPressRef.current;
+      roomPressRef.current = null;
       endDrag(event);
+      // A press that did not travel is a click on the space: offer its type right there.
+      if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) <= 5) {
+        latest.current.onRoomClick?.(press.id, { x: event.clientX, y: event.clientY });
+      }
       return;
     }
 
@@ -1631,12 +1698,15 @@ function syncScene(
  * Room badges are suppressed in the stacked building view: that view is about massing,
  * and a dozen storeys of overlapping room names is unreadable.
  */
-function labelsFor(props: Pick<PlanCanvasProps, "floor" | "selection" | "viewMode" | "customSectionTypes">): PlanLabel[] {
+function labelsFor(props: Pick<PlanCanvasProps, "floor" | "selection" | "viewMode" | "customSectionTypes" | "showRoomNames" | "showRoomTypes">): PlanLabel[] {
   if (props.viewMode === "building") return [];
   const selected = soleSelection(props.selection);
   const custom = (props.customSectionTypes ?? []) as never;
   return [
-    ...collectRoomLabels(props.floor, (id) => findSectionType(id, custom)),
+    ...collectRoomLabels(props.floor, (id) => findSectionType(id, custom), {
+      showNames: props.showRoomNames,
+      showTypes: props.showRoomTypes
+    }),
     ...collectDimensionLabels(props.floor, selected?.kind === "wall" ? selected.id : undefined)
   ];
 }
@@ -1698,6 +1768,24 @@ function clearSmartGuideLabel(host: HTMLDivElement | null) {
   host?.replaceChildren();
 }
 
+/** Mirrors the dimension badge used by the animated tutorial while a shape is drawn. */
+function renderDraftDimensionLabels(
+  host: HTMLDivElement | null,
+  labels: Array<{ text: string; world: { x: number; y: number; z: number } }>
+) {
+  if (!host) return;
+  const nodes = labels.map(({ text, world }) => {
+    const node = document.createElement("span");
+    node.className = "plan-smart-guide-label is-draft-dimension";
+    node.textContent = text;
+    node.dataset.worldX = String(world.x);
+    node.dataset.worldY = String(world.y);
+    node.dataset.worldZ = String(world.z);
+    return node;
+  });
+  host.replaceChildren(...nodes);
+}
+
 function updateLabelPositions(bundle: Bundle, camera: THREE_NS.Camera, host: HTMLDivElement | null) {
   if (!host || !host.children.length) return;
   const { THREE, renderer } = bundle;
@@ -1708,7 +1796,9 @@ function updateLabelPositions(bundle: Bundle, camera: THREE_NS.Camera, host: HTM
     vector.set(Number(child.dataset.worldX), Number(child.dataset.worldY), Number(child.dataset.worldZ));
     vector.project(camera);
     const behind = vector.z > 1;
-    child.style.display = behind ? "none" : "block";
+    // Clearing rather than forcing "block" leaves the layout to the stylesheet: room badges
+    // are a two-line grid, and "block" ran the name and the type together.
+    child.style.display = behind ? "none" : "";
     if (behind) continue;
     child.style.transform = `translate(-50%, -50%) translate(${((vector.x + 1) / 2) * size.x}px, ${((-vector.y + 1) / 2) * size.y}px)`;
   }

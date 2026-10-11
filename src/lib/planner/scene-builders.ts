@@ -2644,7 +2644,8 @@ export function buildCoverageArea(
  */
 export function collectRoomLabels(
   floor: FloorPlan,
-  resolveSection: (id?: string) => { label: string; forbidden?: boolean } | null
+  resolveSection: (id?: string) => { label: string; forbidden?: boolean } | null,
+  visibility: { showNames: boolean; showTypes: boolean } = { showNames: true, showTypes: true }
 ): PlanLabel[] {
   const labels: PlanLabel[] = [];
 
@@ -2653,14 +2654,17 @@ export function collectRoomLabels(
     const centre = polygonCentroid(room.polygon);
     if (!centre) continue;
     const name = room.name?.trim();
+    const visibleName = visibility.showNames ? name : undefined;
+    const visibleType = visibility.showTypes
+      ? section?.label ?? "نوع کاربری مشخص نشده"
+      : undefined;
+    if (!visibleName && !visibleType) continue;
     labels.push({
       id: `room-${room.id}`,
       // The modifier drives the colour: an untyped space has to keep reading as a problem.
       kind: section ? (section.forbidden ? "room-forbidden" : "room") : "room-unassigned",
-      text: name || section?.label || "بدون فضا",
-      subtext: name
-        ? section?.label ?? "بدون فضا"
-        : section ? undefined : "نوع کاربری مشخص نشده",
+      text: visibleName ?? visibleType!,
+      subtext: visibleName && visibleType ? visibleType : undefined,
       world: { x: centre.x, y: 0.25, z: centre.z }
     });
   }
@@ -2669,11 +2673,16 @@ export function collectRoomLabels(
     const centre = polygonCentroid(requirement.polygon);
     if (!centre) continue;
     const section = resolveSection(requirement.sectionTypeId);
+    const visibleName = visibility.showNames ? requirement.label.trim() : undefined;
+    const visibleType = visibility.showTypes
+      ? section ? `پوشش اجباری • ${section.label}` : "پوشش اجباری"
+      : undefined;
+    if (!visibleName && !visibleType) continue;
     labels.push({
       id: `requirement-${requirement.id}`,
       kind: "room-requirement",
-      text: requirement.label,
-      subtext: section ? `پوشش اجباری • ${section.label}` : "پوشش اجباری",
+      text: visibleName ?? visibleType!,
+      subtext: visibleName && visibleType ? visibleType : undefined,
       world: { x: centre.x, y: 0.3, z: centre.z }
     });
   }
