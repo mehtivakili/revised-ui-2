@@ -470,19 +470,15 @@ function setBackStopLines(tracks: Track[]) {
     const turns = tracks.filter((track) => track.kind === "connector" && track.node === lane.node && !lane.next.includes(track.id));
     const sweeps: { centre: Vec2; forward: Vec2 }[] = [];
     for (const turn of turns) {
-      const route = { track: turn.id, route: turn.next.slice(0, 1) };
-      for (let s = -LARGEST.lengthM / 2; s <= turn.length + LARGEST.lengthM / 2; s += 0.4) {
-        const centre = routePoint(tracks, route, s);
-        const forward = unit(sub(routePoint(tracks, route, s + LARGEST.lengthM * 0.35), routePoint(tracks, route, s - LARGEST.lengthM * 0.35)));
-        sweeps.push({ centre, forward });
-      }
+      const path = { track: turn.id, route: turn.next.slice(0, 1) };
+      for (let s = -LARGEST.lengthM / 2; s <= turn.length + LARGEST.lengthM / 2; s += 0.4) sweeps.push(bodyAt(tracks, path, s, LARGEST.lengthM));
     }
     const waiting = { lengthM: 4.6, widthM: 1.9 };
+    const path = { track: lane.id, route: [] };
     for (let hold = lane.length - 0.3; hold >= lane.length - 3.3; hold -= 0.25) {
       lane.hold = hold;
-      const centre = routePoint(tracks, { track: lane.id, route: [] }, hold - waiting.lengthM / 2);
-      const forward = trackPose(lane, Math.max(0, hold - waiting.lengthM / 2)).heading;
-      if (!sweeps.some((sweep) => bodiesTouch({ centre, forward, ...waiting }, { ...sweep, ...LARGEST }, 0.15))) break;
+      const body = { ...bodyAt(tracks, path, hold - waiting.lengthM / 2, waiting.lengthM), ...waiting };
+      if (!sweeps.some((sweep) => bodiesTouch(body, { ...sweep, ...LARGEST }, 0.15))) break;
     }
   }
 }
