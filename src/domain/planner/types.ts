@@ -358,6 +358,8 @@ export type PlanRoom = {
   name?: string;
   /** Falls back to the floor's storey height when unset. */
   ceilingHeightM?: number;
+  /** Floor finish (an id from floor-finishes); unset uses the plan's default finish. */
+  floorFinish?: string;
   boundarySource: RoomBoundarySource;
   /** Wall ids that produced the outline, used to re-match the room after wall edits. */
   wallIds?: string[];
@@ -460,6 +462,8 @@ export type PlanDefaults = {
   wallThicknessM: number;
   obstacleHeightM: number;
   cameraMountHeightM: number;
+  /** Floor finish of every enclosed space that has none of its own (an id from floor-finishes). */
+  floorFinish?: string;
 };
 
 export type PlanTool =
@@ -471,7 +475,9 @@ export type PlanTool =
   | "camera"
   | "measure"
   | "room"
-  | "coverage";
+  | "coverage"
+  /** Paints a floor finish onto the space clicked. */
+  | "floor";
 export type PlanViewMode = "top" | "orbit" | "building";
 /**
  * How the wall tool draws.

@@ -8579,6 +8579,41 @@ h3 {
 .plan-object-tool-popover > button em { color: #718b99; font-size: 8px; font-style: normal; direction: ltr; white-space: nowrap; }
 .plan-object-tool-popover > button > svg { display: grid; place-items: center; color: var(--accent); }
 .plan-wall-mode-popover > button { grid-template-columns: minmax(0, 1fr) 30px; }
+
+/* Floor finishes: swatches in the «رنگ کف» menu, on its button and in the space panel. */
+.plan-floor-popover { width: 250px; max-height: 430px; overflow-y: auto; }
+.plan-floor-popover > button { grid-template-columns: minmax(0, 1fr) 30px; min-height: 40px; }
+.plan-floor-popover > button.active,
+.plan-designer-focus .plan-toolbar .plan-floor-popover > button.active {
+  color: var(--accent-strong);
+  background: #e8f5fb;
+  border-color: transparent;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.plan-floor-swatch {
+  display: inline-block;
+  width: 26px;
+  height: 20px;
+  border: 1px solid rgba(15, 23, 42, .2);
+  border-radius: 6px;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, .35);
+}
+.plan-floor-default { margin-top: 4px; border-top: 1px dashed #dbe6ee !important; }
+.plan-floor-default:disabled { cursor: default; opacity: .6; }
+.plan-tool-button.is-floor .plan-tool-icon { position: relative; }
+.plan-floor-tool-chip {
+  position: absolute;
+  inset-inline-end: -3px;
+  bottom: -3px;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, .18);
+}
+.plan-floor-field > span { display: flex; align-items: center; gap: 8px; }
+.plan-floor-field .plan-floor-swatch { width: 18px; height: 14px; }
+.plan-canvas.tool-floor { cursor: cell; }
 .plan-wall-mode-popover > button.active,
 .plan-door-mode-popover > button.active { color: var(--accent-strong); background: #e8f5fb; box-shadow: inset 3px 0 0 var(--accent); }
 .plan-wall-mode-popover > button.active > svg,
@@ -13033,12 +13068,14 @@ body.chat-assistant-maximized { overflow: hidden; }
 .plan-tool-button.is-column { --tool-color: #64748b; --tool-soft: #f1f5f9; --tool-border: #bac5d2; }
 .plan-tool-button.is-room { --tool-color: #15956f; --tool-soft: #e7f8f1; --tool-border: #91d8c1; }
 .plan-tool-button.is-coverage { --tool-color: #d13b68; --tool-soft: #fff0f5; --tool-border: #efabc0; }
+.plan-tool-button.is-floor { --tool-color: #a16207; --tool-soft: #fef6e7; --tool-border: #f1d29b; }
 .plan-tool-button.is-camera { --tool-color: #078da8; --tool-soft: #e6f8fb; --tool-border: #8ed6e2; }
 .plan-tool-button.is-measure { --tool-color: #4f66d4; --tool-soft: #edf0ff; --tool-border: #adb8ee; }
 
 .plan-view-tool.is-map { --tool-color: #137fbe; --tool-soft: #e8f5fd; --tool-border: #9ed1ec; }
 .plan-view-tool.is-orbit { --tool-color: #6558c9; --tool-soft: #f0edff; --tool-border: #c2baf0; }
 .plan-view-tool.is-building { --tool-color: #28768a; --tool-soft: #e7f5f7; --tool-border: #9ccdd5; }
+.plan-view-tool.is-dynamic { --tool-color: #b45309; --tool-soft: #fff4e5; --tool-border: #f3c58a; }
 
 .plan-object-tool-menu.is-vehicle { --tool-color: #2878c8; --tool-soft: #e9f3fe; --tool-border: #9dc8ee; }
 .plan-object-tool-menu.is-structure { --tool-color: #6b7280; --tool-soft: #f0f2f5; --tool-border: #c5cbd3; }

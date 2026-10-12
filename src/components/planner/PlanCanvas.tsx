@@ -27,6 +27,10 @@ import {
   type RoomAwarePlanPick
 } from "@/src/lib/planner/selection";
 import { findSectionType } from "@/src/domain/planner/venues";
+import { roomAtPoint } from "@/src/lib/planner/rooms";
+import { floorFinish } from "@/src/lib/planner/floor-finishes";
+import { createCrowd, stepCrowd, type CrowdState } from "@/src/lib/planner/crowd/simulation";
+import { buildCrowdView, disposeCrowdView, updateCrowdView, type CrowdView } from "@/src/lib/planner/crowd/models";
 import { isCardinalAngle, snapRotationAngle } from "@/src/lib/planner/rotation";
 import { constrainCameraMountHeight } from "@/src/lib/planner/placement-rules";
 import { drawsSingleWall, fenceWallStyles, isFenceMode } from "@/src/lib/planner/wall-styles";
@@ -57,6 +61,8 @@ import {
   buildMarqueeRect,
   buildPreviewLine,
   buildRoomOutline,
+  buildRoomFloor,
+  roomHasFloor,
   buildPreviewRect,
   buildRightAngleMarker,
   buildWallWithDoors,
@@ -88,6 +94,11 @@ type Bundle = {
   raycaster: THREE_NS.Raycaster;
   groundPlane: THREE_NS.Plane;
   sceneGeneration: number;
+  /** The dynamic environment of the floor on screen, when it is switched on. */
+  crowd: { state: CrowdState; view: CrowdView; floor: FloorPlan } | null;
+  /** A floor edit waiting to settle before the crowd is rebuilt for it. */
+  crowdPending: { floor: FloorPlan; since: number } | null;
+  lastFrameAt: number;
   frame: number;
 };
 
@@ -222,6 +233,14 @@ export type PlanCanvasProps = {
    * automatic orbit, so a demo shows the real rendering without anyone driving it.
    */
   presentation?: { topZoom?: number; orbitScale?: number; autoRotate?: boolean };
+  /**
+   * Dynamic environment: people walking, sitting, talking and using things, and cars on
+   * roads, on the floor in view. Display only — none of it is part of the plan, it is
+   * never picked, and coverage ignores it.
+   */
+  dynamicEnvironment?: boolean;
+  /** The finish the «رنگ کف» tool paints onto the space clicked. */
+  paintFinish?: string;
 };
 
 type DragState =
@@ -415,6 +434,9 @@ export function PlanCanvas(props: PlanCanvasProps) {
         raycaster: new THREE.Raycaster(),
         groundPlane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
         sceneGeneration: 0,
+        crowd: null,
+        crowdPending: null,
+        lastFrameAt: performance.now(),
         frame: 0
       };
       bundleRef.current = bundle;
@@ -434,6 +456,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
           orbitControls.autoRotateSpeed = 1.4;
           orbitControls.update();
         }
+        stepDynamicEnvironment(bundle, latest.current);
         renderer.render(scene, activeCamera());
         updateLabelPositions(bundle, activeCamera(), labelHostRef.current);
         updateLabelPositions(bundle, activeCamera(), smartGuideLabelHostRef.current);
@@ -470,6 +493,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
       const bundle = bundleRef.current;
       if (!bundle) return;
       cancelAnimationFrame(bundle.frame);
+      if (bundle.crowd) disposeCrowdView(bundle.crowd.view);
       Object.values(bundle.groups).forEach(disposeGroup);
       bundle.topControls.dispose();
       bundle.orbitControls.dispose();
@@ -486,11 +510,12 @@ export function PlanCanvas(props: PlanCanvasProps) {
     if (!bundle) return;
     syncScene(
       bundle,
-      { floor, selection, viewMode, buildingFloors, focusedFloorId, referenceFloor, customSectionTypes },
+      { floor, selection, viewMode, buildingFloors, focusedFloorId, referenceFloor, customSectionTypes, defaults: props.defaults },
       coverages
     );
     renderLabels(labelHostRef.current, labelsFor({ floor, selection, viewMode, customSectionTypes, showRoomNames, showRoomTypes }));
-  }, [floor, selection, coverages, buildingFloors, focusedFloorId, referenceFloor, viewMode, customSectionTypes, showRoomNames, showRoomTypes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [floor, selection, coverages, buildingFloors, focusedFloorId, referenceFloor, viewMode, customSectionTypes, showRoomNames, showRoomTypes, props.defaults.floorFinish]);
 
   useEffect(() => {
     const bundle = bundleRef.current;
@@ -643,6 +668,21 @@ export function PlanCanvas(props: PlanCanvasProps) {
     current.onPointerPlanPosition?.(point);
     if (current.pendingBackdrop) {
       current.onPlaceBackdrop?.(point);
+      return;
+    }
+    // «رنگ کف»: paint the chosen finish onto the space under the pointer.
+    if (current.tool === "floor") {
+      const room = roomAtPoint(current.floor, point);
+      if (!room) {
+        onHint("برای رنگ‌کردن کف، داخل یک فضا کلیک کنید");
+        return;
+      }
+      const finish = floorFinish(current.paintFinish ?? current.defaults.floorFinish);
+      onFloorChange({
+        ...current.floor,
+        rooms: (current.floor.rooms ?? []).map((item) => (item.id === room.id ? { ...item, floorFinish: finish.id } : item))
+      });
+      onHint(`کف این فضا «${finish.label}» شد؛ برای فضای بعدی کلیک کنید؛ کلیک راست برای پایان`);
       return;
     }
     const snapped = snapPoint(point, current.snapM);
@@ -1542,18 +1582,65 @@ export function PlanCanvas(props: PlanCanvasProps) {
   );
 }
 
+/* ── Dynamic environment ───────────────────────────────────────────── */
+
+/**
+ * Runs the crowd for the floor on screen. Building it takes a moment on a large site, so
+ * after an edit the old crowd keeps going until the plan has been still for a quarter of a
+ * second, and only then is it rebuilt. The stacked building view shows no crowd.
+ */
+function stepDynamicEnvironment(
+  bundle: Bundle,
+  props: Pick<PlanCanvasProps, "dynamicEnvironment" | "viewMode" | "floor">
+) {
+  const now = performance.now();
+  const dt = (now - bundle.lastFrameAt) / 1000;
+  bundle.lastFrameAt = now;
+  const wanted = Boolean(props.dynamicEnvironment) && props.viewMode !== "building";
+  if (!wanted) {
+    if (bundle.crowd) {
+      disposeCrowdView(bundle.crowd.view);
+      bundle.crowd = null;
+    }
+    bundle.crowdPending = null;
+    return;
+  }
+  if (!bundle.crowd || bundle.crowd.floor !== props.floor) {
+    if (bundle.crowdPending?.floor !== props.floor) {
+      bundle.crowdPending = { floor: props.floor, since: now };
+    } else if (!bundle.crowd || now - bundle.crowdPending.since > 250) {
+      if (bundle.crowd) disposeCrowdView(bundle.crowd.view);
+      const state = createCrowd(props.floor, { seed: seedFor(props.floor.id) });
+      const view = buildCrowdView(bundle.THREE, state);
+      bundle.scene.add(view.group);
+      bundle.crowd = { state, view, floor: props.floor };
+      bundle.crowdPending = null;
+    }
+  }
+  if (!bundle.crowd) return;
+  stepCrowd(bundle.crowd.state, dt);
+  updateCrowdView(bundle.crowd.state, bundle.crowd.view, Math.min(0.1, dt));
+}
+
+/** The same floor always starts with the same people in the same places. */
+function seedFor(text: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
+  return hash >>> 0;
+}
+
 /* ── Scene sync ────────────────────────────────────────────────────── */
 
 function syncScene(
   bundle: Bundle,
   props: Pick<
     PlanCanvasProps,
-    "floor" | "selection" | "viewMode" | "buildingFloors" | "focusedFloorId" | "referenceFloor" | "customSectionTypes"
+    "floor" | "selection" | "viewMode" | "buildingFloors" | "focusedFloorId" | "referenceFloor" | "customSectionTypes" | "defaults"
   >,
   coverages: CameraCoverage[]
 ) {
   const { THREE, groups } = bundle;
-  const { floor, selection, buildingFloors, focusedFloorId, referenceFloor, viewMode, customSectionTypes } = props;
+  const { floor, selection, buildingFloors, focusedFloorId, referenceFloor, viewMode, customSectionTypes, defaults } = props;
   const sceneGeneration = ++bundle.sceneGeneration;
 
   disposeGroup(groups.rooms);
@@ -1573,6 +1660,11 @@ function syncScene(
       floorGroup.position.y = stackedFloor.elevationM;
       floorGroup.userData = { kind: "building-floor", floorId: stackedFloor.id, floorOpacity: opacity };
       floorGroup.add(buildFloorSlab(THREE, stackedFloor, isFocused));
+      for (const room of stackedFloor.rooms ?? []) {
+        if (!roomHasFloor(room)) continue;
+        const roomFloor = buildRoomFloor(THREE, room, room.floorFinish ?? defaults.floorFinish);
+        if (roomFloor) floorGroup.add(roomFloor);
+      }
       // Keep the envelope legible without rebuilding the old "stack of combs" effect.
       // In the all-floor view, furniture and equipment remain visible while the hundreds
       // of shop partitions stay collapsed to each level's architectural shell.
@@ -1618,6 +1710,11 @@ function syncScene(
   if (referenceFloor) groups.reference.add(buildFloorFootprintGuide(THREE, referenceFloor));
 
   for (const room of floor.rooms ?? []) {
+    // The floor finish of an enclosed space, under everything else.
+    if (roomHasFloor(room)) {
+      const roomFloor = buildRoomFloor(THREE, room, room.floorFinish ?? defaults.floorFinish);
+      if (roomFloor) groups.rooms.add(roomFloor);
+    }
     const section = findSectionType(room.sectionTypeId, (customSectionTypes ?? []) as never);
     const selected = isSelected(selection, "room", room.id);
     groups.rooms.add(buildRoomOutline(THREE, room, {

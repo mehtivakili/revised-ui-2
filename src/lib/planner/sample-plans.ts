@@ -16,6 +16,7 @@ import { findSectionType, sectionsForVenue, type SectionType, type VenueTypeId }
 import { pointInPolygon, polygonArea } from "@/src/lib/planner/geometry";
 import { obstaclePreset } from "@/src/lib/planner/obstacle-presets";
 import { reconcileRooms, roomCentroid } from "@/src/lib/planner/rooms";
+import { finishForSpace } from "@/src/lib/planner/floor-finishes";
 
 type SamplePlanId =
   | "family-villa"
@@ -5827,7 +5828,27 @@ function programmeSampleRooms(id: SamplePlanId, plan: BuildingPlan): BuildingPla
 }
 
 export function createSamplePlan(id: SamplePlanId): BuildingPlan {
-  return programmeSampleRooms(id, rawSamplePlan(id));
+  return withFloorFinishes(programmeSampleRooms(id, rawSamplePlan(id)));
+}
+
+/**
+ * Floors to suit each space: tiles in kitchens and washrooms, parquet in bedrooms and
+ * offices, marble in lobbies, terrazzo in corridors, epoxy in warehouses and car parks.
+ * Only spaces closed by walls get one; open areas drawn by hand keep the ground.
+ */
+function withFloorFinishes(plan: BuildingPlan): BuildingPlan {
+  return {
+    ...plan,
+    // Floors whose rooms are worked out later (the large malls) are left as they are.
+    floors: plan.floors.map((floor) => floor.rooms === undefined ? floor : ({
+      ...floor,
+      rooms: floor.rooms.map((room) => {
+        if (room.floorFinish || room.boundarySource === "drawn") return room;
+        const finish = finishForSpace(room.sectionTypeId, findSectionType(room.sectionTypeId)?.label ?? room.name ?? "");
+        return finish ? { ...room, floorFinish: finish } : room;
+      })
+    }))
+  };
 }
 
 export type { SamplePlanId };

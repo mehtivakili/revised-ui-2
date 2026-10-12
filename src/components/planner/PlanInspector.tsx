@@ -1,6 +1,7 @@
 "use client";
 
-import { Blinds, BrickWall, Camera, Compass, Cuboid, DoorOpen, Layers, Ruler, Square, Target, Trash2, X } from "lucide-react";
+import { Blinds, BrickWall, Camera, Compass, Cuboid, DoorOpen, Layers, PaintBucket, Ruler, Square, Target, Trash2, X } from "lucide-react";
+import { DEFAULT_FLOOR_FINISH, floorFinishes } from "@/src/lib/planner/floor-finishes";
 import {
   soleSelection,
   type FloorPlan,
@@ -153,6 +154,28 @@ export function PlanInspector({
       );
     }
 
+    if (activeTool === "floor") {
+      return (
+        <aside className="plan-inspector plan-tool-inspector">
+          <header><PaintBucket size={18} aria-hidden="true" /><strong>رنگ کف</strong></header>
+          <p>
+            داخل هر فضای بسته کلیک کنید تا کفش رنگ انتخاب‌شده در نوار ابزار شود. فضاهایی که رنگ
+            جداگانه ندارند، رنگ پیش‌فرض را می‌گیرند.
+          </p>
+          <label className="plan-text-field">
+            <span>رنگ پیش‌فرض کف</span>
+            <select
+              value={defaults.floorFinish ?? DEFAULT_FLOOR_FINISH}
+              onChange={(event) => onDefaultsChange({ floorFinish: event.target.value })}
+            >
+              {floorFinishes.map((finish) => <option key={finish.id} value={finish.id}>{finish.label}</option>)}
+            </select>
+          </label>
+          <div className="plan-tool-tip"><Ruler size={15} aria-hidden="true" /><span>رنگ هر فضا از پنل مشخصات همان فضا هم قابل تغییر است؛ کلیک راست ابزار را می‌بندد.</span></div>
+        </aside>
+      );
+    }
+
     if (activeTool === "room") {
       return (
         <aside className="plan-inspector plan-tool-inspector">
@@ -224,6 +247,7 @@ export function PlanInspector({
         onFloorChange={onFloorChange}
         onCustomSectionType={(section) => onCustomSectionType?.(section)}
         onSelect={() => onSelect([])}
+        defaultFloorFinish={defaults.floorFinish ?? DEFAULT_FLOOR_FINISH}
       />
     );
   }

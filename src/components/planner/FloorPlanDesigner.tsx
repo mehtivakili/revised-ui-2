@@ -45,10 +45,13 @@ import {
   Settings2,
   Sofa,
   Sparkles,
+  PaintBucket,
+  Check,
   Target,
   TriangleAlert,
   Trash2,
   Undo2,
+  Users,
   Minus,
   X
 } from "lucide-react";
@@ -73,6 +76,7 @@ import {
 } from "@/src/domain/planner/types";
 import { PlanCanvas } from "@/src/components/planner/PlanCanvas";
 import { PlanInspector } from "@/src/components/planner/PlanInspector";
+import { DEFAULT_FLOOR_FINISH, floorFinish, floorFinishCss, floorFinishes } from "@/src/lib/planner/floor-finishes";
 import { RoomTypeQuickPicker, assignRoomSection } from "@/src/components/planner/RoomTypeQuickPicker";
 import { drawsSingleWall, fenceWallStyles, isFenceMode } from "@/src/lib/planner/wall-styles";
 import { VenuePanel } from "@/src/components/planner/VenuePanel";
@@ -130,6 +134,7 @@ const allTools: { id: PlanTool; label: string; icon: typeof MousePointer2; hint:
   { id: "obstacle", label: "مانع", icon: Cuboid, hint: "دو نقطه مقابل هم را بزنید", modes: ["environment"] },
   { id: "room", label: "فضا", icon: Square, hint: "برای محوطه‌های بدون دیوار بسته، مرز فضا را دستی بکشید", modes: ["environment"] },
   { id: "coverage", label: "ناحیه اجباری", icon: Target, hint: "ناحیه‌ای که حتماً باید زیر پوشش باشد", modes: ["environment", "cameras"] },
+  { id: "floor", label: "رنگ کف", icon: PaintBucket, hint: "یک رنگ کف انتخاب کنید و داخل هر فضا کلیک کنید؛ کلیک راست برای پایان", modes: ["environment"] },
   { id: "camera", label: "افزودن دوربین", icon: CameraIcon, hint: "روی نقشه کلیک کنید تا دوربین اضافه شود", modes: ["cameras"] },
   { id: "measure", label: "اندازه‌گیری", icon: Ruler, hint: "دو نقطه را بزنید تا فاصله را ببینید", modes: ["environment", "cameras"] }
 ];
@@ -165,7 +170,7 @@ export function FloorPlanDesigner({
     () => allTools.filter((item) =>
       item.modes.includes(mode)
       && !(mode === "cameras" && item.id === "camera")
-      && (!isSimpleEnvironment || item.id === "select" || item.id === "wall")
+      && (!isSimpleEnvironment || item.id === "select" || item.id === "wall" || item.id === "floor")
     ),
     [isSimpleEnvironment, mode]
   );
@@ -190,6 +195,10 @@ export function FloorPlanDesigner({
   const [showRoomNames, setShowRoomNames] = useState(true);
   const [showRoomTypes, setShowRoomTypes] = useState(true);
   const [showAdvancedElements, setShowAdvancedElements] = useState(false);
+  /* Display only: people and traffic moving through the plan, never part of it. */
+  const [dynamicEnvironment, setDynamicEnvironment] = useState(false);
+  /* The finish the «رنگ کف» tool paints; starts as the plan's default. */
+  const [paintFinish, setPaintFinish] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [pendingBackdrop, setPendingBackdrop] = useState<PlanBackdrop | null>(null);
   const [showDefaults, setShowDefaults] = useState(false);
@@ -899,6 +908,27 @@ export function FloorPlanDesigner({
                   />
                 );
               }
+              if (item.id === "floor") {
+                const defaultFinish = designDefaults.floorFinish ?? DEFAULT_FLOOR_FINISH;
+                return (
+                  <FloorToolMenu
+                    key={item.id}
+                    active={tool === "floor"}
+                    finish={paintFinish ?? defaultFinish}
+                    defaultFinish={defaultFinish}
+                    onPick={(finishId) => {
+                      setPaintFinish(finishId);
+                      setTool("floor");
+                      setSelection(emptySelection);
+                      setHint(`«${floorFinish(finishId).label}» انتخاب شد؛ داخل هر فضا کلیک کنید تا کفش این رنگ شود`);
+                    }}
+                    onMakeDefault={(finishId) => {
+                      commit({ ...plan, defaults: { ...designDefaults, floorFinish: finishId } });
+                      setHint(`«${floorFinish(finishId).label}» رنگ پیش‌فرض کف همه فضاهایی شد که رنگ جداگانه ندارند`);
+                    }}
+                  />
+                );
+              }
               if (item.id === "door") {
                 return (
                   <DoorToolMenu
@@ -985,6 +1015,21 @@ export function FloorPlanDesigner({
               <span className="plan-tool-icon"><Building2 size={17} aria-hidden="true" /></span><span>ساختمان</span>
             </button>
           ) : null}
+          <button
+            type="button"
+            className={`plan-view-tool is-dynamic${dynamicEnvironment ? " active" : ""}`}
+            aria-pressed={dynamicEnvironment}
+            onClick={() => {
+              const next = !dynamicEnvironment;
+              setDynamicEnvironment(next);
+              setHint(next
+                ? "محیط دینامیک روشن شد: آدم‌ها راه می‌روند، می‌نشینند و صحبت می‌کنند و خودروها در جاده‌ها تردد دارند؛ در نمای سه‌بعدی بهتر دیده می‌شود"
+                : "محیط دینامیک خاموش شد");
+            }}
+            title="نمایش آدم‌ها و خودروهای در حال حرکت روی نقشه؛ فقط برای نمایش است و در طرح و محاسبات اثری ندارد"
+          >
+            <span className="plan-tool-icon"><Users size={17} aria-hidden="true" /></span><span>محیط دینامیک</span>
+          </button>
           </div>
           <span className="plan-ribbon-label">نمایش</span>
         </section>
@@ -1237,6 +1282,8 @@ export function FloorPlanDesigner({
           showRoomNames={showRoomNames}
           showRoomTypes={showRoomTypes}
           palette={variant === "focus" ? "studio" : "classic"}
+          dynamicEnvironment={dynamicEnvironment}
+          paintFinish={paintFinish ?? designDefaults.floorFinish ?? DEFAULT_FLOOR_FINISH}
           customSectionTypes={plan.customSectionTypes}
           onSelect={setSelection}
           onFloorChange={updateFloor}
@@ -1522,6 +1569,72 @@ function DoorToolMenu({
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Floor finishes at the tool itself: pick one to paint spaces with it, or make it the
+ * default for every space that has no finish of its own.
+ */
+function FloorToolMenu({
+  active,
+  finish,
+  defaultFinish,
+  onPick,
+  onMakeDefault
+}: {
+  active: boolean;
+  finish: string;
+  defaultFinish: string;
+  onPick: (finishId: string) => void;
+  onMakeDefault: (finishId: string) => void;
+}) {
+  const current = floorFinish(finish);
+  return (
+    <div className="plan-object-tool-menu plan-floor-tool-menu">
+      <button
+        type="button"
+        className={active ? "plan-object-tool-trigger plan-tool-button is-floor active" : "plan-object-tool-trigger plan-tool-button is-floor"}
+        onClick={() => onPick(finish)}
+        aria-haspopup="menu"
+        title="رنگ کف فضاهای بسته"
+      >
+        <span className="plan-tool-icon">
+          <PaintBucket className="plan-object-tool-main-icon" size={17} aria-hidden="true" />
+          <i className="plan-floor-tool-chip" style={{ background: floorFinishCss(current) }} aria-hidden="true" />
+        </span>
+        <span>رنگ کف</span>
+        <ChevronDown className="plan-object-tool-chevron" size={11} aria-hidden="true" />
+      </button>
+      <div className="plan-object-tool-popover plan-floor-popover" role="menu" aria-label="رنگ کف">
+        <div className="plan-object-tool-popover-title">
+          <PaintBucket size={17} aria-hidden="true" />
+          <div><strong>رنگ کف</strong><small>رنگ را انتخاب کنید و داخل هر فضا کلیک کنید</small></div>
+        </div>
+        {floorFinishes.map((item) => (
+          <button key={item.id} type="button" role="menuitem" className={item.id === finish ? "active" : ""} onClick={() => onPick(item.id)}>
+            <span>
+              <strong>{item.label}</strong>
+              <small>{item.id === defaultFinish ? "پیش‌فرض فعلی" : item.pattern === "planks" ? "چوبی" : item.pattern === "tiles" ? "کاشی و سنگ" : "یکپارچه"}</small>
+            </span>
+            <i className="plan-floor-swatch" style={{ background: floorFinishCss(item) }} aria-hidden="true" />
+          </button>
+        ))}
+        <button
+          type="button"
+          role="menuitem"
+          className="plan-floor-default"
+          disabled={finish === defaultFinish}
+          onClick={() => onMakeDefault(finish)}
+        >
+          <span>
+            <strong>{finish === defaultFinish ? `«${current.label}» پیش‌فرض است` : `«${current.label}» پیش‌فرض شود`}</strong>
+            <small>برای همه فضاهایی که رنگ جداگانه ندارند</small>
+          </span>
+          <Check size={16} aria-hidden="true" />
+        </button>
       </div>
     </div>
   );

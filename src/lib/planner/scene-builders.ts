@@ -15,6 +15,7 @@ import type {
 import type { CameraCoverage } from "@/src/lib/planner/coverage";
 import { largestClosedWallLoop, pointInPolygon, type RightAngleCorner } from "@/src/lib/planner/geometry";
 import { isCardinalAngle } from "@/src/lib/planner/rotation";
+import { floorFinish, type FloorFinish } from "@/src/lib/planner/floor-finishes";
 
 /**
  * Mesh construction for the plan scene.
@@ -2517,6 +2518,116 @@ function polygonFill(
   mesh.rotation.x = Math.PI / 2;
   mesh.position.y = y;
   return mesh;
+}
+
+/* ── Floor finishes ─────────────────────────────────────────────────── */
+
+/** One texture per finish, shared by every floor that uses it (materials mark it as shared). */
+const finishTextures = new Map<string, THREE_NS.Texture | null>();
+
+function finishTexture(THREE: ThreeModule, finish: FloorFinish): THREE_NS.Texture | null {
+  if (finishTextures.has(finish.id)) return finishTextures.get(finish.id)!;
+  if (typeof document === "undefined") { finishTextures.set(finish.id, null); return null; }
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) { finishTextures.set(finish.id, null); return null; }
+  const hex = (value: number) => `#${value.toString(16).padStart(6, "0")}`;
+  context.fillStyle = hex(finish.color);
+  context.fillRect(0, 0, size, size);
+  context.strokeStyle = hex(finish.accent);
+  context.fillStyle = hex(finish.accent);
+  // The canvas spans two modules each way.
+  const tile = size / 2;
+  let seed = 7;
+  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  if (finish.pattern === "tiles") {
+    context.lineWidth = 3;
+    for (let k = 0; k <= 2; k += 1) {
+      context.beginPath(); context.moveTo(k * tile, 0); context.lineTo(k * tile, size); context.stroke();
+      context.beginPath(); context.moveTo(0, k * tile); context.lineTo(size, k * tile); context.stroke();
+    }
+  } else if (finish.pattern === "planks") {
+    // Rows of boards with staggered joints and a little grain.
+    const rows = 8;
+    const rowHeight = size / rows;
+    context.lineWidth = 2;
+    for (let row = 0; row < rows; row += 1) {
+      const y = row * rowHeight;
+      context.beginPath(); context.moveTo(0, y); context.lineTo(size, y); context.stroke();
+      const offset = (row % 2) * (size / 2) + (row % 3) * 37;
+      for (const x of [offset % size, (offset + size / 2) % size]) {
+        context.beginPath(); context.moveTo(x, y); context.lineTo(x, y + rowHeight); context.stroke();
+      }
+      context.globalAlpha = 0.25;
+      for (let grain = 0; grain < 3; grain += 1) {
+        const gy = y + rowHeight * (0.25 + grain * 0.25) + (random() - 0.5) * 3;
+        context.beginPath(); context.moveTo(0, gy); context.lineTo(size, gy + (random() - 0.5) * 4); context.stroke();
+      }
+      context.globalAlpha = 1;
+    }
+  } else if (finish.pattern === "speckle") {
+    for (let dot = 0; dot < 900; dot += 1) {
+      context.globalAlpha = 0.35 + random() * 0.4;
+      context.fillRect(random() * size, random() * size, 1 + random() * 3, 1 + random() * 3);
+    }
+    context.globalAlpha = 1;
+  } else {
+    // A fine, even texture so a plain floor does not look like flat plastic.
+    for (let dot = 0; dot < 1600; dot += 1) {
+      context.globalAlpha = 0.12 + random() * 0.12;
+      context.fillRect(random() * size, random() * size, 1, 1);
+    }
+    context.globalAlpha = 1;
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  finishTextures.set(finish.id, texture);
+  return texture;
+}
+
+/**
+ * The floor of an enclosed space in its finish: a thin lit surface just above the ground
+ * grid, so furniture casts shadows on it and the grid stops at the walls.
+ */
+export function buildRoomFloor(THREE: ThreeModule, room: PlanRoom, finishId: string | undefined): THREE_NS.Mesh | null {
+  if (room.polygon.length < 3) return null;
+  const finish = floorFinish(finishId);
+  // Built in the XY plane with y = -z, then laid face up.
+  const shape = new THREE.Shape(room.polygon.map((point) => new THREE.Vector2(point.x, -point.z)));
+  const geometry = new THREE.ShapeGeometry(shape);
+  const texture = finishTexture(THREE, finish);
+  const material = new THREE.MeshStandardMaterial({
+    color: texture ? 0xffffff : finish.color,
+    map: texture ?? null,
+    roughness: finish.pattern === "planks" ? 0.62 : finish.id === "marble-cream" || finish.id === "tile-white" ? 0.38 : 0.8,
+    metalness: 0
+  });
+  material.userData.sharedAssetTextures = true;
+  if (texture) {
+    // Texture coordinates are plan metres; the canvas covers two modules.
+    const repeat = 1 / (finish.moduleM * 2);
+    const uv = geometry.getAttribute("uv");
+    for (let index = 0; index < uv.count; index += 1) uv.setXY(index, uv.getX(index) * repeat, uv.getY(index) * repeat);
+    uv.needsUpdate = true;
+  }
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = 0.012;
+  mesh.receiveShadow = true;
+  mesh.userData = { kind: "room", id: room.id, floorFinish: finish.id };
+  mesh.name = "room-floor";
+  return mesh;
+}
+
+/** Spaces closed by walls get a floor; an open area drawn by hand only if one was chosen. */
+export function roomHasFloor(room: PlanRoom) {
+  return room.boundarySource !== "drawn" || Boolean(room.floorFinish);
 }
 
 /**

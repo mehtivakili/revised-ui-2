@@ -664,6 +664,7 @@ export function reconcileRooms(floor: FloorPlan, options: ReconcileOptions = {})
       sectionTypeId: room.sectionTypeId ?? duplicate.sectionTypeId,
       name: room.name ?? duplicate.name,
       ceilingHeightM: room.ceilingHeightM ?? duplicate.ceilingHeightM,
+      floorFinish: room.floorFinish ?? duplicate.floorFinish,
       manual: room.manual ?? duplicate.manual,
       overrides: room.overrides ?? duplicate.overrides,
       boundarySource: "drawn" as const
@@ -712,6 +713,7 @@ export function reconcileRooms(floor: FloorPlan, options: ReconcileOptions = {})
       sectionTypeId: bestRoom?.sectionTypeId,
       name: bestRoom?.name,
       ceilingHeightM: bestRoom?.ceilingHeightM,
+      floorFinish: bestRoom?.floorFinish,
       boundarySource: candidate.boundarySource,
       wallIds: candidate.wallIds,
       impliedEdgeIndices: candidate.impliedEdgeIndices.length ? candidate.impliedEdgeIndices : undefined,

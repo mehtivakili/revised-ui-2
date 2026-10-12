@@ -26,6 +26,7 @@ import { mountKindLabels, recipeFor, roomContext, type MountKind } from "@/src/l
 import { housingLabels } from "@/src/lib/planner/camera-templates";
 import { roomAreaM2 } from "@/src/lib/planner/rooms";
 import { formatFa } from "@/src/lib/chatbot/persian";
+import { floorFinish, floorFinishCss, floorFinishes } from "@/src/lib/planner/floor-finishes";
 
 /**
  * Property panel for a space and for a must-cover area.
@@ -48,10 +49,13 @@ export function RoomInspector({
   customSectionTypes,
   onFloorChange,
   onCustomSectionType,
-  onSelect
+  onSelect,
+  defaultFloorFinish
 }: {
   floor: FloorPlan;
   room: PlanRoom;
+  /** The plan's default floor finish, used while the space has none of its own. */
+  defaultFloorFinish: string;
   venueTypeId?: string;
   customSectionTypes: CustomSectionRecord[];
   onFloorChange: (floor: FloorPlan) => void;
@@ -205,6 +209,17 @@ export function RoomInspector({
         <span>مساحت</span>
         <strong>{formatFa(Math.round(areaM2 * 10) / 10)} متر مربع</strong>
       </div>
+
+      <label className="plan-field plan-floor-field">
+        <span>
+          رنگ کف
+          <i className="plan-floor-swatch" style={{ background: floorFinishCss(floorFinish(room.floorFinish ?? defaultFloorFinish)) }} aria-hidden="true" />
+        </span>
+        <select value={room.floorFinish ?? ""} onChange={(event) => update({ floorFinish: event.target.value || undefined })}>
+          <option value="">پیش‌فرض ({floorFinish(defaultFloorFinish).label})</option>
+          {floorFinishes.map((finish) => <option key={finish.id} value={finish.id}>{finish.label}</option>)}
+        </select>
+      </label>
 
       <NumberField
         label="ارتفاع سقف"
