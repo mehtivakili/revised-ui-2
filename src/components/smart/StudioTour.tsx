@@ -42,7 +42,7 @@ export interface StudioTourStep {
   body: string;
   items?: { label: string; text: string }[];
   /** An animated how-to played on the drawing canvas beside the card (inside it when there is no room). */
-  demo?: StudioDemoId;
+  demo?: StudioDemoId | StudioDemoId[];
   /** A toggle pressed while the step is shown, so a collapsed panel can be explained open. */
   reveal?: string;
 }
@@ -133,7 +133,7 @@ export const studioTours: Record<StudioTourId, StudioTourStep[]> = {
       icon: PencilRuler,
       title: "ابزارهای ترسیم",
       body: "ابزار را انتخاب کنید و روی نقشه کلیک کنید. ابزارهای دارای فلش کوچک، با نگه‌داشتن نشانگر روی آن‌ها انواعشان را نشان می‌دهند. نمایش متحرک، کشیدن یک اتاق کامل با در و پنجره را قدم‌به‌قدم نشان می‌دهد.",
-      demo: "room",
+      demo: ["room", "space", "zone"],
       items: [
         { label: "انتخاب", text: "عناصر را انتخاب و با کشیدن جابه‌جا کنید؛ با Shift یا Ctrl چند عنصر را با هم انتخاب کنید." },
         { label: "دیوار", text: "پنج حالت دارد: دیوار خطی، مستطیل (چهار دیوار با دو کلیک)، جدار شیشه‌ای که دید را نمی‌بندد، حصار توری و دیوار محوطه." },
@@ -431,6 +431,8 @@ export function StudioTour({
   const Icon = step.icon;
   const demoReady = demoLayout?.index === index;
   const demoBox = demoReady ? demoLayout.box : null;
+  // A step can play one demo or a short playlist of them.
+  const demoList = step.demo === undefined ? [] : Array.isArray(step.demo) ? step.demo : [step.demo];
 
   const finish = useCallback(() => onClose(dontShowAgain), [dontShowAgain, onClose]);
   const go = useCallback((next: number) => setIndex(Math.min(Math.max(0, next), steps.length - 1)), [steps.length]);
@@ -564,7 +566,7 @@ export function StudioTour({
           className="studio-tour-demo-frame"
           style={{ top: demoBox.top, left: demoBox.left, width: demoBox.width, height: demoBox.height }}
         >
-          <StudioTourDemo demo={step.demo} />
+          <StudioTourDemo demos={demoList} />
         </div>
       ) : null}
       <div
@@ -587,7 +589,7 @@ export function StudioTour({
         </header>
         <h2 id="studio-tour-title">{step.title}</h2>
         <div className="studio-tour-scroll">
-          {step.demo && demoReady && !demoBox ? <StudioTourDemo demo={step.demo} compact /> : null}
+          {step.demo && demoReady && !demoBox ? <StudioTourDemo demos={demoList} compact /> : null}
           <p id="studio-tour-body">{step.body}</p>
           {step.items?.length ? (
             <dl className="studio-tour-items">

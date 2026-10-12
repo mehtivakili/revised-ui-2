@@ -2653,18 +2653,20 @@ export function collectRoomLabels(
     const section = resolveSection(room.sectionTypeId);
     const centre = polygonCentroid(room.polygon);
     if (!centre) continue;
-    const name = room.name?.trim();
-    const visibleName = visibility.showNames ? name : undefined;
+    // A blank or whitespace-only name counts as no name, so the badge never renders empty.
+    const visibleName = visibility.showNames ? room.name?.trim() || undefined : undefined;
     const visibleType = visibility.showTypes
       ? section?.label ?? "نوع کاربری مشخص نشده"
       : undefined;
     if (!visibleName && !visibleType) continue;
+    // An unnamed space with no type still reads as a two-line warning: what it is not, then why.
+    const unnamedUntyped = !visibleName && !section && visibleType;
     labels.push({
       id: `room-${room.id}`,
       // The modifier drives the colour: an untyped space has to keep reading as a problem.
       kind: section ? (section.forbidden ? "room-forbidden" : "room") : "room-unassigned",
-      text: visibleName ?? visibleType!,
-      subtext: visibleName && visibleType ? visibleType : undefined,
+      text: unnamedUntyped ? "بدون فضا" : visibleName ?? visibleType!,
+      subtext: unnamedUntyped ? visibleType : visibleName && visibleType ? visibleType : undefined,
       world: { x: centre.x, y: 0.25, z: centre.z }
     });
   }
@@ -2673,7 +2675,7 @@ export function collectRoomLabels(
     const centre = polygonCentroid(requirement.polygon);
     if (!centre) continue;
     const section = resolveSection(requirement.sectionTypeId);
-    const visibleName = visibility.showNames ? requirement.label.trim() : undefined;
+    const visibleName = visibility.showNames ? requirement.label.trim() || undefined : undefined;
     const visibleType = visibility.showTypes
       ? section ? `پوشش اجباری • ${section.label}` : "پوشش اجباری"
       : undefined;

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Anchor, ArrowLeft, ArrowRight, Bookmark, BriefcaseBusiness, Bus, BusFront, Cable, CarFront, Check, ChevronLeft, CircleAlert, CircleParking, Droplets, Factory, FileDown, Flame, FolderOpen, Fuel, Gem, GraduationCap, HardHat, HeartPulse, Hotel, House, Info, Landmark, LoaderCircle, LockKeyhole, Mic, Milestone, MonitorCog, Moon, PencilRuler, Pickaxe, Plane, Presentation, RotateCcw, Save, Search, Server, ShieldCheck, Ship, ShoppingBag, ShoppingCart, Siren, Sparkles, Sprout, SquareStack, Store, SunMedium, TowerControl, TrafficCone, TrainFront, Trash2, UtensilsCrossed, Volleyball, Warehouse, Waves, Waypoints, X, Zap } from "lucide-react";
+import { Anchor, ArrowLeft, ArrowRight, Bookmark, BriefcaseBusiness, BrickWall, Bus, BusFront, Cable, CarFront, Check, ChevronLeft, CircleAlert, CircleParking, Droplets, Factory, FileDown, Flame, FolderOpen, Fuel, Gem, GraduationCap, HardHat, HeartPulse, Hotel, House, Info, Landmark, LoaderCircle, LockKeyhole, Mic, Milestone, MonitorCog, Moon, MousePointer2, Move3d, PencilRuler, Pickaxe, Plane, Presentation, RotateCcw, Save, Search, Server, ShieldCheck, Ship, ShoppingBag, ShoppingCart, Siren, Sparkles, Sprout, SquareStack, Store, SunMedium, TowerControl, TrafficCone, TrainFront, Trash2, UtensilsCrossed, Volleyball, Warehouse, Waves, Waypoints, X, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ProjectBrief, ProjectCameraTemplate, ProjectZone, RecommendationPlan, RecommendationResult } from "@/src/domain/catalog/types";
 import { createEmptyPlan, type BuildingPlan } from "@/src/domain/planner/types";
@@ -151,6 +151,12 @@ type WizardPreset = {
   planId?: SamplePlanId;
   description?: string;
 };
+
+type DesignExperience = "simple" | "advanced";
+type PendingDesignStart =
+  | { kind: "blank" }
+  | { kind: "venue"; venueId: VenueTypeId }
+  | { kind: "sample"; preset: WizardPreset };
 
 const presets: WizardPreset[] = [
   { id: "retail", title: "فروشگاه کوچک", brief: { projectType: "shop", siteAreaM2: 180, entrances: 1, archiveDays: 21 }, zones: [{ id: "p1", name: "ورودی و صندوق", cameraCount: 3, outdoor: false, goal: "face-capture", targetDistanceM: 4, sceneWidthM: 3, mountingHeightM: 3, targetHeightM: 1.7, cameraTiltDeg: 15 }, { id: "p2", name: "سالن فروش", cameraCount: 3, outdoor: false, goal: "monitor", targetDistanceM: 9, sceneWidthM: 8, mountingHeightM: 3.2, targetHeightM: 1.5, cameraTiltDeg: 12 }] },
@@ -836,6 +842,8 @@ export function ProjectWizard() {
   const [siteMode, setSiteMode] = useState<"manual" | "designer">("designer");
   const [buildingPlan, setBuildingPlan] = useState<BuildingPlan>(() => createEmptyPlan());
   const [designFocusActive, setDesignFocusActive] = useState(false);
+  const [designExperience, setDesignExperience] = useState<DesignExperience>("advanced");
+  const [pendingDesignStart, setPendingDesignStart] = useState<PendingDesignStart | null>(null);
   const [venueQuery, setVenueQuery] = useState("");
   const [cameraSelectionAnalysis, setCameraSelectionAnalysis] = useState<CameraSelectionAnalysis | null>(null);
 
@@ -910,12 +918,6 @@ export function ProjectWizard() {
     if (!query) return venueTypes;
     return venueTypes.filter((venue) => [venue.label, venue.blurb, ...venue.aliases].some((value) => value.toLocaleLowerCase("fa").includes(query)));
   }, [venueQuery]);
-
-  const selectVenue = useCallback((venueId: VenueTypeId) => {
-    const experience = venueExperiences[venueId];
-    setBrief((current) => ({ ...current, ...experience.defaults, projectType: experience.projectType }));
-    setBuildingPlan((current) => ({ ...current, venueTypeId: venueId }));
-  }, []);
 
   /**
    * Everything worth keeping, in the shape the API expects.
@@ -995,10 +997,22 @@ export function ProjectWizard() {
   }, [router]);
 
   const selectVenueAndStart = useCallback((venueId: VenueTypeId) => {
-    selectVenue(venueId);
+    const venueExperience = venueExperiences[venueId];
+    setBrief({
+      ...initialBrief,
+      ...venueExperience.defaults,
+      projectType: venueExperience.projectType,
+      cameraTemplates: defaultCameraTemplates()
+    });
+    setBuildingPlan({ ...createEmptyPlan(), venueTypeId: venueId });
+    setResult(null);
+    setProjectId(null);
+    setProjectName("");
+    setSaveState("idle");
+    dirtyRef.current = false;
     setSiteMode("designer");
     setDesignFocusActive(true);
-  }, [selectVenue]);
+  }, []);
 
   /**
    * A simple design: a new, empty plan with no project type.
@@ -1135,8 +1149,23 @@ export function ProjectWizard() {
   }
 
   function openSample(preset: WizardPreset) {
+    setBrief({ ...initialBrief, cameraTemplates: defaultCameraTemplates() });
+    setResult(null);
+    setProjectId(null);
+    setProjectName("");
+    setSaveState("idle");
+    dirtyRef.current = false;
     applyPreset(preset);
     setDesignFocusActive(true);
+  }
+
+  function beginPendingDesign(experience: DesignExperience) {
+    if (!pendingDesignStart) return;
+    setDesignExperience(experience);
+    if (pendingDesignStart.kind === "blank") startBlankDesign();
+    if (pendingDesignStart.kind === "venue") selectVenueAndStart(pendingDesignStart.venueId);
+    if (pendingDesignStart.kind === "sample") openSample(pendingDesignStart.preset);
+    setPendingDesignStart(null);
   }
 
   async function generate() {
@@ -1172,6 +1201,8 @@ export function ProjectWizard() {
     <DesignFocusStage
       venue={selectedVenue}
       plan={buildingPlan}
+      experience={designExperience}
+      onExperienceChange={setDesignExperience}
       onPlanChange={setBuildingPlan}
       onSummaryChange={applyPlanSummary}
       onHome={goToPlannerHome}
@@ -1198,19 +1229,32 @@ export function ProjectWizard() {
   );
 
   if (step === 1) return (
-    <ProjectTypeGateway
-      venues={filteredVenues}
-      selectedVenueId={selectedVenueId}
-      query={venueQuery}
-      onQueryChange={setVenueQuery}
-      onSelect={selectVenueAndStart}
-      onStartBlank={startBlankDesign}
-      onOpenProject={openSavedProject}
-      onViewProject={viewSavedProject}
-      galleryToken={galleryToken}
-      samples={samplePresets}
-      onOpenSample={openSample}
-    />
+    <>
+      <ProjectTypeGateway
+        venues={filteredVenues}
+        selectedVenueId={selectedVenueId}
+        query={venueQuery}
+        onQueryChange={setVenueQuery}
+        onSelect={(venueId) => setPendingDesignStart({ kind: "venue", venueId })}
+        onStartBlank={() => setPendingDesignStart({ kind: "blank" })}
+        onOpenProject={openSavedProject}
+        onViewProject={viewSavedProject}
+        galleryToken={galleryToken}
+        samples={samplePresets}
+        onOpenSample={(preset) => setPendingDesignStart({ kind: "sample", preset })}
+      />
+      {pendingDesignStart ? (
+        <DesignModeDialog
+          title={pendingDesignStart.kind === "blank"
+            ? "پروژه خالی"
+            : pendingDesignStart.kind === "venue"
+              ? venueTypes.find((venue) => venue.id === pendingDesignStart.venueId)?.label ?? "پروژه جدید"
+              : pendingDesignStart.preset.title}
+          onChoose={beginPendingDesign}
+          onClose={() => setPendingDesignStart(null)}
+        />
+      ) : null}
+    </>
   );
 
   // The drawn plan only reaches the results when it was actually used and completed.
@@ -1626,12 +1670,12 @@ function ProjectTypeGateway({
           onMouseLeave={scheduleVenueDismiss}
         >
           {!query.trim() && (
-            <section className="project-venue-section project-blank-section" aria-label="طراحی ساده">
+            <section className="project-venue-section project-blank-section" aria-label="پروژه خالی">
               <button type="button" className="project-blank-select" onClick={onStartBlank}>
                 <span className="tool-icon tool-icon-slate"><PencilRuler size={26} aria-hidden="true" /></span>
                 <span className="project-blank-copy">
-                  <span className="project-blank-title"><strong>طراحی ساده</strong><em>بدون پیش‌فرض</em></span>
-                  <small>صفحه سفید بدون نوع کاربری، چک‌لیست یا چیدمان آماده. نقشه را آزادانه بکشید، دوربین بگذارید و هر وقت خواستید نوع پروژه را از داخل طراح انتخاب کنید.</small>
+                  <span className="project-blank-title"><strong>پروژه خالی</strong><em>بدون پیش‌فرض</em></span>
+                  <small>صفحه سفید بدون نوع کاربری یا چیدمان آماده. در مرحله بعد حالت ساده یا پیشرفته را انتخاب می‌کنید.</small>
                 </span>
                 <span className="project-venue-arrow"><ChevronLeft size={17} aria-hidden="true" /></span>
               </button>
@@ -1724,9 +1768,79 @@ function ProjectTypeGateway({
   );
 }
 
+function DesignModeDialog({
+  title,
+  onChoose,
+  onClose
+}: {
+  title: string;
+  onChoose: (experience: DesignExperience) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const bodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = bodyOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="design-mode-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="design-mode-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="design-mode-title"
+        aria-describedby="design-mode-description"
+        dir="rtl"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <button type="button" className="design-mode-close" onClick={onClose} aria-label="بستن انتخاب حالت طراحی"><X size={18} /></button>
+        <header>
+          <span className="design-mode-kicker"><PencilRuler size={15} />شروع {title}</span>
+          <h2 id="design-mode-title">با کدام حالت طراحی شروع می‌کنید؟</h2>
+          <p id="design-mode-description">هر زمان بخواهید می‌توانید از نوار بالای محیط طراحی بین دو حالت جابه‌جا شوید.</p>
+        </header>
+        <div className="design-mode-options">
+          <button type="button" className="design-mode-option is-simple" onClick={() => onChoose("simple")} autoFocus>
+            <span className="design-mode-option-icon"><MousePointer2 size={26} /></span>
+            <span className="design-mode-option-copy">
+              <span><strong>حالت ساده</strong><em>شروع سریع</em></span>
+              <small>محیط خلوت برای ترسیم سریع پوسته اصلی پروژه</small>
+            </span>
+            <span className="design-mode-feature"><Check size={15} />ابزار انتخاب</span>
+            <span className="design-mode-feature"><BrickWall size={15} />دیوار خطی و مستطیلی</span>
+            <span className="design-mode-feature"><Move3d size={15} />نمای دو‌بعدی و سه‌بعدی ساده</span>
+            <span className="design-mode-enter">ورود به حالت ساده <ArrowLeft size={16} /></span>
+          </button>
+          <button type="button" className="design-mode-option is-advanced" onClick={() => onChoose("advanced")}>
+            <span className="design-mode-option-icon"><Sparkles size={26} /></span>
+            <span className="design-mode-option-copy">
+              <span><strong>حالت پیشرفته</strong><em>تمام ابزارها</em></span>
+              <small>برای نقشه‌های کامل، چندطبقه و جزئیات تخصصی</small>
+            </span>
+            <span className="design-mode-feature"><Check size={15} />در، پنجره، فضا و مانع</span>
+            <span className="design-mode-feature"><Check size={15} />طبقات، المان‌ها و نقشه CAD</span>
+            <span className="design-mode-feature"><Check size={15} />تنظیمات و پنل مشخصات کامل</span>
+            <span className="design-mode-enter">ورود به حالت پیشرفته <ArrowLeft size={16} /></span>
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function DesignFocusStage({
   venue,
   plan,
+  experience,
+  onExperienceChange,
   onPlanChange,
   onSummaryChange,
   onHome,
@@ -1735,6 +1849,8 @@ function DesignFocusStage({
 }: {
   venue: VenueType | null;
   plan: BuildingPlan;
+  experience: DesignExperience;
+  onExperienceChange: (experience: DesignExperience) => void;
   onPlanChange: (plan: BuildingPlan) => void;
   onSummaryChange: (summary: PlanSummary) => void;
   onHome: () => void;
@@ -1752,12 +1868,16 @@ function DesignFocusStage({
           <div><small>نوع پروژه فعال</small><strong>{venue?.label ?? blankDesignLabel}</strong></div>
         </div>
         <div className="design-focus-tools">
-          <StudioHelpButton onClick={tour.start} />
+          <div className="design-experience-switch" role="group" aria-label="حالت طراحی">
+            <button type="button" className={experience === "simple" ? "is-active" : ""} aria-pressed={experience === "simple"} onClick={() => onExperienceChange("simple")}>ساده</button>
+            <button type="button" className={experience === "advanced" ? "is-active" : ""} aria-pressed={experience === "advanced"} onClick={() => onExperienceChange("advanced")}>پیشرفته</button>
+          </div>
+          {experience === "advanced" ? <StudioHelpButton onClick={tour.start} /> : null}
           <div className="design-focus-lock"><LockKeyhole size={15} /><span>حالت تمرکز فعال است</span></div>
         </div>
       </header>
       <main className="design-focus-content">
-        <FloorPlanDesigner plan={plan} mode="environment" variant="focus" onPlanChange={onPlanChange} onSummaryChange={onSummaryChange} />
+        <FloorPlanDesigner plan={plan} mode="environment" variant="focus" experience={experience} onPlanChange={onPlanChange} onSummaryChange={onSummaryChange} />
       </main>
       {tour.open ? <StudioTour tourId="design" onClose={tour.close} /> : null}
       <footer className="design-focus-footer">

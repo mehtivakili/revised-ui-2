@@ -118,6 +118,7 @@ export type PlanSummary = {
 
 /** `mode` decides which tools exist: the environment is drawn first, cameras are placed later. */
 export type DesignerMode = "environment" | "cameras";
+export type DesignerExperience = "simple" | "advanced";
 
 type BuildingFloorFilter = "above" | "below" | "all";
 
@@ -137,6 +138,7 @@ export function FloorPlanDesigner({
   plan: controlledPlan,
   mode = "environment",
   variant = "default",
+  experience = "advanced",
   readOnly = false,
   cameraTemplates = [],
   onPlanChange,
@@ -145,6 +147,7 @@ export function FloorPlanDesigner({
   plan?: BuildingPlan;
   mode?: DesignerMode;
   variant?: "default" | "focus";
+  experience?: DesignerExperience;
   /**
    * Presentation mode: the canvas still renders everything and pans and zooms freely,
    * but no tool can alter the plan. Used by the saved-project viewer, where showing a
@@ -157,9 +160,14 @@ export function FloorPlanDesigner({
 }) {
   const [internalPlan, setInternalPlan] = useState<BuildingPlan>(() => controlledPlan ?? createEmptyPlan());
   const plan = controlledPlan ?? internalPlan;
+  const isSimpleEnvironment = mode === "environment" && experience === "simple";
   const tools = useMemo(
-    () => allTools.filter((item) => item.modes.includes(mode) && !(mode === "cameras" && item.id === "camera")),
-    [mode]
+    () => allTools.filter((item) =>
+      item.modes.includes(mode)
+      && !(mode === "cameras" && item.id === "camera")
+      && (!isSimpleEnvironment || item.id === "select" || item.id === "wall")
+    ),
+    [isSimpleEnvironment, mode]
   );
 
   const [requestedTool, setTool] = useState<PlanTool>("select");
@@ -171,6 +179,10 @@ export function FloorPlanDesigner({
     ? requestedTool
     : "select";
   const [viewMode, setViewMode] = useState<PlanViewMode>("top");
+  const visibleViewMode: PlanViewMode = isSimpleEnvironment && viewMode === "building" ? "top" : viewMode;
+  const visibleWallDrawMode: WallDrawMode = isSimpleEnvironment && (isFenceMode(wallDrawMode) || wallDrawMode === "glass")
+    ? "rectangle"
+    : wallDrawMode;
   const [previewFocusFloorId, setPreviewFocusFloorId] = useState<string | null>(null);
   const [buildingFloorFilter, setBuildingFloorFilter] = useState<BuildingFloorFilter>("above");
   const [selection, setSelection] = useState<PlanSelection>(emptySelection);
@@ -772,7 +784,7 @@ export function FloorPlanDesigner({
   if (!activeFloor) return null;
   const activeTool = tools.find((item) => item.id === tool);
   // Shown only while that space is still the selection on the plan view.
-  const pickerRoomId = roomPicker && viewMode !== "building" && soleSelection(selection)?.id === roomPicker.roomId
+  const pickerRoomId = roomPicker && visibleViewMode !== "building" && soleSelection(selection)?.id === roomPicker.roomId
     ? roomPicker.roomId
     : null;
   const pickerRoom = pickerRoomId ? (activeFloor.rooms ?? []).find((room) => room.id === pickerRoomId) : undefined;
@@ -782,7 +794,7 @@ export function FloorPlanDesigner({
   ]).filter((id): id is string => Boolean(id)));
 
   return (
-    <section className={`plan-designer plan-designer-${mode} plan-designer-${variant}${readOnly ? " plan-designer-readonly" : ""}`}>
+    <section className={`plan-designer plan-designer-${mode} plan-designer-${variant}${isSimpleEnvironment ? " plan-designer-simple" : ""}${readOnly ? " plan-designer-readonly" : ""}`}>
       {variant !== "focus" ? <header className="plan-designer-head">
         <span className="plan-designer-head-icon"><Building2 size={20} aria-hidden="true" /></span>
         <div>
@@ -798,7 +810,7 @@ export function FloorPlanDesigner({
           <span><RotateCcw size={13} aria-hidden="true" />دستگیره نارنجی: چرخش</span>
         </div>
       </header> : null}
-      <div className="plan-floor-rail">
+      {!isSimpleEnvironment ? <div className="plan-floor-rail">
         <div className="plan-floor-switcher">
           <span className="plan-floor-switcher-icon"><Layers size={16} aria-hidden="true" /></span>
           <div>
@@ -860,7 +872,7 @@ export function FloorPlanDesigner({
             </button>
           </div>
         ) : null}
-      </div>
+      </div> : null}
 
       {readOnly ? null : <div className="plan-toolbar plan-ribbon">
         <section className="plan-ribbon-section plan-ribbon-drawing" aria-label="ترسیم و جانمایی">
@@ -872,7 +884,8 @@ export function FloorPlanDesigner({
                   <WallToolMenu
                     key={item.id}
                     active={tool === "wall"}
-                    mode={wallDrawMode}
+                    mode={visibleWallDrawMode}
+                    simple={isSimpleEnvironment}
                     onSelect={(nextMode) => {
                       setWallDrawMode(nextMode);
                       setTool("wall");
@@ -918,7 +931,7 @@ export function FloorPlanDesigner({
           <span className="plan-ribbon-label">ترسیم و جانمایی</span>
         </section>
 
-        {mode === "environment" ? (
+        {mode === "environment" && !isSimpleEnvironment ? (
           <section className="plan-ribbon-section plan-ribbon-essentials" aria-label="عناصر آماده پرکاربرد">
             <div className="plan-tool-group">
               <ObstacleToolMenu group="vehicle" label="خودرو" icon={CarFront} onPick={addPresetObstacle} />
@@ -944,37 +957,39 @@ export function FloorPlanDesigner({
 
         <section className="plan-ribbon-section plan-ribbon-view" aria-label="نمایش">
           <div className="plan-tool-group">
-          <button type="button" className={`plan-view-tool is-map${viewMode === "top" ? " active" : ""}`} onClick={() => setViewMode("top")}>
+          <button type="button" className={`plan-view-tool is-map${visibleViewMode === "top" ? " active" : ""}`} onClick={() => setViewMode("top")}>
             <span className="plan-tool-icon"><Grid3x3 size={17} aria-hidden="true" /></span><span>نمای نقشه</span>
           </button>
           <button
             type="button"
-            className={`plan-view-tool is-orbit${viewMode === "orbit" ? " active" : ""}`}
+            className={`plan-view-tool is-orbit${visibleViewMode === "orbit" ? " active" : ""}`}
             onClick={() => setViewMode("orbit")}
             title="در نمای سه‌بعدی، اسکرول ماوس را نگه دارید و بکشید تا نما بچرخد"
           >
             <span className="plan-tool-icon"><Move3d size={17} aria-hidden="true" /></span><span>نمای سه‌بعدی</span>
           </button>
-          <button
-            type="button"
-            className={`plan-view-tool is-building${viewMode === "building" ? " active" : ""}`}
-            onClick={() => {
-              setViewMode("building");
-              setBuildingFloorFilter("above");
-              setPreviewFocusFloorId(null);
-              setTool("select");
-              setSelection(emptySelection);
-              setHint("پیش‌نمایش کلی ساختمان؛ یک طبقه را از پنل کناری انتخاب کنید");
-            }}
-            title="چیدمان همه طبقات روی یکدیگر"
-          >
-            <span className="plan-tool-icon"><Building2 size={17} aria-hidden="true" /></span><span>ساختمان</span>
-          </button>
+          {!isSimpleEnvironment ? (
+            <button
+              type="button"
+              className={`plan-view-tool is-building${visibleViewMode === "building" ? " active" : ""}`}
+              onClick={() => {
+                setViewMode("building");
+                setBuildingFloorFilter("above");
+                setPreviewFocusFloorId(null);
+                setTool("select");
+                setSelection(emptySelection);
+                setHint("پیش‌نمایش کلی ساختمان؛ یک طبقه را از پنل کناری انتخاب کنید");
+              }}
+              title="چیدمان همه طبقات روی یکدیگر"
+            >
+              <span className="plan-tool-icon"><Building2 size={17} aria-hidden="true" /></span><span>ساختمان</span>
+            </button>
+          ) : null}
           </div>
           <span className="plan-ribbon-label">نمایش</span>
         </section>
 
-        <section className="plan-ribbon-section plan-ribbon-settings" aria-label="تنظیم نقشه">
+        {!isSimpleEnvironment ? <section className="plan-ribbon-section plan-ribbon-settings" aria-label="تنظیم نقشه">
           <div className="plan-tool-group">
             <label className="plan-snap-field">
               <span>مقیاس طراحی</span>
@@ -1004,9 +1019,9 @@ export function FloorPlanDesigner({
             />
           </div>
           <span className="plan-ribbon-label">تنظیم نقشه</span>
-        </section>
+        </section> : null}
 
-        <div className="plan-ribbon-quick plan-history-tools" dir="ltr" aria-label="دسترسی سریع">
+        {!isSimpleEnvironment ? <div className="plan-ribbon-quick plan-history-tools" dir="ltr" aria-label="دسترسی سریع">
           <div className="plan-history-actions">
             <button
               type="button"
@@ -1042,11 +1057,11 @@ export function FloorPlanDesigner({
               <span className="plan-advanced-switch-track" aria-hidden="true"><i /></span>
             </button>
           ) : null}
-        </div>
+        </div> : null}
       </div>}
 
       {mode === "environment" && showAdvancedElements ? (
-        <section className="plan-element-strip is-advanced" aria-label="المان‌های پیشرفته">
+        isSimpleEnvironment ? null : <section className="plan-element-strip is-advanced" aria-label="المان‌های پیشرفته">
           <div className="plan-element-strip-label">
             <strong>المان‌های پیشرفته</strong>
             <small>{formatFa(obstaclePresets.filter((item) => !["vehicle", "structure", "tree"].includes(item.group)).length)} المان</small>
@@ -1124,8 +1139,8 @@ export function FloorPlanDesigner({
         ) : null}
       </div> : null}
 
-      <div className={mode === "cameras" ? "plan-workspace plan-workspace-cameras" : "plan-workspace plan-workspace-venue"}>
-        {mode === "environment" && viewMode !== "building" ? (
+      <div className={mode === "cameras" ? "plan-workspace plan-workspace-cameras" : isSimpleEnvironment ? "plan-workspace plan-workspace-simple" : "plan-workspace plan-workspace-venue"}>
+        {mode === "environment" && !isSimpleEnvironment && visibleViewMode !== "building" ? (
           <div className="plan-venue-rail">
             <VenuePanel
               floor={activeFloor}
@@ -1204,19 +1219,19 @@ export function FloorPlanDesigner({
           </div>
         ) : null}
         <PlanCanvas
-          key={viewMode === "building" ? "building-preview" : activeFloor.id}
+          key={visibleViewMode === "building" ? "building-preview" : activeFloor.id}
           floor={activeFloor}
           tool={tool}
-          wallDrawMode={wallDrawMode}
+          wallDrawMode={visibleWallDrawMode}
           doorVariant={doorVariant}
-          viewMode={viewMode}
+          viewMode={visibleViewMode}
           selection={selection}
           snapM={plan.snapM}
           defaults={designDefaults}
-          readOnly={readOnly || viewMode === "building"}
-          buildingFloors={viewMode === "building" ? buildingPreviewFloors : undefined}
-          focusedFloorId={viewMode === "building" ? previewFocusFloorId : null}
-          referenceFloor={viewMode !== "building" && mode === "environment" ? referenceFloor : null}
+          readOnly={readOnly || visibleViewMode === "building"}
+          buildingFloors={visibleViewMode === "building" ? buildingPreviewFloors : undefined}
+          focusedFloorId={visibleViewMode === "building" ? previewFocusFloorId : null}
+          referenceFloor={visibleViewMode !== "building" && mode === "environment" ? referenceFloor : null}
           pendingBackdrop={pendingBackdrop}
           showCoverage={mode === "cameras" && showCoverage}
           showRoomNames={showRoomNames}
@@ -1239,7 +1254,7 @@ export function FloorPlanDesigner({
             setTool("select");
             setHint(null);
           }}
-          onRoomClick={mode === "environment" && !readOnly ? (roomId, at) => setRoomPicker({ roomId, ...at }) : undefined}
+          onRoomClick={mode === "environment" && !isSimpleEnvironment && !readOnly ? (roomId, at) => setRoomPicker({ roomId, ...at }) : undefined}
         />
         {pickerRoom && roomPicker ? (
           <RoomTypeQuickPicker
@@ -1269,8 +1284,8 @@ export function FloorPlanDesigner({
             onClose={closeRoomPicker}
           />
         ) : null}
-        <div className="plan-workspace-sidebar">
-          {viewMode === "building" ? (
+        {!isSimpleEnvironment ? <div className="plan-workspace-sidebar">
+          {visibleViewMode === "building" ? (
             <BuildingPreviewPanel
               floors={buildingPreviewFloors}
               floorFilter={buildingFloorFilter}
@@ -1285,13 +1300,13 @@ export function FloorPlanDesigner({
               }}
             />
           ) : null}
-          {viewMode !== "building" && referenceFloor ? (
+          {visibleViewMode !== "building" && referenceFloor ? (
             <div className="plan-floor-reference-note">
               <Layers size={16} aria-hidden="true" />
               <div><strong>محدوده طبقه زیرین</strong><span>خط قرمز، مرز «{referenceFloor.name}» است؛ بهتر است دیوارهای این طبقه داخل آن بمانند.</span></div>
             </div>
           ) : null}
-          {viewMode !== "building" && backdropControls ? (
+          {visibleViewMode !== "building" && backdropControls ? (
             <BackdropControls
               backdrop={backdropControls}
               isPlacing={Boolean(pendingBackdrop)}
@@ -1309,7 +1324,7 @@ export function FloorPlanDesigner({
               }}
             />
           ) : null}
-          {viewMode !== "building" ? <PlanInspector
+          {visibleViewMode !== "building" ? <PlanInspector
             floor={activeFloor}
             selection={selection}
             activeTool={tool}
@@ -1324,10 +1339,10 @@ export function FloorPlanDesigner({
             onCustomSectionType={addCustomSectionType}
             onSelect={setSelection}
           /> : null}
-        </div>
+        </div> : null}
       </div>
 
-      {pendingRoomCount > 0 ? (
+      {!isSimpleEnvironment && pendingRoomCount > 0 ? (
         <div className="plan-closure-warning plan-room-warning" role="status">
           <TriangleAlert size={17} aria-hidden="true" />
           <div>
@@ -1339,7 +1354,7 @@ export function FloorPlanDesigner({
         </div>
       ) : null}
 
-      {activeFloor.walls.length > 0 && !hasClosedPerimeter ? (
+      {!isSimpleEnvironment && activeFloor.walls.length > 0 && !hasClosedPerimeter ? (
         <div className="plan-closure-warning" role="status">
           <TriangleAlert size={17} aria-hidden="true" />
           <div>
@@ -1351,7 +1366,7 @@ export function FloorPlanDesigner({
 
       <div className="plan-statusbar">
         <span className="plan-hint">{hint ?? activeTool?.hint}</span>
-        <div className="plan-visibility-toggles" aria-label="نمایش برچسب‌های نقشه">
+        {!isSimpleEnvironment ? <div className="plan-visibility-toggles" aria-label="نمایش برچسب‌های نقشه">
           <button
             type="button"
             className={showRoomNames ? "plan-coverage-toggle active" : "plan-coverage-toggle"}
@@ -1384,7 +1399,7 @@ export function FloorPlanDesigner({
               پوشش DORI
             </button>
           ) : null}
-        </div>
+        </div> : null}
         <div className="plan-metrics">
           <span className="plan-grid-readout" title="خطوط پررنگ شبکه هر ۵ متر تکرار می‌شوند">
             <Grid3x3 size={13} aria-hidden="true" />
@@ -1515,10 +1530,12 @@ function DoorToolMenu({
 function WallToolMenu({
   active,
   mode,
+  simple = false,
   onSelect
 }: {
   active: boolean;
   mode: WallDrawMode;
+  simple?: boolean;
   onSelect: (mode: WallDrawMode) => void;
 }) {
   return (
@@ -1547,18 +1564,22 @@ function WallToolMenu({
           <span><strong>رسم مستطیل</strong><small>رسم هم‌زمان چهار دیوار با تعیین دو گوشه</small></span>
           <Square size={17} aria-hidden="true" />
         </button>
-        <button type="button" className={mode === "glass" ? "active" : ""} role="menuitem" onClick={() => onSelect("glass")}>
-          <span><strong>جدار شیشه‌ای</strong><small>مرز شفاف؛ دید دوربین از آن عبور می‌کند</small></span>
-          <Blinds size={17} aria-hidden="true" />
-        </button>
-        <button type="button" className={mode === "fence-mesh" ? "active" : ""} role="menuitem" onClick={() => onSelect("fence-mesh")}>
-          <span><strong>{fenceWallStyles["fence-mesh"].label}</strong><small>{fenceWallStyles["fence-mesh"].description}</small></span>
-          <Fence size={17} aria-hidden="true" />
-        </button>
-        <button type="button" className={mode === "fence-wall" ? "active" : ""} role="menuitem" onClick={() => onSelect("fence-wall")}>
-          <span><strong>{fenceWallStyles["fence-wall"].label}</strong><small>{fenceWallStyles["fence-wall"].description}</small></span>
-          <BrickWall size={17} aria-hidden="true" />
-        </button>
+        {!simple ? (
+          <>
+            <button type="button" className={mode === "glass" ? "active" : ""} role="menuitem" onClick={() => onSelect("glass")}>
+              <span><strong>جدار شیشه‌ای</strong><small>مرز شفاف؛ دید دوربین از آن عبور می‌کند</small></span>
+              <Blinds size={17} aria-hidden="true" />
+            </button>
+            <button type="button" className={mode === "fence-mesh" ? "active" : ""} role="menuitem" onClick={() => onSelect("fence-mesh")}>
+              <span><strong>{fenceWallStyles["fence-mesh"].label}</strong><small>{fenceWallStyles["fence-mesh"].description}</small></span>
+              <Fence size={17} aria-hidden="true" />
+            </button>
+            <button type="button" className={mode === "fence-wall" ? "active" : ""} role="menuitem" onClick={() => onSelect("fence-wall")}>
+              <span><strong>{fenceWallStyles["fence-wall"].label}</strong><small>{fenceWallStyles["fence-wall"].description}</small></span>
+              <BrickWall size={17} aria-hidden="true" />
+            </button>
+          </>
+        ) : null}
       </div>
     </div>
   );
