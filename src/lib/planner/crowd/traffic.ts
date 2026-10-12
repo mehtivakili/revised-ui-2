@@ -23,6 +23,8 @@ const JUNCTION_MERGE_M = 2.2;
 const STOP_SECONDS: [number, number] = [0.6, 1.6];
 const ACCEL = 2.2;
 const BRAKE = 4.5;
+/** A dead end closer than this to a junction is too short to turn round in. */
+const STUB_M = 9;
 
 type Rng = () => number;
 
@@ -266,16 +268,24 @@ export function buildTraffic(floor: FloorPlan, rng: Rng): Traffic {
       break;
     }
   }
+  // 3c. A road drawn a little past a junction leaves a stub too short to turn round in;
+  //     cars would only U-turn on top of the junction. It is no road.
+  const extent = siteExtent(floor);
+  const atSiteEdge = (point: Vec2) => point.x < extent.minX + 3 || point.x > extent.maxX - 3
+    || point.z < extent.minZ + 3 || point.z > extent.maxZ - 3;
+  const degreeOf = (node: number) => edges.filter((edge) => edge.u === node || edge.v === node).length;
+  for (let index = edges.length - 1; index >= 0; index -= 1) {
+    const edge = edges[index]!;
+    const length = len(sub(junctions[edge.u]!.position, junctions[edge.v]!.position));
+    if (length >= STUB_M) continue;
+    const stub = [[edge.u, edge.v], [edge.v, edge.u]].some(([end, from]) =>
+      degreeOf(end!) === 1 && degreeOf(from!) >= 3 && !atSiteEdge(junctions[end!]!.position));
+    if (stub) edges.splice(index, 1);
+  }
   for (const edge of edges) { junctions[edge.u]!.degree += 1; junctions[edge.v]!.degree += 1; }
 
   // 4. A dead end at the edge of the site is where traffic comes and goes.
-  const extent = siteExtent(floor);
-  for (const junction of junctions) {
-    junction.gateway = junction.degree === 1 && (
-      junction.position.x < extent.minX + 3 || junction.position.x > extent.maxX - 3
-      || junction.position.z < extent.minZ + 3 || junction.position.z > extent.maxZ - 3
-    );
-  }
+  for (const junction of junctions) junction.gateway = junction.degree === 1 && atSiteEdge(junction.position);
 
   // 5. Lanes: one each way on a two-way road, kept back from junctions so the turns fit.
   const widthAt = (node: number) => Math.max(...edges.filter((edge) => edge.u === node || edge.v === node).map((edge) => edge.width));
@@ -359,9 +369,11 @@ export function buildTraffic(floor: FloorPlan, rng: Rng): Traffic {
     const edge = edges[lane.edge]!;
     if (junction.gateway) { lane.control = "exit"; continue; }
     const incomingDirection = unit(sub(lane.points[1]!, lane.points[0]!));
+    // Turning round is for a road's end, or wherever there is no other way on.
+    const onwards = outgoing.filter((out) => out.edge !== lane.edge);
     for (const out of outgoing) {
       const uTurn = out.edge === lane.edge;
-      if (uTurn && junction.degree > 1) continue;
+      if (uTurn && onwards.length) continue;
       const p0 = lane.points[lane.points.length - 1]!;
       const p3 = out.points[0]!;
       const outDirection = unit(sub(out.points[1]!, out.points[0]!));
@@ -396,10 +408,23 @@ export function buildTraffic(floor: FloorPlan, rng: Rng): Traffic {
     else if (junction.degree === 2 && lane.next.some((id) => tracks[id]!.limit < Infinity && tracks[id]!.limit < 8)) lane.control = "yield";
   }
 
+  // A narrow one-way drive that stops inside the site has nowhere to turn round: a car on
+  // it could only vanish at the end. Such lanes, and turns leading only to them, carry no traffic.
+  const deadEnd = new Set(tracks.filter((track) => track.control === "exit" && !junctions[track.node]!.gateway).map((track) => track.id));
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const track of tracks) {
+      if (deadEnd.has(track.id) || !track.next.length || !track.next.every((id) => deadEnd.has(id))) continue;
+      deadEnd.add(track.id);
+      grew = true;
+    }
+  }
+  for (const track of tracks) track.next = track.next.filter((id) => !deadEnd.has(id));
+
   setBackStopLines(tracks);
   const zones = conflictZones(tracks);
-  const entries = tracks.filter((track) => track.kind === "lane" && track.entry).map((track) => track.id);
-  const cars = spawnCars(tracks, rng);
+  const entries = tracks.filter((track) => track.kind === "lane" && track.entry && !deadEnd.has(track.id)).map((track) => track.id);
+  const cars = spawnCars(tracks, rng, (track) => !deadEnd.has(track.id));
   for (const car of cars) placeCar(tracks, car);
   return { tracks, junctions, zones, cars, entries };
 }
@@ -615,8 +640,8 @@ function newCar(id: string, rng: Rng, track: number, s: number): TrafficCar {
 }
 
 /** About one car per 35 m of lane, spaced out along the lanes. */
-function spawnCars(tracks: Track[], rng: Rng): TrafficCar[] {
-  const lanes = tracks.filter((track) => track.kind === "lane" && track.length > 6);
+function spawnCars(tracks: Track[], rng: Rng, usable: (track: Track) => boolean): TrafficCar[] {
+  const lanes = tracks.filter((track) => track.kind === "lane" && track.length > 6 && usable(track));
   const total = lanes.reduce((sum, lane) => sum + lane.length, 0);
   const count = Math.max(lanes.length ? 1 : 0, Math.min(14, Math.round(total / 35)));
   const cars: TrafficCar[] = [];
@@ -1228,7 +1253,7 @@ function release(traffic: Traffic, car: TrafficCar) {
 /** A car that left the site comes back in on a road from the edge, when there is room. */
 function reenter(traffic: Traffic, car: TrafficCar, time: number, rng: Rng) {
   if (time < car.waitUntil) return;
-  const options = traffic.entries.length ? traffic.entries : traffic.tracks.filter((track) => track.kind === "lane" && track.length > 6).map((track) => track.id);
+  const options = traffic.entries.length ? traffic.entries : traffic.tracks.filter((track) => track.kind === "lane" && track.length > 6 && track.control !== "exit").map((track) => track.id);
   if (!options.length) return;
   const lane = options[Math.floor(rng() * options.length)]!;
   const entry = traffic.tracks[lane]!;
