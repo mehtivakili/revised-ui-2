@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
-import { query } from "@/src/lib/db";
+import { pool, query } from "@/src/lib/db";
 import type { BuildingPlan } from "@/src/domain/planner/types";
 import { floorAreaM2 } from "@/src/lib/planner/geometry";
+import { DEFAULT_PROJECT_LIMIT } from "@/src/lib/projects/limits";
 
 /**
  * Storage for saved designs.
@@ -252,6 +253,55 @@ export async function getProject(userId: string, id: string): Promise<ProjectRec
   };
 }
 
+/* ── Per-account limit ─────────────────────────────────────────────── */
+
+/** How many designs this account may keep, or null for no limit. */
+export function projectLimitFor(role: string | undefined): number | null {
+  if (role === "admin") return null;
+  const configured = Number(process.env.PROJECTS_PER_USER);
+  return Number.isInteger(configured) && configured > 0 ? configured : DEFAULT_PROJECT_LIMIT;
+}
+
+export class ProjectLimitError extends Error {
+  limit: number;
+
+  constructor(limit: number) {
+    super(`project limit of ${limit} reached`);
+    this.name = "ProjectLimitError";
+    this.limit = limit;
+  }
+}
+
+/**
+ * Inserts a project row, refusing when the account already holds `limit` projects.
+ *
+ * The count and the insert run under a per-account advisory lock, so two saves fired at
+ * once (a double click, two tabs) cannot both slip under the limit.
+ */
+async function insertProjectRow(userId: string, limit: number | null, sql: string, params: unknown[]) {
+  if (limit === null) {
+    await query(sql, params);
+    return;
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`projects:${userId}`]);
+    const count = await client.query("SELECT COUNT(*)::int AS n FROM projects WHERE user_id = $1", [userId]);
+    if (Number(count.rows[0]?.n ?? 0) >= limit) {
+      await client.query("ROLLBACK");
+      throw new ProjectLimitError(limit);
+    }
+    await client.query(sql, params);
+    await client.query("COMMIT");
+  } catch (error) {
+    if (!(error instanceof ProjectLimitError)) await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 /* ── Writes ────────────────────────────────────────────────────────── */
 
 async function writeAssets(projectId: string, assets: PendingAsset[]) {
@@ -263,12 +313,19 @@ async function writeAssets(projectId: string, assets: PendingAsset[]) {
   }
 }
 
-export async function createProject(userId: string, input: ProjectInput): Promise<ProjectRecord> {
+/** `limit` caps how many projects the account may hold; see `projectLimitFor`. */
+export async function createProject(
+  userId: string,
+  input: ProjectInput,
+  limit: number | null = null
+): Promise<ProjectRecord> {
   await ensureProjectTables();
   const id = randomUUID();
   const { plan, assets } = extractAssets(input.plan);
 
-  await query(
+  await insertProjectRow(
+    userId,
+    limit,
     `INSERT INTO projects (id, user_id, name, venue_type_id, status, thumbnail,
                            brief, plan, templates, quantities, result, summary)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
@@ -345,7 +402,11 @@ export async function deleteProject(userId: string, id: string): Promise<boolean
 }
 
 /** Copies a project, including its drawings, so the original is never put at risk. */
-export async function duplicateProject(userId: string, id: string): Promise<ProjectRecord | null> {
+export async function duplicateProject(
+  userId: string,
+  id: string,
+  limit: number | null = null
+): Promise<ProjectRecord | null> {
   await ensureProjectTables();
   const source = await query(
     `SELECT name, venue_type_id, status, thumbnail, brief, plan, templates, quantities, result, summary
@@ -356,7 +417,9 @@ export async function duplicateProject(userId: string, id: string): Promise<Proj
   if (!row) return null;
 
   const copyId = randomUUID();
-  await query(
+  await insertProjectRow(
+    userId,
+    limit,
     `INSERT INTO projects (id, user_id, name, venue_type_id, status, thumbnail,
                            brief, plan, templates, quantities, result, summary)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,

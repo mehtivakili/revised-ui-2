@@ -802,6 +802,62 @@ export function FloorPlanDesigner({
     ...(floor.coverageRequirements ?? []).map((requirement) => requirement.sectionTypeId)
   ]).filter((id): id is string => Boolean(id)));
 
+  /*
+   * The view controls. They change only how the plan is shown, so a read-only viewer keeps
+   * them: the full ribbon is hidden there, but this group still lets a saved design be
+   * looked at in plan, in 3D and as the whole building.
+   */
+  const viewRibbonSection = (
+    <section className="plan-ribbon-section plan-ribbon-view" aria-label="نمایش">
+      <div className="plan-tool-group">
+      <button type="button" className={`plan-view-tool is-map${visibleViewMode === "top" ? " active" : ""}`} onClick={() => setViewMode("top")}>
+        <span className="plan-tool-icon"><Grid3x3 size={17} aria-hidden="true" /></span><span>نمای نقشه</span>
+      </button>
+      <button
+        type="button"
+        className={`plan-view-tool is-orbit${visibleViewMode === "orbit" ? " active" : ""}`}
+        onClick={() => setViewMode("orbit")}
+        title="در نمای سه‌بعدی، اسکرول ماوس را نگه دارید و بکشید تا نما بچرخد"
+      >
+        <span className="plan-tool-icon"><Move3d size={17} aria-hidden="true" /></span><span>نمای سه‌بعدی</span>
+      </button>
+      {!isSimpleEnvironment ? (
+        <button
+          type="button"
+          className={`plan-view-tool is-building${visibleViewMode === "building" ? " active" : ""}`}
+          onClick={() => {
+            setViewMode("building");
+            setBuildingFloorFilter("above");
+            setPreviewFocusFloorId(null);
+            setTool("select");
+            setSelection(emptySelection);
+            setHint("پیش‌نمایش کلی ساختمان؛ یک طبقه را از پنل کناری انتخاب کنید");
+          }}
+          title="چیدمان همه طبقات روی یکدیگر"
+        >
+          <span className="plan-tool-icon"><Building2 size={17} aria-hidden="true" /></span><span>ساختمان</span>
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className={`plan-view-tool is-dynamic${dynamicEnvironment ? " active" : ""}`}
+        aria-pressed={dynamicEnvironment}
+        onClick={() => {
+          const next = !dynamicEnvironment;
+          setDynamicEnvironment(next);
+          setHint(next
+            ? "محیط دینامیک روشن شد: آدم‌ها راه می‌روند، می‌نشینند و صحبت می‌کنند و خودروها در جاده‌ها تردد دارند؛ در نمای سه‌بعدی بهتر دیده می‌شود"
+            : "محیط دینامیک خاموش شد");
+        }}
+        title="نمایش آدم‌ها و خودروهای در حال حرکت روی نقشه؛ فقط برای نمایش است و در طرح و محاسبات اثری ندارد"
+      >
+        <span className="plan-tool-icon"><Users size={17} aria-hidden="true" /></span><span>محیط دینامیک</span>
+      </button>
+      </div>
+      <span className="plan-ribbon-label">نمایش</span>
+    </section>
+  );
+
   return (
     <section className={`plan-designer plan-designer-${mode} plan-designer-${variant}${isSimpleEnvironment ? " plan-designer-simple" : ""}${readOnly ? " plan-designer-readonly" : ""}`}>
       {variant !== "focus" ? <header className="plan-designer-head">
@@ -814,10 +870,10 @@ export function FloorPlanDesigner({
               : "دوربین‌ها را روی نقشه قرار دهید، با کشیدن بدنه جابه‌جا و فقط با دستگیره نارنجی بچرخانید."}
           </small>
         </div>
-        <div className="plan-designer-head-tips" aria-label="راهنمای تعامل">
+        {readOnly ? null : <div className="plan-designer-head-tips" aria-label="راهنمای تعامل">
           <span><MousePointer2 size={13} aria-hidden="true" />کشیدن بدنه: جابه‌جایی</span>
           <span><RotateCcw size={13} aria-hidden="true" />دستگیره نارنجی: چرخش</span>
-        </div>
+        </div>}
       </header> : null}
       {!isSimpleEnvironment ? <div className="plan-floor-rail">
         <div className="plan-floor-switcher">
@@ -883,7 +939,7 @@ export function FloorPlanDesigner({
         ) : null}
       </div> : null}
 
-      {readOnly ? null : <div className="plan-toolbar plan-ribbon">
+      {readOnly ? <div className="plan-toolbar plan-ribbon is-readonly">{viewRibbonSection}</div> : <div className="plan-toolbar plan-ribbon">
         <section className="plan-ribbon-section plan-ribbon-drawing" aria-label="ترسیم و جانمایی">
           <div className="plan-tool-group">
             {tools.map((item) => {
@@ -985,54 +1041,7 @@ export function FloorPlanDesigner({
           </section>
         ) : null}
 
-        <section className="plan-ribbon-section plan-ribbon-view" aria-label="نمایش">
-          <div className="plan-tool-group">
-          <button type="button" className={`plan-view-tool is-map${visibleViewMode === "top" ? " active" : ""}`} onClick={() => setViewMode("top")}>
-            <span className="plan-tool-icon"><Grid3x3 size={17} aria-hidden="true" /></span><span>نمای نقشه</span>
-          </button>
-          <button
-            type="button"
-            className={`plan-view-tool is-orbit${visibleViewMode === "orbit" ? " active" : ""}`}
-            onClick={() => setViewMode("orbit")}
-            title="در نمای سه‌بعدی، اسکرول ماوس را نگه دارید و بکشید تا نما بچرخد"
-          >
-            <span className="plan-tool-icon"><Move3d size={17} aria-hidden="true" /></span><span>نمای سه‌بعدی</span>
-          </button>
-          {!isSimpleEnvironment ? (
-            <button
-              type="button"
-              className={`plan-view-tool is-building${visibleViewMode === "building" ? " active" : ""}`}
-              onClick={() => {
-                setViewMode("building");
-                setBuildingFloorFilter("above");
-                setPreviewFocusFloorId(null);
-                setTool("select");
-                setSelection(emptySelection);
-                setHint("پیش‌نمایش کلی ساختمان؛ یک طبقه را از پنل کناری انتخاب کنید");
-              }}
-              title="چیدمان همه طبقات روی یکدیگر"
-            >
-              <span className="plan-tool-icon"><Building2 size={17} aria-hidden="true" /></span><span>ساختمان</span>
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className={`plan-view-tool is-dynamic${dynamicEnvironment ? " active" : ""}`}
-            aria-pressed={dynamicEnvironment}
-            onClick={() => {
-              const next = !dynamicEnvironment;
-              setDynamicEnvironment(next);
-              setHint(next
-                ? "محیط دینامیک روشن شد: آدم‌ها راه می‌روند، می‌نشینند و صحبت می‌کنند و خودروها در جاده‌ها تردد دارند؛ در نمای سه‌بعدی بهتر دیده می‌شود"
-                : "محیط دینامیک خاموش شد");
-            }}
-            title="نمایش آدم‌ها و خودروهای در حال حرکت روی نقشه؛ فقط برای نمایش است و در طرح و محاسبات اثری ندارد"
-          >
-            <span className="plan-tool-icon"><Users size={17} aria-hidden="true" /></span><span>محیط دینامیک</span>
-          </button>
-          </div>
-          <span className="plan-ribbon-label">نمایش</span>
-        </section>
+        {viewRibbonSection}
 
         {!isSimpleEnvironment ? <section className="plan-ribbon-section plan-ribbon-settings" aria-label="تنظیم نقشه">
           <div className="plan-tool-group">
@@ -1132,7 +1141,7 @@ export function FloorPlanDesigner({
         </section>
       ) : null}
 
-      {variant !== "focus" ? <div className="plan-defaults-section">
+      {variant !== "focus" && !readOnly ? <div className="plan-defaults-section">
         <button
           type="button"
           className={showDefaults ? "plan-defaults-toggle active" : "plan-defaults-toggle"}
@@ -1201,7 +1210,8 @@ export function FloorPlanDesigner({
             />
           </div>
         ) : null}
-        {mode === "cameras" ? (
+        {/* The optimiser and the device palette only change the plan, so a viewer leaves them out. */}
+        {mode === "cameras" && !readOnly ? (
           <div className="plan-camera-library">
             <section className="smart-placement-panel">
               <div className="smart-placement-heading">

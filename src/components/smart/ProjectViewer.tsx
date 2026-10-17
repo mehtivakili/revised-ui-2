@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
-  ArrowRight, Camera, Layers, LoaderCircle, PencilLine, Ruler, ShieldAlert, Square
+  ArrowRight, Camera, Layers, LoaderCircle, Map as MapIcon, PencilLine, Ruler, ShieldAlert, Square
 } from "lucide-react";
 import type { BuildingPlan } from "@/src/domain/planner/types";
 import {
@@ -25,6 +25,8 @@ import { formatFa } from "@/src/lib/chatbot/persian";
  * someone, so it leads with the drawing and the tables rather than with editing tools that
  * cannot be used. The designer is mounted in read-only mode, which keeps the same
  * rendering — rooms, labels, coverage — without any way to change the plan by accident.
+ * Looking around is still allowed: switching floors, plan, 3D and building views, and
+ * switching between the drawn environment and the camera placement.
  */
 
 const FloorPlanDesigner = dynamic(
@@ -51,7 +53,9 @@ type ViewerProject = {
 };
 
 export function ProjectViewer({ project }: { project: ViewerProject }) {
-  const [plan] = useState<BuildingPlan>(project.plan);
+  const [plan, setPlan] = useState<BuildingPlan>(project.plan);
+  const hasCameras = project.summary.cameraCount > 0;
+  const [layer, setLayer] = useState<"environment" | "cameras">(hasCameras ? "cameras" : "environment");
   const venue = findVenueType(project.venueTypeId ?? undefined);
   const custom = plan.customSectionTypes ?? [];
 
@@ -81,7 +85,7 @@ export function ProjectViewer({ project }: { project: ViewerProject }) {
           </p>
         </div>
         <div className="project-viewer-actions">
-          <Link href="/planner" className="project-viewer-edit">
+          <Link href={`/planner?project=${encodeURIComponent(project.id)}`} className="project-viewer-edit">
             <PencilLine size={16} aria-hidden="true" /> ویرایش در طراح
           </Link>
         </div>
@@ -104,8 +108,39 @@ export function ProjectViewer({ project }: { project: ViewerProject }) {
         </div>
       )}
 
+      <div className="project-viewer-layers" role="tablist" aria-label="نوع نمایش">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={layer === "environment"}
+          className={layer === "environment" ? "is-active" : undefined}
+          onClick={() => setLayer("environment")}
+        >
+          <MapIcon size={15} aria-hidden="true" />نقشه محیط
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={layer === "cameras"}
+          className={layer === "cameras" ? "is-active" : undefined}
+          onClick={() => setLayer("cameras")}
+        >
+          <Camera size={15} aria-hidden="true" />جانمایی دوربین‌ها
+          <small>{formatFa(project.summary.cameraCount)}</small>
+        </button>
+      </div>
+
       <section className="project-viewer-map">
-        <FloorPlanDesigner plan={plan} mode="cameras" readOnly onPlanChange={() => {}} />
+        <FloorPlanDesigner
+          key={layer}
+          plan={plan}
+          mode={layer}
+          readOnly
+          // Only the floor being looked at is taken from the designer; nothing it sends can
+          // change the saved design itself.
+          onPlanChange={(next) => setPlan((current) =>
+            next.activeFloorId === current.activeFloorId ? current : { ...current, activeFloorId: next.activeFloorId })}
+        />
       </section>
 
       <div className="project-viewer-tables">

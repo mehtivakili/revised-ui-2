@@ -167,6 +167,35 @@ describe("project storage", { skip: store ? false : reason }, () => {
     assert.equal(await store.readAsset(USER, project.id, assetId), null);
   });
 
+  test("an account keeps at most its limit of designs; deleting one makes room", async () => {
+    const LIMITED = "__test_user_limited__";
+    const input = { name: "سقف", venueTypeId: "shop", brief: {}, plan: samplePlan() };
+    const first = await store.createProject(LIMITED, input, 2);
+    created.push([LIMITED, first.id]);
+    // Two saves fired together must not both slip under the limit.
+    const racing = await Promise.allSettled([
+      store.createProject(LIMITED, input, 2),
+      store.createProject(LIMITED, input, 2)
+    ]);
+    for (const outcome of racing) if (outcome.status === "fulfilled") created.push([LIMITED, outcome.value.id]);
+    assert.equal(racing.filter((outcome) => outcome.status === "fulfilled").length, 1);
+    const refused = racing.find((outcome) => outcome.status === "rejected");
+    assert.ok(refused.reason instanceof store.ProjectLimitError);
+    assert.equal(refused.reason.limit, 2);
+    assert.equal((await store.listProjects(LIMITED)).length, 2, "the refused save left nothing behind");
+
+    await assert.rejects(store.duplicateProject(LIMITED, first.id, 2), store.ProjectLimitError);
+    assert.ok(await store.updateProject(LIMITED, first.id, input), "editing a saved design is never limited");
+
+    await store.deleteProject(LIMITED, first.id);
+    const again = await store.createProject(LIMITED, input, 2);
+    created.push([LIMITED, again.id]);
+    assert.equal((await store.listProjects(LIMITED)).length, 2);
+
+    assert.equal(store.projectLimitFor("admin"), null, "admins are not limited");
+    assert.equal(store.projectLimitFor("user"), 2);
+  });
+
   test("cleanup", async () => {
     for (const [user, id] of created) await store.deleteProject(user, id);
     assert.equal((await store.listProjects(USER)).length, 0);

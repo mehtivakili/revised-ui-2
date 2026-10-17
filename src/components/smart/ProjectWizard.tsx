@@ -16,15 +16,17 @@ import { defaultCameraTemplates, zonesFromPlan, zonesFromTemplates } from "@/src
 import { recommendCameraSelection, type CameraSelectionAnalysis } from "@/src/lib/planner/camera-selection";
 import { createSamplePlan, sampleVenueTypeIds, type SamplePlanId } from "@/src/lib/planner/sample-plans";
 import { venueTypes, type VenueType, type VenueTypeId } from "@/src/domain/planner/venues";
-import { ProjectGallery, VenueComposition } from "@/src/components/smart/ProjectGallery";
+import { ProjectGallery, ProjectLimitDialog, VenueComposition } from "@/src/components/smart/ProjectGallery";
 import { StudioHelpButton, StudioTour, useStudioTour } from "@/src/components/smart/StudioTour";
 import {
   createProject as createStoredProject,
   fetchProject,
+  ProjectRequestError,
   saveProject as saveStoredProject,
   type ProjectListItem,
   type ProjectPayload
 } from "@/src/lib/projects/client";
+import { DEFAULT_PROJECT_LIMIT, PROJECT_LIMIT_CODE } from "@/src/lib/projects/limits";
 import { useRouter } from "next/navigation";
 
 const formatFaCount = (value: number) => new Intl.NumberFormat("fa-IR").format(value);
@@ -854,6 +856,8 @@ export function ProjectWizard() {
   const [projectName, setProjectName] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState("");
+  /** Set when a new design could not be saved because the account is full: the limit. */
+  const [limitDialog, setLimitDialog] = useState<number | null>(null);
   /** Bumped to make the gallery refetch after a save. */
   const [galleryToken, setGalleryToken] = useState(0);
   const dirtyRef = useRef(false);
@@ -954,6 +958,9 @@ export function ProjectWizard() {
     } catch (cause) {
       setSaveState("error");
       setSaveError(cause instanceof Error ? cause.message : "ذخیره پروژه انجام نشد.");
+      if (cause instanceof ProjectRequestError && cause.code === PROJECT_LIMIT_CODE) {
+        setLimitDialog(cause.limit ?? DEFAULT_PROJECT_LIMIT);
+      }
       return null;
     }
   }, [buildPayload, projectId]);
@@ -973,8 +980,12 @@ export function ProjectWizard() {
 
   useEffect(() => { dirtyRef.current = true; }, [brief, buildingPlan, result]);
 
-  /** Loads a saved design back into the wizard and drops the user straight into it. */
-  const openSavedProject = useCallback(async (item: ProjectListItem) => {
+  /**
+   * Loads a saved design back into the wizard and drops the user straight into the drawing
+   * studio. Step 1 underneath is the project-type page, so cancelling the studio returns
+   * there. The full tool set is shown, since a saved design may use any element.
+   */
+  const openSavedProject = useCallback(async (item: Pick<ProjectListItem, "id">) => {
     try {
       const project = await fetchProject(item.id);
       setProjectId(project.id);
@@ -983,14 +994,30 @@ export function ProjectWizard() {
       setBuildingPlan(project.plan);
       setResult((project.result as RecommendationResult | null) ?? null);
       setSiteMode("designer");
-      setDesignFocusActive(false);
+      setDesignExperience("advanced");
+      setPendingDesignStart(null);
       setSaveState("saved");
       dirtyRef.current = false;
-      setStep(1);
+      // A design saved with cameras placed reopens where they are, in the camera studio;
+      // otherwise in the drawing studio.
+      const hasCameras = (project.plan?.floors ?? []).some((floor) => (floor.cameras?.length ?? 0) > 0);
+      setStep(hasCameras ? 3 : 1);
+      setDesignFocusActive(!hasCameras);
     } catch {
       setSaveError("باز کردن پروژه انجام نشد.");
     }
   }, []);
+
+  // "Edit in the designer" on the project page links here with ?project=<id>.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("project");
+    if (!id) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    // Every state update in openSavedProject follows the fetch, never the effect body.
+    (async () => {
+      await openSavedProject({ id });
+    })();
+  }, [openSavedProject]);
 
   const viewSavedProject = useCallback((item: ProjectListItem) => {
     router.push(`/projects/${item.id}`);
@@ -1197,8 +1224,33 @@ export function ProjectWizard() {
     setStep(1);
   };
 
+  /*
+   * Saving from inside the studios. The first save creates the design in «پروژه‌های من»;
+   * every later save, and the autosave, replaces that same design rather than adding one.
+   */
+  const focusSave: FocusSaveProps = {
+    name: projectName,
+    placeholder: defaultProjectName(buildingPlan.venueTypeId),
+    onNameChange: setProjectName,
+    stored: Boolean(projectId),
+    state: saveState,
+    error: saveError,
+    cameraCount: buildingPlan.floors.reduce((sum, floor) => sum + (floor.cameras?.length ?? 0), 0),
+    onSave: () => { void persistProject(); }
+  };
+
+  const limitDialogNode = limitDialog !== null ? (
+    <ProjectLimitDialog
+      limit={limitDialog}
+      onClose={() => setLimitDialog(null)}
+      onSave={() => { setLimitDialog(null); setGalleryToken((token) => token + 1); void persistProject(); }}
+    />
+  ) : null;
+
   if (designFocusActive) return (
+    <>
     <DesignFocusStage
+      save={focusSave}
       venue={selectedVenue}
       plan={buildingPlan}
       experience={designExperience}
@@ -1212,10 +1264,14 @@ export function ProjectWizard() {
         setStep(2);
       }}
     />
+    {limitDialogNode}
+    </>
   );
 
   if (cameraFocusActive) return (
+    <>
     <CameraPlacementFocusStage
+      save={focusSave}
       venue={selectedVenue}
       plan={buildingPlan}
       cameraTemplates={cameraTemplates}
@@ -1226,6 +1282,8 @@ export function ProjectWizard() {
       onBack={() => setStep(2)}
       onContinue={() => setStep(4)}
     />
+    {limitDialogNode}
+    </>
   );
 
   if (step === 1) return (
@@ -1297,6 +1355,7 @@ export function ProjectWizard() {
     </div>
     <div className="wizard-progress"><span style={{ width: progress }} /></div>
     {savedMessage && <button type="button" className="saved-toast" onClick={() => setSavedMessage("")}><Check size={14} />{savedMessage}</button>}
+    {limitDialogNode}
 
     {step === 1 && <div className="wizard-stage-layout wizard-stage-layout-fluid">
       <WizardVisual image="/assets/wizard-environment.webp" title="نقشه اولیه پوشش" description="ابعاد و نوع محیط روی تعداد دوربین، مقاومت بدنه و پیچیدگی کابل‌کشی اثر دارد." tips={["متراژ تقریبی کافی است", "تعداد طبقات را جدا حساب کنید", "ورودی‌های مهم را فراموش نکنید"]} />
@@ -1836,7 +1895,56 @@ function DesignModeDialog({
   );
 }
 
+type FocusSaveProps = {
+  name: string;
+  placeholder: string;
+  onNameChange: (name: string) => void;
+  /** True once the design exists in «پروژه‌های من»: saving then replaces it. */
+  stored: boolean;
+  state: "idle" | "saving" | "saved" | "error";
+  error: string;
+  cameraCount: number;
+  onSave: () => void;
+};
+
+/** Name and save button in a studio header. */
+function FocusSaveControl({ save, withCameras = false }: { save: FocusSaveProps; withCameras?: boolean }) {
+  const saving = save.state === "saving";
+  const what = withCameras && save.cameraCount > 0
+    ? `نقشه و ${formatFaCount(save.cameraCount)} دوربین جانمایی‌شده`
+    : "نقشه";
+  return (
+    <div className="focus-save">
+      <label className="focus-save-name">
+        <FolderOpen size={14} aria-hidden="true" />
+        <input
+          type="text"
+          value={save.name}
+          placeholder={save.placeholder}
+          onChange={(event) => save.onNameChange(event.target.value)}
+          aria-label="نام نقشه"
+        />
+      </label>
+      <button
+        type="button"
+        className="focus-save-button"
+        onClick={save.onSave}
+        disabled={saving}
+        title={save.stored
+          ? `${what} روی همین فایل ذخیره می‌شود و فایل جدیدی ساخته نمی‌شود.`
+          : `${what} در «پروژه‌های من» ذخیره می‌شود.`}
+      >
+        {saving ? <LoaderCircle className="is-spinning" size={15} aria-hidden="true" /> : <Save size={15} aria-hidden="true" />}
+        {saving ? "در حال ذخیره…" : save.stored ? "ذخیره تغییرات" : "ذخیره نقشه"}
+      </button>
+      {save.state === "saved" && <span className="focus-save-state is-ok" role="status"><Check size={13} aria-hidden="true" />ذخیره شد</span>}
+      {save.state === "error" && <span className="focus-save-state is-error" role="status" title={save.error}><CircleAlert size={13} aria-hidden="true" />ذخیره نشد</span>}
+    </div>
+  );
+}
+
 function DesignFocusStage({
+  save,
   venue,
   plan,
   experience,
@@ -1847,6 +1955,7 @@ function DesignFocusStage({
   onCancel,
   onContinue
 }: {
+  save: FocusSaveProps;
   venue: VenueType | null;
   plan: BuildingPlan;
   experience: DesignExperience;
@@ -1873,6 +1982,7 @@ function DesignFocusStage({
             <button type="button" className={experience === "advanced" ? "is-active" : ""} aria-pressed={experience === "advanced"} onClick={() => onExperienceChange("advanced")}>پیشرفته</button>
           </div>
           {experience === "advanced" ? <StudioHelpButton onClick={tour.start} /> : null}
+          <FocusSaveControl save={save} />
           <div className="design-focus-lock"><LockKeyhole size={15} /><span>حالت تمرکز فعال است</span></div>
         </div>
       </header>
@@ -1892,6 +2002,7 @@ function DesignFocusStage({
 }
 
 function CameraPlacementFocusStage({
+  save,
   venue,
   plan,
   cameraTemplates,
@@ -1902,6 +2013,7 @@ function CameraPlacementFocusStage({
   onBack,
   onContinue
 }: {
+  save: FocusSaveProps;
   venue: VenueType | null;
   plan: BuildingPlan;
   cameraTemplates: ProjectCameraTemplate[];
@@ -1929,6 +2041,7 @@ function CameraPlacementFocusStage({
         </div>
         <div className="design-focus-tools">
           <StudioHelpButton onClick={tour.start} />
+          <FocusSaveControl save={save} withCameras />
           <div className="design-focus-lock"><LockKeyhole size={15} /><span>حالت تمرکز فعال است</span></div>
         </div>
       </header>

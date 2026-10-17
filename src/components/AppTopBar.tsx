@@ -1,11 +1,12 @@
 ﻿import Link from "next/link";
-import { Phone, Bell, Download, LogIn, Sparkles } from "lucide-react";
+import { Phone, Download, LogIn, Sparkles } from "lucide-react";
 import { ProfileMenu } from "@/src/components/ProfileMenu";
 import { ToolsMenu } from "@/src/components/ToolsMenu";
 import { TopSearch } from "@/src/components/TopSearch";
 import { TopBarLayout } from "@/src/components/TopBarLayout";
 import { OnlinePresence } from "@/src/components/OnlinePresence";
 import { LoginLink } from "@/src/components/LoginLink";
+import { TopGreeting } from "@/src/components/TopGreeting";
 import { getUserById } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
@@ -40,7 +41,7 @@ export async function AppTopBar() {
       }
     >
       {session ? <OnlinePresence /> : null}
-      <header className="top-bar">
+      <header className={session ? "top-bar is-signed-in" : "top-bar"}>
         <Link className="brand-mark" href="/" aria-label="همیار دوربین">
           <span>
             <strong>همیار دوربین</strong>
@@ -63,12 +64,10 @@ export async function AppTopBar() {
         </nav>
 
         <div className="top-actions">
+          {session ? <TopGreeting name={user?.displayName?.trim() || session.username} /> : null}
           <Link href="/contacts" className="icon-button" aria-label="تماس با ما" title="تماس با ما">
             <Phone size={18} aria-hidden="true" />
           </Link>
-          <button type="button" className="icon-button top-utility" aria-label="اعلان‌ها">
-            <Bell size={18} aria-hidden="true" />
-          </button>
           {session ? (
             <ProfileMenu username={session.username} plan={access.plan} isAdmin={session?.role === "admin"} />
           ) : (

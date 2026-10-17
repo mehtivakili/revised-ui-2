@@ -985,7 +985,7 @@ test("public-safety and education samples stay detailed without copying a sensit
 
 test("the compact ribbon keeps essential assets visible and gates advanced categories", () => {
   const source = fs.readFileSync(path.resolve("src", "components", "planner", "FloorPlanDesigner.tsx"), "utf8");
-  const essentials = source.slice(source.indexOf('className="plan-ribbon-section plan-ribbon-essentials"'), source.indexOf('className="plan-ribbon-section plan-ribbon-view"'));
+  const essentials = source.slice(source.indexOf('className="plan-ribbon-section plan-ribbon-essentials"'), source.indexOf("{viewRibbonSection}", source.indexOf('className="plan-ribbon-section plan-ribbon-essentials"')));
   const advanced = source.slice(source.indexOf('className="plan-element-strip is-advanced"'), source.indexOf('className="plan-defaults-section"'));
   const ribbon = source.slice(source.indexOf('className="plan-toolbar plan-ribbon"'), source.indexOf('className="plan-element-strip is-advanced"'));
 

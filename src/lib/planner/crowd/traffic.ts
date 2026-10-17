@@ -509,15 +509,31 @@ function conflictZones(tracks: Track[]): ConflictZone[] {
   };
   // Stretches of each track near another track, as [start, end] intervals.
   const stretches: { track: number; start: number; end: number; with: number }[] = [];
+  const isTurnRound = (track: Track) => track.kind === "connector"
+    && dot(unit(sub(track.points[1]!, track.points[0]!)), unit(sub(track.points[track.points.length - 1]!, track.points[track.points.length - 2]!))) < -0.5;
+  // Where a vehicle on a track has its body: on a tight turn it swings wider than the line.
+  const sweepOf = (track: Track) => {
+    const path = { track: track.id, route: track.next.slice(0, 1) };
+    const bodies: { centre: Vec2; forward: Vec2 }[] = [];
+    for (let d = 0; d <= track.length + 1e-6; d += 0.4) bodies.push(bodyAt(tracks, path, d, LARGEST.lengthM));
+    return bodies;
+  };
   const near = (a: Track, b: Track) => {
     let start = -1;
-    for (let d = 0; d <= a.length + 1e-6; d += 0.4) {
+    // Only a turn round swings a body that far out; elsewhere the centre lines tell.
+    const swings = isTurnRound(a) || isTurnRound(b);
+    const aSweep = swings ? sweepOf(a) : [];
+    const bSweep = swings ? sweepOf(b) : [];
+    for (let d = 0, k = 0; d <= a.length + 1e-6; d += 0.4, k += 1) {
       const here = trackPose(a, d);
       const there = nearestOn(here.position, b);
       // Running side by side (the two lanes either side of a corner, say) cars pass at lane
       // spacing; only where the tracks meet at an angle does a car need the wider margin.
       const parallel = Math.abs(dot(here.heading, there.direction)) > 0.92;
-      const close = there.distance < (parallel ? PARALLEL_CLEARANCE_M : CONFLICT_CLEARANCE_M);
+      const body = aSweep[Math.min(k, aSweep.length - 1)]!;
+      const close = there.distance < (parallel ? PARALLEL_CLEARANCE_M : CONFLICT_CLEARANCE_M)
+        || (swings && there.distance < LARGEST.lengthM && bSweep.some((other) => len(sub(other.centre, body.centre)) < LARGEST.lengthM + 0.5
+          && bodiesTouch({ ...body, ...LARGEST }, { ...other, ...LARGEST })));
       if (close && start < 0) start = d;
       if ((!close || d + 0.4 > a.length) && start >= 0) {
         stretches.push({ track: a.id, start: Math.max(0, start - 0.6), end: Math.min(a.length, (close ? d : d - 0.4) + 0.6), with: b.id });
