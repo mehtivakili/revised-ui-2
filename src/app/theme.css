@@ -1,0 +1,430 @@
+/*
+ * Theme: contrast, colour and glass.
+ *
+ * Loaded after globals.css and layered on top of it, so the whole look can be tuned (or
+ * reverted) from this one file.
+ *
+ * - One orange for actions, one darker orange for orange text; no pale-orange fills
+ *   competing with the buttons.
+ * - Body text near-black, secondary text dark grey: everything readable at a glance.
+ * - Each family of cards has its own accent (calculator groups, project-type groups,
+ *   the two home routes), so sections are told apart by colour, not just by heading.
+ * - Sections and the top bar are frosted glass over a softly coloured page; the cards on
+ *   them are tinted glass in their section's colour.
+ */
+
+:root {
+  --brand: #e04e1b;
+  --brand-dark: #a8360c;
+  --brand-soft: #ffe7da;
+  --brand-border: #f2ae8c;
+  --brand-blue: var(--brand);
+  --brand-blue-dark: var(--brand-dark);
+  --brand-blue-soft: var(--brand-soft);
+  --accent: var(--brand);
+  --accent-strong: var(--brand-dark);
+
+  --bg: #e8edf4;
+  --text: #0b1524;
+  --muted: #3b4959;
+  --faint: #5e6e80;
+  --border: #9eafc0;
+  --panel: rgba(255, 255, 255, 0.72);
+
+  /* Accents for telling groups apart. Each is dark enough for text on white. */
+  --ink-orange: #c2410c;
+  --ink-blue: #1d4ed8;
+  --ink-teal: #0f766e;
+  --ink-violet: #6d28d9;
+  --ink-amber: #b45309;
+  --ink-green: #15803d;
+  --ink-slate: #334155;
+
+  /* Glass */
+  --glass-section: rgba(255, 255, 255, 0.58);
+  --glass-card: rgba(255, 255, 255, 0.78);
+  --glass-edge: rgba(255, 255, 255, 0.78);
+  --glass-blur: blur(20px) saturate(165%);
+  --glass-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 1px rgba(15, 23, 42, 0.07),
+    0 14px 36px rgba(15, 23, 42, 0.10);
+  --card-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 0 1px rgba(15, 23, 42, 0.06),
+    0 6px 18px rgba(15, 23, 42, 0.08);
+
+  --shadow: 0 10px 28px rgba(15, 23, 42, 0.10);
+  --shadow-soft: 0 18px 44px rgba(15, 23, 42, 0.14);
+}
+
+/* A softly coloured page, so the glass has something to show. */
+body {
+  background:
+    radial-gradient(900px 560px at 102% -6%, rgba(224, 78, 27, 0.20), transparent 62%),
+    radial-gradient(820px 620px at -6% 18%, rgba(37, 99, 235, 0.17), transparent 62%),
+    radial-gradient(760px 520px at 62% 108%, rgba(13, 148, 136, 0.16), transparent 62%),
+    radial-gradient(620px 420px at 28% 58%, rgba(124, 58, 237, 0.09), transparent 66%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+input,
+select,
+textarea {
+  border-color: var(--border);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--faint);
+}
+
+/* ── Shared glass surfaces ─────────────────────────────────────────── */
+
+.top-bar,
+.page-intro,
+.panel,
+.auth-card,
+.category-section,
+.project-gateway-hero,
+.project-type-gateway .project-gallery,
+.project-gallery,
+.project-venue-section,
+.portal-card {
+  background: var(--glass-section);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+.top-bar {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+/* Cards on a glass section: tinted by their section's accent, no second blur. */
+.tool-card,
+.project-venue-card,
+.project-type-gateway .project-card,
+.project-card,
+.catalog-card {
+  --tint: var(--category-accent, var(--brand));
+  background:
+    linear-gradient(165deg,
+      color-mix(in srgb, var(--tint) 20%, rgba(255, 255, 255, 0.86)) 0%,
+      color-mix(in srgb, var(--tint) 7%, rgba(255, 255, 255, 0.82)) 70%);
+  border: 1px solid color-mix(in srgb, var(--tint) 36%, rgba(255, 255, 255, 0.9));
+  box-shadow: var(--card-shadow);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.tool-card:hover,
+.project-venue-card:hover,
+.project-type-gateway .project-card:hover,
+.project-card:hover,
+.catalog-card:hover {
+  background:
+    linear-gradient(165deg,
+      color-mix(in srgb, var(--tint) 26%, #fff) 0%,
+      color-mix(in srgb, var(--tint) 9%, #fff) 72%);
+  border-color: color-mix(in srgb, var(--tint) 62%, #fff);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 0 0 1px color-mix(in srgb, var(--tint) 30%, transparent),
+    0 16px 34px color-mix(in srgb, var(--tint) 22%, rgba(15, 23, 42, 0.10));
+}
+
+/* ── Group colours ─────────────────────────────────────────────────── */
+
+.category-tone-orange { --category-accent: var(--ink-orange); --category-soft: #ffe7da; }
+.category-tone-blue { --category-accent: var(--ink-blue); --category-soft: #e1eaff; }
+.category-tone-teal { --category-accent: var(--ink-teal); --category-soft: #d6f2ec; }
+.category-tone-violet { --category-accent: var(--ink-violet); --category-soft: #ebe2ff; }
+
+.project-venue-section.category-living-retail { --category-accent: var(--ink-orange); --category-soft: #ffe7da; }
+.project-venue-section.category-public { --category-accent: var(--ink-blue); --category-soft: #e1eaff; }
+.project-venue-section.category-transport { --category-accent: var(--ink-violet); --category-soft: #ebe2ff; }
+.project-venue-section.category-industrial { --category-accent: var(--ink-amber); --category-soft: #fdeccb; }
+.project-venue-section.category-energy { --category-accent: var(--ink-teal); --category-soft: #d6f2ec; }
+.project-venue-section.project-blank-section { --category-accent: var(--ink-slate); --category-soft: #e3e8ef; }
+.project-gallery { --category-accent: var(--ink-blue); --category-soft: #e1eaff; }
+.catalog-grid { --category-accent: var(--ink-blue); }
+
+/* A section wears its colour: a tinted wash from the heading side and a solid top edge. */
+.category-section,
+.project-venue-section,
+.project-gallery {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--category-accent, var(--brand)) 16%, rgba(255, 255, 255, 0.62)) 0,
+      color-mix(in srgb, var(--category-accent, var(--brand)) 5%, rgba(255, 255, 255, 0.55)) 170px);
+}
+
+.category-section::before,
+.project-venue-section::before,
+.project-gallery:not(.is-empty)::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--category-accent, var(--brand)) 70%, #fff),
+    var(--category-accent, var(--brand)));
+  pointer-events: none;
+}
+
+.category-section h2,
+.project-venue-section-head h2,
+.project-gallery-head h2 {
+  color: color-mix(in srgb, var(--category-accent, var(--text)) 72%, #0b1524);
+}
+
+.category-section .category-icon,
+.project-venue-section-head > span:first-child {
+  color: var(--category-accent);
+  background: var(--category-soft);
+  border: 1px solid color-mix(in srgb, var(--category-accent) 25%, #fff);
+}
+
+.project-venue-section-head p,
+.category-section p {
+  color: var(--muted);
+}
+
+/* Card text: strong titles, readable descriptions. */
+.tool-card h3,
+.tool-card strong,
+.project-venue-copy strong,
+.project-card-body strong,
+.catalog-card h3,
+.catalog-card strong {
+  color: var(--text);
+}
+
+.tool-card p,
+.tool-card small,
+.project-venue-copy small,
+.project-card-body > small,
+.catalog-card p {
+  color: var(--muted);
+}
+
+.tool-card-foot,
+.tool-card-foot > span:first-child {
+  color: var(--category-accent, var(--brand-dark));
+  font-weight: 800;
+}
+
+.project-venue-arrow,
+.tool-card-arrow {
+  color: var(--category-accent, var(--brand));
+  background: color-mix(in srgb, var(--category-accent, var(--brand)) 12%, #fff);
+}
+
+.project-venue-card:hover .project-venue-arrow,
+.project-venue-arrow.is-selected,
+.tool-card:hover .tool-card-arrow {
+  color: #fff;
+  background: var(--category-accent, var(--brand));
+}
+
+.project-venue-card.is-selected {
+  border-color: var(--category-accent);
+  box-shadow:
+    inset 0 0 0 1px var(--category-accent),
+    0 14px 30px color-mix(in srgb, var(--category-accent) 24%, transparent);
+}
+
+/* ── Top bar ───────────────────────────────────────────────────────── */
+
+/* The search is a calm white field; orange is kept for actions. */
+.top-search form {
+  color: var(--faint);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.top-search form:focus-within,
+.top-search.open form {
+  background: #fff;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(224, 78, 27, 0.18);
+}
+
+.top-nav a,
+.tools-menu-trigger {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.top-nav a:hover,
+.tools-menu-trigger:hover {
+  color: var(--brand-dark);
+}
+
+/* The planner link is the site's main feature: a clear blue pill, distinct from the orange buttons. */
+.smart-nav-link {
+  color: #fff !important;
+  background: linear-gradient(135deg, #2f6bf0, var(--ink-blue)) !important;
+  border: 1px solid var(--ink-blue) !important;
+  box-shadow: 0 6px 16px rgba(29, 78, 216, 0.24);
+}
+
+.smart-nav-link:hover {
+  color: #fff !important;
+  background: linear-gradient(135deg, var(--ink-blue), #1e3fa8) !important;
+}
+
+.smart-nav-link svg { color: #fff; }
+
+.brand-mark strong { color: var(--text); }
+.brand-mark small,
+.top-greeting small { color: var(--muted); }
+
+/* ── Buttons ───────────────────────────────────────────────────────── */
+
+.primary-action {
+  background: linear-gradient(135deg, #ee5d27, var(--brand) 55%, #c9420f);
+  border-color: var(--brand-dark);
+  box-shadow: 0 10px 22px rgba(224, 78, 27, 0.28);
+}
+
+.primary-action:hover {
+  background: var(--brand-dark);
+}
+
+.secondary-action {
+  color: var(--brand-dark);
+  background: rgba(255, 255, 255, 0.86);
+  border-color: var(--border);
+}
+
+.secondary-action:hover {
+  border-color: var(--brand);
+  background: #fff;
+}
+
+.eyebrow {
+  color: var(--brand-dark);
+}
+
+/* ── Home routes ───────────────────────────────────────────────────── */
+
+.portal-card-tools { --portal-accent: var(--brand); --portal-soft: #ffe7da; }
+.portal-card-smart { --portal-accent: var(--ink-teal); --portal-soft: #d6f2ec; }
+
+.portal-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%,
+      color-mix(in srgb, var(--portal-accent) 12%, rgba(255, 255, 255, 0.7)) 100%);
+  border-color: color-mix(in srgb, var(--portal-accent) 30%, #fff);
+}
+
+.portal-card:hover {
+  border-color: color-mix(in srgb, var(--portal-accent) 65%, #fff);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 20px 44px color-mix(in srgb, var(--portal-accent) 22%, rgba(15, 23, 42, 0.12));
+}
+
+.portal-card-body {
+  background: transparent;
+}
+
+.portal-card-body > p {
+  color: var(--muted);
+}
+
+.portal-card-heading h2,
+.portal-card-heading h3 {
+  color: color-mix(in srgb, var(--portal-accent) 70%, #0b1524);
+}
+
+/* ── Catalogue ─────────────────────────────────────────────────────── */
+
+.catalog-search {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--border);
+}
+
+.category-filter button {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.85);
+  border-color: var(--border);
+}
+
+.category-filter button.active {
+  color: #fff;
+  background: var(--brand);
+  border-color: var(--brand-dark);
+}
+
+/* ── Saved designs ─────────────────────────────────────────────────── */
+
+.project-gallery.is-empty {
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--muted);
+}
+
+/* ── Studios: slightly darker secondary text ──────────────────────── */
+
+.design-focus-shell {
+  --studio-muted: #44576a;
+  --studio-faint: #6a7c8d;
+}
+
+/* ── Fallback when glass is unavailable ───────────────────────────── */
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .top-bar,
+  .page-intro,
+  .panel,
+  .auth-card,
+  .category-section,
+  .project-gateway-hero,
+  .project-gallery,
+  .project-venue-section,
+  .portal-card {
+    background-color: rgba(255, 255, 255, 0.94);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .top-bar,
+  .page-intro,
+  .panel,
+  .auth-card,
+  .category-section,
+  .project-gateway-hero,
+  .project-gallery,
+  .project-venue-section,
+  .portal-card {
+    background-color: rgba(255, 255, 255, 0.96);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Phones: globals.css forces the calculator cards white with !important; keep the tint. */
+@media (max-width: 760px) {
+  .tool-card {
+    background:
+      linear-gradient(165deg,
+        color-mix(in srgb, var(--category-accent, var(--brand)) 20%, rgba(255, 255, 255, 0.86)) 0%,
+        color-mix(in srgb, var(--category-accent, var(--brand)) 7%, rgba(255, 255, 255, 0.82)) 70%) !important;
+    border: 1px solid color-mix(in srgb, var(--category-accent, var(--brand)) 36%, rgba(255, 255, 255, 0.9)) !important;
+    box-shadow: var(--card-shadow) !important;
+  }
+
+  .tool-card:hover {
+    background:
+      linear-gradient(165deg,
+        color-mix(in srgb, var(--category-accent, var(--brand)) 26%, #fff) 0%,
+        color-mix(in srgb, var(--category-accent, var(--brand)) 9%, #fff) 72%) !important;
+  }
+}

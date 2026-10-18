@@ -6,6 +6,7 @@ import { PwaInstallPrompt } from "@/src/components/PwaInstallPrompt";
 import { ScrollReset } from "@/src/components/ScrollReset";
 import { SiteFooter } from "@/src/components/SiteFooter";
 import "./globals.css";
+import "./theme.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://hamyardoorbin.ir"),
