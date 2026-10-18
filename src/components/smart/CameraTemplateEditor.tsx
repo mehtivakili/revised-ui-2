@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Copy, Plus, Trash2 } from "lucide-react";
+import { MapPin, Copy, Plus, Trash2 } from "lucide-react";
 import type { ProjectCameraTemplate, SurveillanceTask } from "@/src/domain/catalog/types";
 import type { CameraHousing } from "@/src/domain/catalog/types";
 import { createTemplate, estimateBitrateKbps, housingLabels } from "@/src/lib/planner/camera-templates";
@@ -9,11 +9,11 @@ import { sensorOptions } from "@/src/lib/chatbot/slots";
 import { formatFa } from "@/src/lib/chatbot/persian";
 
 /**
- * "Default devices" step.
+ * Camera types, edited from the placement studio.
  *
- * Replaces the old per-zone camera tables. The user describes a few device types and
- * roughly how many of each; exact positions and per-camera tuning happen later on the
- * plan, so nothing here needs to be final.
+ * A type is a reusable starting point: it is dragged onto the plan as many times as the
+ * site needs, and each drop becomes an independent camera. There is deliberately no
+ * quantity here — how many cameras a project has is simply how many are on the plan.
  */
 
 const megapixelOptions = [2, 3, 4, 5, 6, 8, 12];
@@ -21,14 +21,14 @@ const taskEntries = Object.entries(TASK_LABELS) as [SurveillanceTask, string][];
 
 export function CameraTemplateEditor({
   templates,
-  onChange
+  onChange,
+  placedCounts
 }: {
   templates: ProjectCameraTemplate[];
   onChange: (templates: ProjectCameraTemplate[]) => void;
+  /** How many cameras of each type are already on the plan. */
+  placedCounts?: Map<string, number>;
 }) {
-  const totalQuantity = templates.reduce((sum, template) => sum + template.quantity, 0);
-  const outdoorQuantity = templates.filter((item) => item.outdoor).reduce((sum, item) => sum + item.quantity, 0);
-
   const update = (id: string, patch: Partial<ProjectCameraTemplate>) =>
     onChange(templates.map((template) => {
       if (template.id !== id) return template;
@@ -46,46 +46,20 @@ export function CameraTemplateEditor({
 
   return (
     <section className="camera-template-editor">
-      <div className="camera-template-stats">
-        <div className="is-primary">
-          <Camera size={18} aria-hidden="true" />
-          <span>مجموع دستگاه‌ها</span>
-          <strong>{formatFa(totalQuantity)}</strong>
-          <small>برآورد اولیه</small>
-        </div>
-        <div>
-          <span>انواع دستگاه</span>
-          <strong>{formatFa(templates.length)}</strong>
-          <small>نوع مستقل</small>
-        </div>
-        <div>
-          <span>فضای باز</span>
-          <strong>{formatFa(outdoorQuantity)}</strong>
-          <small>نیازمند بدنه مقاوم</small>
-        </div>
-      </div>
-
       <div className="camera-template-list">
         {templates.map((template) => (
           <article key={template.id} className="camera-template-card">
             <div className="camera-template-head">
               <label className="camera-template-name">
-                <span>نام دستگاه</span>
+                <span>نام نوع دوربین</span>
                 <input value={template.label} onChange={(event) => update(template.id, { label: event.target.value })} />
               </label>
-              <label className="camera-template-quantity">
-                <span>تعداد تقریبی</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={200}
-                  value={template.quantity}
-                  onChange={(event) => {
-                    const parsed = Number(event.target.value);
-                    if (Number.isFinite(parsed)) update(template.id, { quantity: Math.min(200, Math.max(1, Math.round(parsed))) });
-                  }}
-                />
-              </label>
+              {placedCounts ? (
+                <span className={(placedCounts.get(template.id) ?? 0) > 0 ? "camera-template-placed is-used" : "camera-template-placed"}>
+                  <MapPin size={13} aria-hidden="true" />
+                  {(placedCounts.get(template.id) ?? 0) > 0 ? `${formatFa(placedCounts.get(template.id) ?? 0)} روی نقشه` : "هنوز استفاده نشده"}
+                </span>
+              ) : null}
               <div className="camera-template-head-actions">
                 <button
                   type="button"
@@ -176,9 +150,9 @@ export function CameraTemplateEditor({
         type="button"
         className="add-zone-button"
         disabled={templates.length >= 12}
-        onClick={() => onChange([...templates, createTemplate({ label: `دستگاه ${formatFa(templates.length + 1)}`, quantity: 1 })])}
+        onClick={() => onChange([...templates, createTemplate({ label: `دوربین ${formatFa(templates.length + 1)}`, quantity: 1 })])}
       >
-        <Plus size={17} aria-hidden="true" />افزودن نوع دستگاه
+        <Plus size={17} aria-hidden="true" />افزودن نوع دوربین
       </button>
     </section>
   );

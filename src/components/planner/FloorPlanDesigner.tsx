@@ -146,6 +146,7 @@ export function FloorPlanDesigner({
   experience = "advanced",
   readOnly = false,
   cameraTemplates = [],
+  onManageCameraTypes,
   onPlanChange,
   onSummaryChange
 }: {
@@ -160,6 +161,8 @@ export function FloorPlanDesigner({
    */
   readOnly?: boolean;
   cameraTemplates?: ProjectCameraTemplate[];
+  /** Opens the camera-type editor; "new" also starts a new type. Without it the palette is fixed. */
+  onManageCameraTypes?: (intent: "edit" | "new") => void;
   onPlanChange?: (plan: BuildingPlan) => void;
   onSummaryChange?: (summary: PlanSummary) => void;
 }) {
@@ -208,6 +211,12 @@ export function FloorPlanDesigner({
   const closeRoomPicker = useCallback(() => setRoomPicker(null), []);
   const [smartPlacementReport, setSmartPlacementReport] = useState<SmartPlacementReport | null>(null);
   const [isOptimisingPlacement, setIsOptimisingPlacement] = useState(false);
+  // The optimiser runs a frame later; if the studio was left in the meantime, its result is dropped.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const pastRef = useRef<BuildingPlan[]>([]);
   const futureRef = useRef<BuildingPlan[]>([]);
@@ -560,6 +569,7 @@ export function FloorPlanDesigner({
     setHint("در حال تحلیل هندسه طبقات، ورودی‌ها، موانع، PPM و نقاط کور...");
     window.requestAnimationFrame(() => {
       window.setTimeout(() => {
+        if (!mountedRef.current) return;
         try {
           const result = optimiseCameraPlacement(plan, [], { enforceSemanticValidation: true });
           if (result.report.accepted && result.report.placed > 0) {
@@ -1213,64 +1223,51 @@ export function FloorPlanDesigner({
         {/* The optimiser and the device palette only change the plan, so a viewer leaves them out. */}
         {mode === "cameras" && !readOnly ? (
           <div className="plan-camera-library">
-            <section className="smart-placement-panel">
-              <div className="smart-placement-heading">
-                <span className="smart-placement-icon"><Sparkles size={17} aria-hidden="true" /></span>
-                <div>
-                  <strong>بهینه‌ساز جانمایی هوشمند</strong>
-                  <small>تحلیل دیوار، ورودی، مانع، PPM، هم‌پوشانی و نقاط کور</small>
-                </div>
-                <em>قرارگیری پیشنهادی</em>
-              </div>
-              <div className="smart-placement-actions">
+            <CameraPalette
+              templates={cameraTemplates}
+              placedByTemplate={placedByTemplate}
+              onManageTypes={onManageCameraTypes}
+            />
+            {/*
+              Placement is manual first. The optimiser is a helper: it only adds cameras
+              (one Undo step) and everything it places can be moved or deleted by hand.
+            */}
+            <section className="camera-assist" aria-label="ابزارهای کمکی جانمایی">
+              <div className="camera-assist-actions">
                 <button
                   type="button"
-                  className="smart-placement-action"
+                  className="camera-assist-suggest"
                   onClick={runSmartPlacement}
                   disabled={isOptimisingPlacement}
-                  title={smartPlacementErrors.length > 0 ? `نیازمند اصلاح نقشه: ${smartPlacementErrors[0]}` : undefined}
+                  title={smartPlacementErrors.length > 0
+                    ? `قبل از پیشنهاد خودکار: ${smartPlacementErrors[0]}`
+                    : "نقشه، ورودی‌ها، موانع و نوع فضاها تحلیل می‌شود و دوربین‌های پیشنهادی اضافه می‌شوند؛ همه قابل جابه‌جایی و حذف‌اند (Ctrl+Z)"}
                 >
-                  <Sparkles className={isOptimisingPlacement ? "is-spinning" : undefined} size={16} aria-hidden="true" />
-                  {isOptimisingPlacement ? "در حال تحلیل عمیق نقشه..." : "تحلیل و ساخت چیدمان پیشنهادی"}
+                  <Sparkles className={isOptimisingPlacement ? "is-spinning" : undefined} size={14} aria-hidden="true" />
+                  {isOptimisingPlacement ? "در حال تحلیل…" : "پیشنهاد خودکار"}
+                  <em>آزمایشی</em>
                 </button>
                 <button
                   type="button"
-                  className="smart-placement-reset"
+                  className="camera-assist-reset"
                   onClick={resetPlacement}
                   disabled={isOptimisingPlacement || placedCameraCount === 0}
-                  title="فقط دوربین‌های همه طبقات پاک می‌شوند و با Ctrl+Z قابل بازگردانی است"
+                  title="همه دوربین‌های همه طبقه‌ها پاک می‌شوند؛ با Ctrl+Z برمی‌گردد"
+                  aria-label="پاک کردن همه دوربین‌ها"
                 >
-                  <RotateCcw size={14} aria-hidden="true" />
-                  ریست جانمایی دوربین‌ها
-                  {placedCameraCount > 0 ? <small>{formatFa(placedCameraCount)}</small> : null}
+                  <RotateCcw size={13} aria-hidden="true" />
                 </button>
               </div>
-              {smartPlacementErrors.length > 0 ? (
-                <small className="plan-room-alert">{smartPlacementErrors[0]}</small>
-              ) : null}
-              <p>دوربین‌های موجود ثابت می‌مانند؛ فقط موارد جانمایی‌نشده با یک عملیات قابل Undo اضافه می‌شوند.</p>
               {smartPlacementReport ? (
-                <div className="smart-placement-result" role="status">
-                  <div className="smart-placement-metrics">
-                    <span><strong>{formatFa(smartPlacementReport.placed)}</strong> دوربین جدید</span>
-                    <span><strong>{formatFa(smartPlacementReport.coverageBeforePercent, 0)}٪</strong> پوشش قبل</span>
-                    <span className="is-improved"><strong>{formatFa(smartPlacementReport.coverageAfterPercent, 0)}٪</strong> پوشش پیشنهادی</span>
-                  </div>
-                  {smartPlacementReport.floorReports.some((floor) => floor.placed > 0) ? (
-                    <div className="smart-placement-floors">
-                      {smartPlacementReport.floorReports.filter((floor) => floor.placed > 0).map((floor) => (
-                        <span key={floor.floorId}>
-                          <b>{floor.floorName}</b>
-                          {formatFa(floor.placed)} دوربین · {formatFa(floor.coverageAfterPercent, 0)}٪
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  {smartPlacementReport.warnings.map((warning) => <small key={warning}>{warning}</small>)}
+                <div className="camera-assist-result" role="status">
+                  <span>
+                    <b>{formatFa(smartPlacementReport.placed)}</b> دوربین پیشنهاد شد · پوشش{" "}
+                    {formatFa(smartPlacementReport.coverageBeforePercent, 0)}٪ ← <b>{formatFa(smartPlacementReport.coverageAfterPercent, 0)}٪</b>
+                  </span>
+                  {smartPlacementReport.warnings.slice(0, 2).map((warning) => <small key={warning}>{warning}</small>)}
                 </div>
               ) : null}
             </section>
-            <CameraPalette templates={cameraTemplates} placedByTemplate={placedByTemplate} />
           </div>
         ) : null}
         <PlanCanvas
@@ -1865,62 +1862,87 @@ function startCameraDrag(event: React.DragEvent, payloadId: string, housing: str
  * Each entry is a reusable type rather than a single reserved camera, so the counter
  * shows progress against the planned quantity instead of locking after one use.
  */
+/**
+ * Ready camera types. Each one is dragged onto the plan as often as the site needs; the
+ * counter is only how many are already there, never a target to reach.
+ */
 function CameraPalette({
   templates,
-  placedByTemplate
+  placedByTemplate,
+  onManageTypes
 }: {
   templates: ProjectCameraTemplate[];
   placedByTemplate: Map<string, number>;
+  onManageTypes?: (intent: "edit" | "new") => void;
 }) {
   return (
-    <aside className="camera-inventory" aria-label="دستگاه‌های تعریف‌شده">
+    <aside className="camera-inventory" aria-label="دوربین‌های آماده">
       <header>
         <CameraIcon size={18} aria-hidden="true" />
-        <div><strong>دستگاه‌های تعریف‌شده</strong><small>نوع دستگاه را بکشید و روی نقشه رها کنید</small></div>
+        <div><strong>دوربین‌های آماده</strong><small>بکشید و هرجا لازم است رها کنید؛ تعداد آزاد است</small></div>
+        {onManageTypes ? (
+          <button
+            type="button"
+            className="camera-inventory-manage"
+            onClick={() => onManageTypes("edit")}
+            title="ویرایش مشخصات انواع دوربین"
+            aria-label="ویرایش انواع دوربین"
+          >
+            <Settings2 size={15} aria-hidden="true" />
+          </button>
+        ) : null}
       </header>
 
       {templates.length > 0 ? (
         <div className="camera-inventory-list">
           {templates.map((template) => {
             const placed = placedByTemplate.get(template.id) ?? 0;
-            const complete = placed >= template.quantity;
             return (
               <button
                 key={template.id}
                 type="button"
-                className={complete ? "camera-inventory-card is-complete" : "camera-inventory-card"}
+                className={placed > 0 ? "camera-inventory-card is-used" : "camera-inventory-card"}
                 draggable
                 onDragStart={(event) => startCameraDrag(event, template.id, template.housing)}
                 onDragEnd={() => document.querySelector(".camera-drag-ghost")?.remove()}
-                title="برای جانمایی روی نقشه بکشید — این نوع دستگاه محدودیت تعداد ندارد"
+                title="برای جانمایی روی نقشه بکشید؛ هر چند بار که لازم است"
               >
                 <CameraIcon size={17} aria-hidden="true" />
                 <span>
                   <strong>{template.label}</strong>
                   <small>{template.megapixel}MP · {template.focalMm}mm · {housingLabels[template.housing]}</small>
                 </span>
-                <em className={complete ? "camera-inventory-count is-complete" : "camera-inventory-count"}>
-                  {formatFa(placed)} / {formatFa(template.quantity)}
-                </em>
+                {placed > 0 ? (
+                  <em className="camera-inventory-count" aria-label={`${formatFa(placed)} عدد روی نقشه`}>
+                    {formatFa(placed)}
+                  </em>
+                ) : null}
               </button>
             );
           })}
         </div>
       ) : (
-        <p className="camera-inventory-empty">در مرحله «دستگاه‌های پیش‌فرض» حداقل یک نوع دستگاه تعریف کنید.</p>
+        <p className="camera-inventory-empty">هنوز نوع دوربینی تعریف نشده است.</p>
       )}
 
-      <button
-        type="button"
-        className="camera-inventory-card is-blank"
-        draggable
-        onDragStart={(event) => startCameraDrag(event, BLANK_CAMERA_ID, "turret")}
-        onDragEnd={() => document.querySelector(".camera-drag-ghost")?.remove()}
-        title="دوربینی خارج از انواع تعریف‌شده اضافه کنید"
-      >
-        <Plus size={17} aria-hidden="true" />
-        <span><strong>دوربین سفارشی</strong><small>بدون نوع از پیش تعریف‌شده</small></span>
-      </button>
+      <div className="camera-inventory-extra">
+        <button
+          type="button"
+          className="camera-inventory-card is-blank"
+          draggable
+          onDragStart={(event) => startCameraDrag(event, BLANK_CAMERA_ID, "turret")}
+          onDragEnd={() => document.querySelector(".camera-drag-ghost")?.remove()}
+          title="دوربینی خارج از انواع آماده؛ مشخصاتش را بعد از جانمایی تعیین کنید"
+        >
+          <Plus size={17} aria-hidden="true" />
+          <span><strong>دوربین سفارشی</strong><small>بکشید و مشخصاتش را همان‌جا تعیین کنید</small></span>
+        </button>
+        {onManageTypes ? (
+          <button type="button" className="camera-inventory-new" onClick={() => onManageTypes("new")}>
+            <Plus size={14} aria-hidden="true" />نوع دوربین جدید
+          </button>
+        ) : null}
+      </div>
     </aside>
   );
 }

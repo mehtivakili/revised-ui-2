@@ -11342,6 +11342,8 @@ body.chat-assistant-maximized { overflow: hidden; }
   z-index: 1300;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  /* One column that never grows past the screen, whatever the header or footer holds. */
+  grid-template-columns: minmax(0, 1fr);
   width: 100vw;
   height: 100dvh;
   overflow: hidden;
@@ -11498,6 +11500,12 @@ body.chat-assistant-maximized { overflow: hidden; }
 }
 @media (max-width: 900px) {
   .focus-save-name { display: none; }
+}
+@media (max-width: 760px) {
+  .focus-save-label,
+  .focus-save-state { display: none; }
+  .focus-save-button { padding-inline: 10px; }
+  .design-focus-brand > div { display: none; }
 }
 .design-focus-help {
   display: inline-flex;
@@ -16195,4 +16203,191 @@ body.chat-assistant-maximized { overflow: hidden; }
     grid-template-areas: "drawing view";
     min-width: 390px;
   }
+}
+
+/* Camera placement: ready types first, the optimiser as a small helper ---------------- */
+.plan-designer-focus .plan-camera-library { grid-template-rows: minmax(0, 1fr) auto; }
+
+.camera-inventory-manage {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-inline-start: auto;
+  color: #1d668d;
+  background: #fff;
+  border: 1px solid #cfe2ec;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.camera-inventory-manage:hover { border-color: #5aa9d1; background: #eef7fb; }
+.plan-designer-focus .camera-inventory > header strong { font-size: 12.5px; }
+.plan-designer-focus .camera-inventory > header small { font-size: 10.5px; }
+.plan-designer-focus .camera-inventory-card { min-height: 52px; }
+.plan-designer-focus .camera-inventory-card strong { font-size: 12px; }
+.plan-designer-focus .camera-inventory-card small { font-size: 10px; }
+.plan-designer .camera-inventory-card.is-used { background: #f6fcf8; border-color: #9fd3b6; }
+.camera-inventory-card.is-used .camera-inventory-count { color: #157a3c; background: #e1f4e8; }
+
+.camera-inventory-extra { display: grid; gap: 6px; padding-top: 8px; border-top: 1px dashed #cfe2ec; }
+.camera-inventory-new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  color: #1d668d;
+  background: transparent;
+  border: 1px dashed #9cc7dd;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.camera-inventory-new:hover { background: #eef7fb; border-color: #5aa9d1; }
+
+.camera-assist {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--planner-border, #cfe2ec);
+  border-radius: 12px;
+}
+.camera-assist-actions { display: flex; gap: 6px; }
+.camera-assist-suggest {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 10px;
+  color: #3b5566;
+  background: #f6f9fb;
+  border: 1px solid #d3dde5;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.camera-assist-suggest em {
+  padding: 1px 6px;
+  color: #8a5a00;
+  background: #fff4dc;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 800;
+}
+.camera-assist-suggest:hover:not(:disabled) { color: #1d668d; border-color: #8fbcd6; }
+.camera-assist-reset {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  min-height: 32px;
+  color: #7a8a96;
+  background: #f6f9fb;
+  border: 1px solid #d3dde5;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.camera-assist-reset:hover:not(:disabled) { color: #b42318; border-color: #f1c4bf; }
+.camera-assist button:disabled { opacity: .5; cursor: default; }
+.camera-assist-result {
+  display: grid;
+  gap: 3px;
+  padding: 6px 8px;
+  color: #2f4f62;
+  background: #f3f9fc;
+  border-radius: 8px;
+  font-size: 10.5px;
+  line-height: 1.7;
+}
+.camera-assist-result small { color: var(--muted); font-size: 9.5px; }
+
+.design-focus-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 8px 16px;
+  color: var(--studio-brand-strong);
+  background: var(--studio-brand-soft);
+  border: 1px solid var(--studio-brand-border);
+  border-radius: 11px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.design-focus-secondary:hover:not(:disabled) { border-color: var(--studio-brand); }
+.design-focus-secondary:disabled { color: var(--studio-faint); background: var(--studio-subtle); border-color: var(--studio-border); cursor: not-allowed; }
+
+.camera-focus-progress-copy { display: grid; gap: 2px; min-width: 0; }
+.camera-focus-note {
+  max-width: 520px;
+  overflow: hidden;
+  color: #8a5a00;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.camera-focus-error { color: #b42318; font-size: 11px; font-weight: 700; }
+
+/* Camera types drawer */
+.camera-types-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1450;
+  background: rgba(15, 26, 36, .42);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.camera-types-drawer {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(580px, 100%);
+  color: #172633;
+  background: #fff;
+  box-shadow: 18px 0 50px rgba(11, 27, 40, .22);
+  animation: camera-types-in .2s cubic-bezier(.2, .8, .2, 1);
+}
+@keyframes camera-types-in { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.camera-types-drawer > header { position: relative; padding: 20px 22px 14px; padding-inline-end: 64px; border-bottom: 1px solid #e3e9ee; }
+.camera-types-drawer h2 { margin: 0 0 6px; font-size: 17px; font-weight: 850; }
+.camera-types-drawer header p { margin: 0; color: #5d6f7d; font-size: 12px; line-height: 1.85; }
+.camera-types-body { overflow-y: auto; padding: 14px 18px; background: #f6f9fb; }
+.camera-types-drawer > footer { display: flex; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid #e3e9ee; }
+
+.camera-template-placed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 10px;
+  color: #6b7c88;
+  background: #f1f4f6;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.camera-template-placed.is-used { color: #157a3c; background: #e1f4e8; }
+
+@media (max-width: 760px) {
+  /* Three actions do not fit one row on a phone: the report gets its own row on top. */
+  .design-focus-camera .design-focus-actions { flex-wrap: wrap; }
+  .design-focus-camera .design-focus-actions .design-focus-next { flex: 1 1 100%; order: -1; }
+  .design-focus-camera .design-focus-actions .design-focus-cancel,
+  .design-focus-camera .design-focus-actions .design-focus-secondary { flex: 1 1 0; min-width: 0; padding-inline: 10px; }
+  .camera-focus-note { white-space: normal; }
 }

@@ -174,6 +174,40 @@ const templateSeeds: Omit<ProjectCameraTemplate, "id" | "stream">[] = [
     microphone: false,
     colorNightVision: true,
     weatherproof: true
+  },
+  {
+    label: "دوربین پلاک‌خوان",
+    housing: "bullet",
+    goal: "anpr",
+    outdoor: true,
+    quantity: 1,
+    megapixel: 2,
+    sensorWidthMm: 5.12,
+    focalMm: 12,
+    irRangeM: 30,
+    maxRangeM: 25,
+    mountingHeightM: 3.5,
+    cameraTiltDeg: 15,
+    microphone: false,
+    colorNightVision: false,
+    weatherproof: true
+  },
+  {
+    label: "دوربین چرخشی PTZ",
+    housing: "ptz",
+    goal: "monitor",
+    outdoor: true,
+    quantity: 1,
+    megapixel: 4,
+    sensorWidthMm: 5.12,
+    focalMm: 4.8,
+    irRangeM: 100,
+    maxRangeM: 60,
+    mountingHeightM: 5,
+    cameraTiltDeg: 12,
+    microphone: false,
+    colorNightVision: false,
+    weatherproof: true
   }
 ];
 

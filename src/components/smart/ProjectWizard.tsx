@@ -3,7 +3,7 @@
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Anchor, ArrowLeft, ArrowRight, Bookmark, BriefcaseBusiness, BrickWall, Bus, BusFront, Cable, CarFront, Check, ChevronLeft, CircleAlert, CircleParking, Droplets, Factory, FileDown, Flame, FolderOpen, Fuel, Gem, GraduationCap, HardHat, HeartPulse, Hotel, House, Info, Landmark, LoaderCircle, LockKeyhole, Mic, Milestone, MonitorCog, Moon, MousePointer2, Move3d, PencilRuler, Pickaxe, Plane, Presentation, RotateCcw, Save, Search, Server, ShieldCheck, Ship, ShoppingBag, ShoppingCart, Siren, Sparkles, Sprout, SquareStack, Store, SunMedium, TowerControl, TrafficCone, TrainFront, Trash2, UtensilsCrossed, Volleyball, Warehouse, Waves, Waypoints, X, Zap } from "lucide-react";
+import { Anchor, ArrowLeft, ArrowRight, Bookmark, BriefcaseBusiness, BrickWall, Bus, BusFront, Cable, CarFront, Check, ChevronLeft, CircleAlert, CircleParking, Droplets, Factory, FileDown, Flame, FolderOpen, Fuel, Gem, GraduationCap, HardHat, HeartPulse, Hotel, House, Info, Landmark, LoaderCircle, LockKeyhole, Mic, Milestone, MonitorCog, Moon, MousePointer2, Move3d, PencilRuler, Pickaxe, Plane, Presentation, RotateCcw, Save, Search, Server, ShieldCheck, Ship, ShoppingBag, ShoppingCart, Siren, SlidersHorizontal, Sparkles, Sprout, SquareStack, Store, SunMedium, TowerControl, TrafficCone, TrainFront, Trash2, UtensilsCrossed, Volleyball, Warehouse, Waves, Waypoints, X, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ProjectBrief, ProjectCameraTemplate, ProjectZone, RecommendationPlan, RecommendationResult } from "@/src/domain/catalog/types";
 import { createEmptyPlan, type BuildingPlan } from "@/src/domain/planner/types";
@@ -12,10 +12,10 @@ import { TASK_LABELS, TASK_MINIMUM_PPM } from "@/src/lib/recommendation/camera-c
 import { PlanResultMaps } from "@/src/components/planner/PlanResultMaps";
 import { CameraTemplateEditor } from "@/src/components/smart/CameraTemplateEditor";
 import { CameraStreamEditor } from "@/src/components/smart/CameraStreamEditor";
-import { defaultCameraTemplates, zonesFromPlan, zonesFromTemplates } from "@/src/lib/planner/camera-templates";
-import { recommendCameraSelection, type CameraSelectionAnalysis } from "@/src/lib/planner/camera-selection";
+import { createTemplate, defaultCameraTemplates, zonesFromPlan, zonesFromTemplates } from "@/src/lib/planner/camera-templates";
+import { roomAtPoint } from "@/src/lib/planner/rooms";
 import { createSamplePlan, sampleVenueTypeIds, type SamplePlanId } from "@/src/lib/planner/sample-plans";
-import { venueTypes, type VenueType, type VenueTypeId } from "@/src/domain/planner/venues";
+import { findSectionType, venueTypes, type VenueType, type VenueTypeId } from "@/src/domain/planner/venues";
 import { ProjectGallery, ProjectLimitDialog, VenueComposition } from "@/src/components/smart/ProjectGallery";
 import { StudioHelpButton, StudioTour, useStudioTour } from "@/src/components/smart/StudioTour";
 import {
@@ -847,7 +847,6 @@ export function ProjectWizard() {
   const [designExperience, setDesignExperience] = useState<DesignExperience>("advanced");
   const [pendingDesignStart, setPendingDesignStart] = useState<PendingDesignStart | null>(null);
   const [venueQuery, setVenueQuery] = useState("");
-  const [cameraSelectionAnalysis, setCameraSelectionAnalysis] = useState<CameraSelectionAnalysis | null>(null);
 
   /* ── Saved-project state ──────────────────────────────────────────── */
   const router = useRouter();
@@ -872,11 +871,24 @@ export function ProjectWizard() {
    * placement — the plan is the source of truth once drawing starts, and the template
    * quantities are only the target it is measured against.
    */
-  const placement = useMemo(() => {
-    const required = cameraTemplates.reduce((sum, template) => sum + template.quantity, 0);
+  const placement = useMemo<PlacementState>(() => {
     const placed = buildingPlan.floors.reduce((sum, floor) => sum + floor.cameras.length, 0);
-    return { required, placed, complete: placed >= required && required > 0 };
-  }, [cameraTemplates, buildingPlan]);
+    const floorsUsed = buildingPlan.floors.filter((floor) => floor.cameras.length > 0).length;
+    // Key spaces (critical priority, cameras allowed) with no camera inside them yet. Only
+    // a gentle reminder: a camera outside the room can still watch its door.
+    const custom = (buildingPlan.customSectionTypes ?? []) as never;
+    const keySpacesWithout: string[] = [];
+    for (const floor of buildingPlan.floors) {
+      const watched = new Set(floor.cameras.map((camera) => roomAtPoint(floor, camera.position)?.id).filter(Boolean));
+      for (const room of floor.rooms ?? []) {
+        const section = findSectionType(room.sectionTypeId, custom);
+        if (!section || section.forbidden || section.priority !== "critical" || watched.has(room.id)) continue;
+        const name = room.name?.trim() || section.label;
+        if (!keySpacesWithout.includes(name)) keySpacesWithout.push(name);
+      }
+    }
+    return { placed, floorsUsed, keySpacesWithout };
+  }, [buildingPlan]);
 
   const planReady = siteMode === "designer" && placement.placed > 0;
   const cameraFocusActive = step === 3 && siteMode === "designer";
@@ -911,7 +923,8 @@ export function ProjectWizard() {
     return () => window.cancelAnimationFrame(frame);
   }, [step]);
 
-  const progress = useMemo(() => `${Math.round((Math.min(step, 6) / 6) * 100)}%`, [step]);
+  // Steps 4–6 are the optional detailed settings after placement; the bar measures those three.
+  const progress = useMemo(() => `${Math.round((Math.min(Math.max(step - 3, 0), 3) / 3) * 100)}%`, [step]);
   const update = <K extends keyof ProjectBrief>(key: K, value: ProjectBrief[K]) => setBrief((current) => ({ ...current, [key]: value }));
   // Null until the user picks one. Everything downstream that needs a venue is gated on
   // this, so an unchosen project cannot silently inherit a shop's defaults.
@@ -1086,16 +1099,8 @@ export function ProjectWizard() {
     }));
   }, []);
 
-  const selectCamerasAutomatically = useCallback(() => {
-    const analysis = recommendCameraSelection(buildingPlan, brief);
-    setCameraSelectionAnalysis(analysis);
-    setBuildingPlan(analysis.plan);
-    setTemplates(analysis.templates);
-    setBrief((current) => ({ ...current, cameraSelectionMode: "automatic" }));
-  }, [brief, buildingPlan, setTemplates]);
-
   const goToPreviousStage = useCallback(() => {
-    if (step === 2 && siteMode === "designer") {
+    if (step <= 2 && siteMode === "designer") {
       // The focused map editor is the real first stage. Keeping step=1 underneath it
       // also means its Cancel action correctly returns to project-type selection.
       setStep(1);
@@ -1215,7 +1220,7 @@ export function ProjectWizard() {
     }));
     setResult(null);
     setError("");
-    setStep(2);
+    setStep(3);
   }
 
   const goToPlannerHome = () => {
@@ -1260,8 +1265,10 @@ export function ProjectWizard() {
       onHome={goToPlannerHome}
       onCancel={() => setDesignFocusActive(false)}
       onContinue={() => {
+        // Older saved designs may have no camera types; placement always starts with the ready set.
+        if (cameraTemplates.length === 0) setTemplates(defaultCameraTemplates());
         setDesignFocusActive(false);
-        setStep(2);
+        setStep(3);
       }}
     />
     {limitDialogNode}
@@ -1276,11 +1283,18 @@ export function ProjectWizard() {
       plan={buildingPlan}
       cameraTemplates={cameraTemplates}
       placement={placement}
+      reporting={loading}
+      reportError={error}
+      onTemplatesChange={setTemplates}
       onPlanChange={setBuildingPlan}
       onSummaryChange={applyPlanSummary}
       onHome={goToPlannerHome}
-      onBack={() => setStep(2)}
-      onContinue={() => setStep(4)}
+      onBack={() => {
+        setStep(1);
+        setDesignFocusActive(true);
+      }}
+      onRefine={() => { setError(""); setStep(4); }}
+      onReport={() => { void generate(); }}
     />
     {limitDialogNode}
     </>
@@ -1316,14 +1330,16 @@ export function ProjectWizard() {
   );
 
   // The drawn plan only reaches the results when it was actually used and completed.
-  if (step === 7 && result) return <RecommendationResults result={result} plan={planReady ? buildingPlan : undefined} onReset={goToPlannerHome} onUseCompatibleDefaults={retryWithCompatibleDefaults} />;
+  if (step === 7 && result) return <RecommendationResults result={result} plan={planReady ? buildingPlan : undefined} onReset={goToPlannerHome} onUseCompatibleDefaults={retryWithCompatibleDefaults} onEditPlacement={siteMode === "designer" ? () => setStep(3) : undefined} onRefine={() => setStep(4)} />;
 
   const stepTitles = ["شناخت محیط", "دستگاه‌های پیش‌فرض", "جانمایی دوربین‌ها", "مشخصات دقیق دوربین‌ها", "پروفایل ضبط و آرشیو", "زیرساخت و اولویت"];
   return <section ref={wizardTopRef} className="wizard-shell advanced-wizard">
     <div className="wizard-progress-head">
       <div className="wizard-progress-title">
         <button type="button" className="wizard-home-link" onClick={goToPlannerHome}><ShieldCheck size={16} />صفحه اصلی طراحی هوشمند</button>
-        <span>مرحله {step} از ۶</span><strong>{stepTitles[step - 1]}</strong>
+        {step >= 4
+          ? <><span>تنظیمات دقیق · بخش {formatFaCount(step - 3)} از ۳</span><strong>{stepTitles[step - 1]}</strong></>
+          : <><span>مرحله {formatFaCount(step)}</span><strong>{stepTitles[step - 1]}</strong></>}
       </div>
       <div className="wizard-persistence">
         <label className="wizard-project-name">
@@ -1401,88 +1417,14 @@ export function ProjectWizard() {
       </div>
     </div>}
 
-    {step === 2 && <div className="wizard-stage-layout wizard-stage-layout-fluid">
-      <WizardVisual image="/assets/wizard-environment.webp" title="دستگاه‌های پروژه" description="فقط چند نوع دستگاه تعریف کنید؛ جانمایی دقیق و تنظیم تک‌تک دوربین‌ها در مراحل بعد انجام می‌شود." tips={["تعداد در این مرحله تقریبی است", "هر نوع را می‌توانید بارها روی نقشه بگذارید", "مشخصات هر دوربین بعداً جداگانه قابل تغییر است"]} />
-      <div className="wizard-step">
-        <div className="wizard-copy align-start">
-          <p className="eyebrow">موجودی تجهیزات</p>
-          <h1>چه دستگاه‌هایی لازم دارید؟</h1>
-          <p>به‌جای تقسیم پروژه به ناحیه‌ها، فقط چند نوع دستگاه با تعداد تقریبی تعریف کنید. در مرحله بعد همین‌ها را هرجای نقشه که خواستید قرار می‌دهید.</p>
-        </div>
-        <div className="camera-selection-modes" role="radiogroup" aria-label="روش انتخاب دوربین‌ها">
-          <button
-            type="button"
-            role="radio"
-            aria-checked={(brief.cameraSelectionMode ?? "manual") === "manual"}
-            className={(brief.cameraSelectionMode ?? "manual") === "manual" ? "camera-selection-mode selected" : "camera-selection-mode"}
-            onClick={() => setBrief((current) => ({ ...current, cameraSelectionMode: "manual" }))}
-          >
-            <PencilRuler size={21} aria-hidden="true" />
-            <span><strong>انتخاب دستی</strong><small>تعداد، رزولوشن، لنز، بدنه و امکانات هر نوع دوربین را خودتان تنظیم کنید.</small></span>
-            {(brief.cameraSelectionMode ?? "manual") === "manual" ? <Check size={18} aria-hidden="true" /> : null}
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={brief.cameraSelectionMode === "automatic"}
-            className={brief.cameraSelectionMode === "automatic" ? "camera-selection-mode is-smart selected" : "camera-selection-mode is-smart"}
-            onClick={selectCamerasAutomatically}
-          >
-            <Sparkles size={21} aria-hidden="true" />
-            <span><strong>انتخاب هوشمند خودکار</strong><small>فضاها، ابعاد، هدف نظارتی، محیط بیرونی، نور شب و تراکم پیکسلی لازم تحلیل می‌شود.</small></span>
-            {brief.cameraSelectionMode === "automatic" ? <Check size={18} aria-hidden="true" /> : null}
-          </button>
-        </div>
-
-        {brief.cameraSelectionMode === "automatic" ? (
-          <section className="camera-auto-analysis" aria-live="polite">
-            <div className="camera-auto-analysis-head">
-              <div>
-                <span><Sparkles size={16} aria-hidden="true" /> پیشنهاد مهندسی قابل ویرایش</span>
-                <strong>
-                  {cameraSelectionAnalysis
-                    ? `${formatFaCount(cameraSelectionAnalysis.totalCameras)} دوربین در ${formatFaCount(cameraSelectionAnalysis.templates.length)} گروه پیشنهاد شد`
-                    : "برای ساخت پیشنهاد، نقشه و نوع فضاها تحلیل می‌شوند"}
-                </strong>
-              </div>
-              <button type="button" onClick={selectCamerasAutomatically}>
-                <RotateCcw size={15} aria-hidden="true" /> تحلیل دوباره نقشه
-              </button>
-            </div>
-            {cameraSelectionAnalysis ? (
-              <>
-                <div className="camera-auto-metrics">
-                  <span><b>{formatFaCount(cameraSelectionAnalysis.analysedSpaces)}</b> فضای تحلیل‌شده</span>
-                  <span><b>{formatFaCount(cameraSelectionAnalysis.totalCameras)}</b> دوربین پیشنهادی</span>
-                  <span><b>{formatFaCount(cameraSelectionAnalysis.excludedSpaces)}</b> فضای حریم خصوصی</span>
-                </div>
-                <ul>{cameraSelectionAnalysis.notes.map((note) => <li key={note}>{note}</li>)}</ul>
-              </>
-            ) : null}
-            <p>نتیجه زیر نهایی و قفل‌شده نیست؛ می‌توانید هر تعداد، مگاپیکسل یا لنز را قبل از مرحله جانمایی تغییر دهید.</p>
-          </section>
-        ) : null}
-
-        <CameraTemplateEditor templates={cameraTemplates} onChange={setTemplates} />
-      </div>
-    </div>}
-
     {step === 3 && <div className="wizard-step wizard-camera-placement-page">
       <div className="wizard-copy align-start"><p className="eyebrow">اجرای جانمایی</p><h1>دوربین‌ها را روی نقشه قرار دهید</h1><p>هر نوع دستگاه را از فهرست سمت چپ بکشید و روی محل نصب رها کنید. با انتخاب هر دوربین، شکل بدنه و همه مشخصاتش از پنل سمت راست قابل تغییر است.</p></div>
       {siteMode === "designer" ? <div className="plan-placement-stage">
-        <div className={placement.complete ? "plan-placement-status is-complete" : "plan-placement-status"}>
-          {placement.complete ? <Check size={17} aria-hidden="true" /> : <CircleAlert size={17} aria-hidden="true" />}
+        <div className={placement.placed > 0 ? "plan-placement-status is-complete" : "plan-placement-status"}>
+          {placement.placed > 0 ? <Check size={17} aria-hidden="true" /> : <CircleAlert size={17} aria-hidden="true" />}
           <div>
-            <strong>
-              {placement.complete
-                ? `${formatFaCount(placement.placed)} دوربین روی نقشه جانمایی شد`
-                : `${formatFaCount(placement.placed)} از ${formatFaCount(placement.required)} دوربین جانمایی شده`}
-            </strong>
-            <small>
-              {placement.complete
-                ? "می‌توانید دوربین بیشتری اضافه کنید یا مشخصات هرکدام را دقیق‌تر تنظیم کنید."
-                : `${formatFaCount(Math.max(0, placement.required - placement.placed))} دوربین دیگر تا رسیدن به تعداد برنامه‌ریزی‌شده باقی مانده است.`}
-            </small>
+            <strong>{placementSummary(placement)}</strong>
+            <small>هر تعداد دوربین که لازم است از فهرست دوربین‌های آماده بکشید و روی نقشه رها کنید.</small>
           </div>
         </div>
         <FloorPlanDesigner
@@ -1928,6 +1870,7 @@ function FocusSaveControl({ save, withCameras = false }: { save: FocusSaveProps;
       <button
         type="button"
         className="focus-save-button"
+        aria-label={save.stored ? "ذخیره تغییرات" : "ذخیره نقشه"}
         onClick={save.onSave}
         disabled={saving}
         title={save.stored
@@ -1935,7 +1878,7 @@ function FocusSaveControl({ save, withCameras = false }: { save: FocusSaveProps;
           : `${what} در «پروژه‌های من» ذخیره می‌شود.`}
       >
         {saving ? <LoaderCircle className="is-spinning" size={15} aria-hidden="true" /> : <Save size={15} aria-hidden="true" />}
-        {saving ? "در حال ذخیره…" : save.stored ? "ذخیره تغییرات" : "ذخیره نقشه"}
+        <span className="focus-save-label">{saving ? "در حال ذخیره…" : save.stored ? "ذخیره تغییرات" : "ذخیره نقشه"}</span>
       </button>
       {save.state === "saved" && <span className="focus-save-state is-ok" role="status"><Check size={13} aria-hidden="true" />ذخیره شد</span>}
       {save.state === "error" && <span className="focus-save-state is-error" role="status" title={save.error}><CircleAlert size={13} aria-hidden="true" />ذخیره نشد</span>}
@@ -1994,11 +1937,29 @@ function DesignFocusStage({
         <div><Info size={16} /><span>تغییرات نقشه در همین فرایند حفظ می‌شود.</span></div>
         <div className="design-focus-actions">
           <button type="button" className="design-focus-cancel" onClick={onCancel}><X size={17} />لغو طراحی</button>
-          <button type="button" className="design-focus-next" onClick={onContinue}>مرحله بعد: دستگاه‌ها<ChevronLeft size={18} /></button>
+          <button type="button" className="design-focus-next" onClick={onContinue}>مرحله بعد: جانمایی دوربین‌ها<ChevronLeft size={18} /></button>
         </div>
       </footer>
     </section>
   );
+}
+
+type PlacementState = {
+  /** Cameras on the plan, over all floors. */
+  placed: number;
+  floorsUsed: number;
+  /** Names of key spaces with no camera inside them yet. */
+  keySpacesWithout: string[];
+};
+
+/** The recommendation engine needs at least this many cameras. */
+const MIN_REPORT_CAMERAS = 2;
+
+function placementSummary(placement: PlacementState) {
+  if (placement.placed === 0) return "هنوز دوربینی روی نقشه نیست";
+  return placement.floorsUsed > 1
+    ? `${formatFaCount(placement.placed)} دوربین روی ${formatFaCount(placement.floorsUsed)} طبقه جانمایی شده`
+    : `${formatFaCount(placement.placed)} دوربین جانمایی شده`;
 }
 
 function CameraPlacementFocusStage({
@@ -2007,26 +1968,80 @@ function CameraPlacementFocusStage({
   plan,
   cameraTemplates,
   placement,
+  reporting,
+  reportError,
+  onTemplatesChange,
   onPlanChange,
   onSummaryChange,
   onHome,
   onBack,
-  onContinue
+  onRefine,
+  onReport
 }: {
   save: FocusSaveProps;
   venue: VenueType | null;
   plan: BuildingPlan;
   cameraTemplates: ProjectCameraTemplate[];
-  placement: { required: number; placed: number; complete: boolean };
+  placement: PlacementState;
+  reporting: boolean;
+  reportError: string;
+  onTemplatesChange: (templates: ProjectCameraTemplate[]) => void;
   onPlanChange: (plan: BuildingPlan) => void;
   onSummaryChange: (summary: PlanSummary) => void;
   onHome: () => void;
   onBack: () => void;
-  onContinue: () => void;
+  onRefine: () => void;
+  onReport: () => void;
 }) {
   const Icon = venue ? venueExperiences[venue.id].icon : PencilRuler;
-  const remaining = Math.max(0, placement.required - placement.placed);
   const tour = useStudioTour("cameras");
+  const [typesOpen, setTypesOpen] = useState(false);
+  const typesBodyRef = useRef<HTMLDivElement>(null);
+  const scrollToNewType = useRef(false);
+
+  const placedCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const floor of plan.floors) {
+      for (const camera of floor.cameras) {
+        if (camera.templateId) counts.set(camera.templateId, (counts.get(camera.templateId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [plan.floors]);
+
+  const manageTypes = useCallback((intent: "edit" | "new") => {
+    if (intent === "new") {
+      onTemplatesChange([
+        ...cameraTemplates,
+        createTemplate({ label: `دوربین ${formatFaCount(cameraTemplates.length + 1)}`, quantity: 1 })
+      ]);
+      scrollToNewType.current = true;
+    }
+    setTypesOpen(true);
+  }, [cameraTemplates, onTemplatesChange]);
+
+  useEffect(() => {
+    if (!typesOpen) return;
+    if (scrollToNewType.current) {
+      scrollToNewType.current = false;
+      const frame = window.requestAnimationFrame(() => {
+        const body = typesBodyRef.current;
+        if (body) body.scrollTop = body.scrollHeight;
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+  }, [typesOpen, cameraTemplates.length]);
+
+  useEffect(() => {
+    if (!typesOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setTypesOpen(false); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [typesOpen]);
+
+  const canReport = placement.placed >= MIN_REPORT_CAMERAS && !reporting;
+  const shownSpaces = placement.keySpacesWithout.slice(0, 3);
+  const moreSpaces = placement.keySpacesWithout.length - shownSpaces.length;
 
   return (
     <section className={`design-focus-shell design-focus-camera venue-${venue?.id ?? "blank"}`} dir="rtl">
@@ -2037,7 +2052,7 @@ function CameraPlacementFocusStage({
         </button>
         <div className="design-focus-project">
           <span><Icon size={20} aria-hidden="true" /></span>
-          <div><small>مرحله ۳ از ۶ · نوع پروژه فعال</small><strong>{venue?.label ?? blankDesignLabel}</strong></div>
+          <div><small>مرحله ۲ · جانمایی دوربین</small><strong>{venue?.label ?? blankDesignLabel}</strong></div>
         </div>
         <div className="design-focus-tools">
           <StudioHelpButton onClick={tour.start} />
@@ -2051,29 +2066,83 @@ function CameraPlacementFocusStage({
           mode="cameras"
           variant="focus"
           cameraTemplates={cameraTemplates}
+          onManageCameraTypes={manageTypes}
           onPlanChange={onPlanChange}
           onSummaryChange={onSummaryChange}
         />
       </main>
       {tour.open ? <StudioTour tourId="cameras" onClose={tour.close} /> : null}
       <footer className="design-focus-footer">
-        <div className={`camera-focus-progress${placement.complete ? " is-complete" : ""}`}>
-          {placement.complete ? <Check size={16} aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" />}
-          <span>
-            {placement.complete
-              ? `${formatFaCount(placement.placed)} دوربین جانمایی شده؛ برای ادامه آماده است.`
-              : placement.placed > 0
-                ? `${formatFaCount(placement.placed)} از ${formatFaCount(placement.required)} دوربین جانمایی شده؛ ${formatFaCount(remaining)} مورد باقی مانده.`
-                : "برای ادامه، حداقل یک دوربین را روی نقشه جانمایی کنید."}
+        <div className={`camera-focus-progress${placement.placed > 0 ? " is-complete" : ""}`}>
+          {placement.placed > 0 ? <Check size={16} aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" />}
+          <span className="camera-focus-progress-copy">
+            <span>
+              {placement.placed === 0
+                ? "دوربین‌ها را از فهرست «دوربین‌های آماده» بکشید و روی نقشه رها کنید."
+                : placement.placed < MIN_REPORT_CAMERAS
+                  ? `${placementSummary(placement)}؛ برای ساخت گزارش حداقل ${formatFaCount(MIN_REPORT_CAMERAS)} دوربین لازم است.`
+                  : placementSummary(placement)}
+            </span>
+            {reportError ? (
+              <small className="camera-focus-error" role="alert">{reportError}</small>
+            ) : placement.keySpacesWithout.length > 0 ? (
+              <small className="camera-focus-note" title={placement.keySpacesWithout.join("، ")}>
+                فضای مهم بدون دوربین: {shownSpaces.join("، ")}{moreSpaces > 0 ? ` و ${formatFaCount(moreSpaces)} مورد دیگر` : ""}
+              </small>
+            ) : null}
           </span>
         </div>
         <div className="design-focus-actions">
-          <button type="button" className="design-focus-cancel" onClick={onBack}><ArrowRight size={17} />بازگشت به دستگاه‌ها</button>
-          <button type="button" className="design-focus-next" disabled={placement.placed === 0} onClick={onContinue}>
-            مرحله بعد: مشخصات دوربین‌ها<ChevronLeft size={18} />
+          <button type="button" className="design-focus-cancel" onClick={onBack}><ArrowRight size={17} />بازگشت به نقشه</button>
+          <button
+            type="button"
+            className="design-focus-secondary"
+            disabled={placement.placed === 0 || reporting}
+            onClick={onRefine}
+            title="مشخصات دقیق هر دوربین، پروفایل ضبط و آرشیو، زیرساخت و اولویت‌ها"
+          >
+            <SlidersHorizontal size={16} aria-hidden="true" />تنظیمات دقیق
+          </button>
+          <button
+            type="button"
+            className="design-focus-next"
+            disabled={!canReport}
+            onClick={onReport}
+            title={placement.placed < MIN_REPORT_CAMERAS
+              ? `برای ساخت گزارش حداقل ${formatFaCount(MIN_REPORT_CAMERAS)} دوربین روی نقشه لازم است`
+              : "گزارش و سه پلن پیشنهادی با تنظیمات پیش‌فرض ضبط و زیرساخت ساخته می‌شود؛ بعداً قابل تنظیم است"}
+          >
+            {reporting ? <LoaderCircle className="spin" size={18} aria-hidden="true" /> : <Sparkles size={17} aria-hidden="true" />}
+            {reporting ? "در حال ساخت گزارش…" : "ساخت گزارش"}
           </button>
         </div>
       </footer>
+
+      {typesOpen ? (
+        <div className="camera-types-backdrop" role="presentation" onMouseDown={() => setTypesOpen(false)}>
+          <aside
+            className="camera-types-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="camera-types-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <h2 id="camera-types-title">انواع دوربین</h2>
+                <p>هر نوع، نقطه شروع دوربین‌هایی است که از فهرست می‌کشید. تغییر آن روی دوربین‌هایی که قبلاً روی نقشه گذاشته‌اید اثر ندارد؛ آن‌ها را از پنل مشخصات تنظیم کنید.</p>
+              </div>
+              <button type="button" className="design-mode-close" onClick={() => setTypesOpen(false)} aria-label="بستن"><X size={18} /></button>
+            </header>
+            <div className="camera-types-body" ref={typesBodyRef}>
+              <CameraTemplateEditor templates={cameraTemplates} onChange={onTemplatesChange} placedCounts={placedCounts} />
+            </div>
+            <footer>
+              <button type="button" className="design-focus-next" onClick={() => setTypesOpen(false)}><Check size={16} aria-hidden="true" />تمام</button>
+            </footer>
+          </aside>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -2086,7 +2155,7 @@ function NumberField({ label, value, min, max, onChange }: { label: string; valu
 function LabeledNumber({ label, value, unit, min, max, onChange }: { label: string; value: number; unit: string; min: number; max: number; onChange: (value: number) => void }) { return <label className="wizard-labeled-number"><span>{label}</span><div><input type="number" value={value} min={min} max={max} onChange={(event) => onChange(Math.max(min, Math.min(max, Number(event.target.value))))} /><small>{unit}</small></div></label>; }
 function FeatureToggle({ icon, title, description, checked, onChange }: { icon: React.ReactNode; title: string; description: string; checked: boolean; onChange: (value: boolean) => void }) { return <label className={checked ? "feature-toggle active" : "feature-toggle"}><span className="feature-toggle-icon">{icon}</span><span><strong>{title}</strong><small>{description}</small></span><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /></label>; }
 
-function RecommendationResults({ result, plan, onReset, onUseCompatibleDefaults }: { result: RecommendationResult; plan?: BuildingPlan; onReset: () => void; onUseCompatibleDefaults: () => void }) {
+function RecommendationResults({ result, plan, onReset, onUseCompatibleDefaults, onEditPlacement, onRefine }: { result: RecommendationResult; plan?: BuildingPlan; onReset: () => void; onUseCompatibleDefaults: () => void; onEditPlacement?: () => void; onRefine?: () => void }) {
   const [activePlan, setActivePlan] = useState(result.project.budget);
   const [quantities, setQuantities] = useState<Record<string, Record<string, number>>>({});
   const [saved, setSaved] = useState(false);
@@ -2143,7 +2212,7 @@ function RecommendationResults({ result, plan, onReset, onUseCompatibleDefaults 
   };
 
   return <section className="recommendation-results">
-    <div className="results-hero"><div><p className="eyebrow">پیشنهاد اولیه آماده است</p><h1>سناریوهای قابل ویرایش</h1><p>موتور {result.calculation.engineVersion} · ورودی {result.calculation.inputVersion} · {result.calculation.inputFingerprint}</p><small className="calculation-standards">{result.calculation.standardVersions.join(" · ")}</small></div><div className="result-actions"><button className="secondary-action" onClick={onReset}><ShieldCheck size={16} />صفحه اصلی طراحی هوشمند</button><button className="secondary-action" onClick={printEngineeringReport}><FileDown size={16} />خروجی PDF مهندسی</button><button className="primary-action" onClick={saveSolution} disabled={savingVersion}><Save size={16} />{savingVersion ? "در حال ذخیره نسخه..." : saved ? "ذخیره نسخه جدید" : "ذخیره پلن و نسخه محاسبه"}</button>{saveVersionMessage ? <small>{saveVersionMessage}</small> : null}</div></div>
+    <div className="results-hero"><div><p className="eyebrow">پیشنهاد اولیه آماده است</p><h1>سناریوهای قابل ویرایش</h1><p>موتور {result.calculation.engineVersion} · ورودی {result.calculation.inputVersion} · {result.calculation.inputFingerprint}</p><small className="calculation-standards">{result.calculation.standardVersions.join(" · ")}</small></div><div className="result-actions"><button className="secondary-action" onClick={onReset}><ShieldCheck size={16} />صفحه اصلی طراحی هوشمند</button>{onEditPlacement ? <button className="secondary-action" onClick={onEditPlacement}><PencilRuler size={16} />اصلاح جانمایی</button> : null}{onRefine ? <button className="secondary-action" onClick={onRefine} title="مشخصات دقیق هر دوربین، پروفایل ضبط و آرشیو، زیرساخت"><SlidersHorizontal size={16} />تنظیمات دقیق</button> : null}<button className="secondary-action" onClick={printEngineeringReport}><FileDown size={16} />خروجی PDF مهندسی</button><button className="primary-action" onClick={saveSolution} disabled={savingVersion}><Save size={16} />{savingVersion ? "در حال ذخیره نسخه..." : saved ? "ذخیره نسخه جدید" : "ذخیره پلن و نسخه محاسبه"}</button>{saveVersionMessage ? <small>{saveVersionMessage}</small> : null}</div></div>
     {selected && <div className="metric-strip"><Metric label="PPM متوسط / حداقل" value={`${selected.metrics.averagePpm} / ${selected.metrics.minimumPpm}`} /><Metric label="Incoming / Remote" value={`${selected.metrics.bandwidthMbps} / ${selected.metrics.outgoingBandwidthMbps} Mbps`} /><Metric label="تقاضای Decode" value={`${selected.metrics.decodeDemandMp} MP`} /><Metric label="Storage پایه / نهایی" value={`${selected.metrics.storageBaseTb} / ${selected.metrics.storageRequiredTb} TB`} /><Metric label="فضای usable / خام" value={`${selected.metrics.storageUsableTb} / ${selected.metrics.storageRawTb} TB`} /><Metric label="آرایش دیسک" value={selected.metrics.raidLevel} /><Metric label="بار / بودجه PoE" value={`${selected.metrics.poeLoadW} / ${selected.metrics.poeBudgetW} W`} /><Metric label="نقاط توزیع شبکه" value={`${selected.metrics.switchLocations}`} /><Metric label="Duty Cycle ضبط" value={`${Math.round(selected.metrics.recordingDutyCycle * 100)}%`} /><Metric label="زمان پشتیبانی" value={selected.metrics.estimatedRuntimeMin ? `${selected.metrics.estimatedRuntimeMin} min` : "لحاظ نشده"} /><Metric label="وضوح بیشینه" value={`${selected.metrics.recommendedResolutionMp} MP`} /></div>}
     <div className="plan-tabs">{result.plans.map((plan) => <button key={plan.id} className={selected?.id === plan.id ? "active" : ""} onClick={() => setActivePlan(plan.id)}><span>{plan.title}</span><small>امتیاز محاسبه‌شده {new Intl.NumberFormat("fa-IR").format(plan.score)} از ۱۰۰</small></button>)}</div>
     {selected && <>{plan ? <PlanResultMaps plan={plan} recommendation={selected} /> : null}<div className="infrastructure-grid"><Metric label="کابل مسی با ذخیره" value={`${selected.infrastructure.copperCableM} m`} /><Metric label="Backbone فیبر" value={`${selected.infrastructure.fiberBackboneM} m`} /><Metric label="Rack" value={`${selected.infrastructure.rackCount} × ${selected.infrastructure.recommendedRackU}U`} /><Metric label="Patch Panel / SFP" value={`${selected.infrastructure.patchPanelCount} / ${selected.infrastructure.sfpModuleCount}`} /></div></>}
