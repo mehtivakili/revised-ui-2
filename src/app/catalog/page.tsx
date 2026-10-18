@@ -4,6 +4,10 @@ import { CatalogExplorer } from "@/src/components/smart/CatalogExplorer";
 import { getCatalogSnapshot } from "@/src/lib/catalog/repository";
 import { getSourceCatalogPage } from "@/src/lib/catalog/source-repository";
 import { getCurrentSession } from "@/src/lib/session";
+import type { Metadata } from "next";
+import { pageMetadata } from "@/src/lib/seo";
+
+export const metadata: Metadata = pageMetadata("/catalog", "محصولات و مشخصات فنی", "فهرست دوربین‌ها، ضبط‌کننده‌ها، سوئیچ‌ها و تجهیزات نظارت تصویری با مشخصات فنی و تصاویر.");
 
 export default async function CatalogPage() {
   if (!(await getCurrentSession())) redirect("/login?next=%2Fcatalog");

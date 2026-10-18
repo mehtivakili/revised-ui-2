@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Mail, MapPin, Phone } from "lucide-react";
 import Image from "next/image";
+import type { Metadata } from "next";
+import { pageMetadata } from "@/src/lib/seo";
 
 type SocialIconName = "telegram" | "instagram" | "facebook" | "twitter" | "linkedin" | "youtube" | "aparat";
 
@@ -62,6 +64,8 @@ function SocialIcon({ name }: { name: SocialIconName }) {
 
   return <span style={{ fontSize: "16px", fontWeight: "900" }} aria-hidden="true">{labels[name]}</span>;
 }
+
+export const metadata: Metadata = pageMetadata("/contacts", "تماس با ما", "راه‌های ارتباط با پرشیا سیستم: تلفن، ایمیل، نشانی و شبکه‌های اجتماعی.");
 
 export default function ContactsPage() {
   return (

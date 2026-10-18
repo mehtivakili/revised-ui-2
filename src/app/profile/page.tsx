@@ -4,6 +4,10 @@ import { CalendarClock, Crown, ShieldCheck, UserRound } from "lucide-react";
 import { getUserById } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
+import type { Metadata } from "next";
+import { pageMetadata } from "@/src/lib/seo";
+
+export const metadata: Metadata = pageMetadata("/profile", "حساب کاربری", "مدیریت حساب کاربری همیار دوربین.", { index: false });
 
 export default async function ProfilePage() {
   const session = await getCurrentSession();

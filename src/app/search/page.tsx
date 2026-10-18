@@ -5,12 +5,16 @@ import { getUserById } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
 import { minimumSearchLength, normalizeText, searchTools } from "@/src/lib/toolSearch";
+import type { Metadata } from "next";
+import { pageMetadata } from "@/src/lib/seo";
 
 type SearchPageProps = {
   searchParams: Promise<{
     q?: string | string[];
   }>;
 };
+
+export const metadata: Metadata = pageMetadata("/search", "جست‌وجو", "جست‌وجو در ابزارها و محصولات همیار دوربین.", { index: false });
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;

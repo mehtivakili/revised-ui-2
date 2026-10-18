@@ -5,6 +5,10 @@ import {
   Calculator,
   Camera,
 } from "lucide-react";
+import type { Metadata } from "next";
+import { pageMetadata } from "@/src/lib/seo";
+
+export const metadata: Metadata = pageMetadata("/", "همیار دوربین — طراحی و محاسبه سیستم‌های نظارت تصویری", "طراحی هوشمند پروژه‌های دوربین مداربسته روی نقشه، جانمایی دوربین و ابزارهای رایگان محاسبه ذخیره‌سازی، لنز، DORI، شبکه و لینک بی‌سیم.", { absoluteTitle: true });
 
 export default function HomePage() {
   return (

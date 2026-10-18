@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { BuildingPlan, FloorPlan, PlanDoor, PlanWall } from "@/src/domain/planner/types";
 import type { CatalogProduct, RecommendationPlan } from "@/src/domain/catalog/types";
-import { computeFloorCoverage, doriLevels } from "@/src/lib/planner/coverage";
+import { computeFloorCoverage, doriLevels, type FloorCoverage } from "@/src/lib/planner/coverage";
 import { boundsOf, obstacleCorners } from "@/src/lib/planner/geometry";
 import { formatFa } from "@/src/lib/chatbot/persian";
 
@@ -55,27 +55,7 @@ export function PlanResultMaps({ plan, recommendation }: { plan: BuildingPlan; r
 function FloorSvg({ floor, cameraProducts }: { floor: FloorPlan; cameraProducts: CatalogProduct[] }) {
   const coverage = useMemo(() => computeFloorCoverage(floor, 1.5), [floor]);
 
-  const view = useMemo(() => {
-    const points = [
-      ...floor.walls.flatMap((wall) => [wall.a, wall.b]),
-      ...floor.obstacles.flatMap(obstacleCorners),
-      ...floor.cameras.map((camera) => camera.position),
-      ...coverage.cameras.flatMap((item) => item.polygon)
-    ];
-    const bounds = boundsOf(points);
-    if (!bounds) return null;
-    return {
-      minX: bounds.minX - PADDING_M,
-      minZ: bounds.minZ - PADDING_M,
-      width: Math.max(1, bounds.maxX - bounds.minX + PADDING_M * 2),
-      height: Math.max(1, bounds.maxZ - bounds.minZ + PADDING_M * 2)
-    };
-  }, [floor, coverage]);
-
-  if (!view) return null;
-
-  const toPath = (points: { x: number; z: number }[]) =>
-    points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(2)},${point.z.toFixed(2)}`).join(" ") + " Z";
+  if (!floor.walls.length && !floor.cameras.length && !floor.obstacles.length) return null;
 
   return (
     <article className="plan-result-floor">
@@ -88,92 +68,7 @@ function FloorSvg({ floor, cameraProducts }: { floor: FloorPlan; cameraProducts:
       </header>
 
       <div className="plan-result-canvas">
-        <svg
-          viewBox={`${view.minX} ${view.minZ} ${view.width} ${view.height}`}
-          role="img"
-          aria-label={`نقشه ${floor.name} با پوشش دوربین‌ها`}
-        >
-          {floor.backdrop?.calibrated ? (
-            <image
-              href={floor.backdrop.imageUrl}
-              x={floor.backdrop.originM.x}
-              y={floor.backdrop.originM.z}
-              width={floor.backdrop.widthPx * floor.backdrop.metresPerPixel}
-              height={floor.backdrop.heightPx * floor.backdrop.metresPerPixel}
-              opacity={floor.backdrop.opacity}
-              preserveAspectRatio="none"
-            />
-          ) : null}
-
-          {/* Bands are disjoint rings, so each is drawn once at full strength. */}
-          {coverage.cameras.map((item) =>
-            item.bands.map((band) =>
-              band.polygon.length >= 3 ? (
-                <path
-                  key={`${item.cameraId}-${band.key}`}
-                  d={toPath(band.polygon)}
-                  fill={band.color}
-                  fillOpacity={0.5}
-                  stroke={band.color}
-                  strokeOpacity={0.9}
-                  strokeWidth={0.05}
-                />
-              ) : null
-            )
-          )}
-
-          {floor.obstacles.map((obstacle) => (
-            <path
-              key={obstacle.id}
-              d={toPath(obstacleCorners(obstacle))}
-              fill={obstacle.blocksView ? "#94a3b8" : "#cbd5e1"}
-              fillOpacity={0.75}
-              stroke="#64748b"
-              strokeWidth={0.06}
-            />
-          ))}
-
-          {floor.walls.map((wall) => (
-            <line
-              key={wall.id}
-              x1={wall.a.x} y1={wall.a.z} x2={wall.b.x} y2={wall.b.z}
-              stroke={wall.variant ? "#64748b" : wall.blocksView ? "#334155" : "#93c5fd"}
-              strokeWidth={Math.max(0.12, wall.thicknessM)}
-              strokeLinecap="square"
-              // Fences read as a boundary line rather than as building fabric.
-              strokeDasharray={wall.variant === "fence-mesh" ? "0.6 0.3" : undefined}
-            />
-          ))}
-
-          {(floor.doors ?? []).map((door) => {
-            const wall = floor.walls.find((item) => item.id === door.wallId);
-            return wall ? <DoorSvg key={door.id} door={door} wall={wall} /> : null;
-          })}
-
-          {floor.cameras.map((camera, index) => {
-            const item = coverage.cameras.find((entry) => entry.cameraId === camera.id);
-            const heading = ((camera.yawDeg * Math.PI) / 180);
-            return (
-              <g key={camera.id}>
-                {item ? (
-                  <line
-                    x1={camera.position.x} y1={camera.position.z}
-                    x2={camera.position.x + Math.cos(heading) * 1.6}
-                    y2={camera.position.z + Math.sin(heading) * 1.6}
-                    stroke="#0f5f99" strokeWidth={0.12}
-                  />
-                ) : null}
-                <circle cx={camera.position.x} cy={camera.position.z} r={0.42} fill="#0f5f99" stroke="#fff" strokeWidth={0.14} />
-                <text
-                  x={camera.position.x} y={camera.position.z + 0.16}
-                  textAnchor="middle" fontSize={0.5} fill="#fff" fontWeight="700"
-                >
-                  {index + 1}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+        <FloorCoverageSvg floor={floor} coverage={coverage} />
       </div>
 
       <ol className="plan-result-schedule">
@@ -203,6 +98,123 @@ function FloorSvg({ floor, cameraProducts }: { floor: FloorPlan; cameraProducts:
         })}
       </ol>
     </article>
+  );
+}
+
+/**
+ * The drawn floor with each camera's DORI bands, numbered cameras, walls, doors and
+ * obstacles. Shared by the results page and the printable proposal.
+ */
+export function FloorCoverageSvg({ floor, coverage }: { floor: FloorPlan; coverage: FloorCoverage }) {
+  const view = useMemo(() => {
+    const points = [
+      ...floor.walls.flatMap((wall) => [wall.a, wall.b]),
+      ...floor.obstacles.flatMap(obstacleCorners),
+      ...floor.cameras.map((camera) => camera.position),
+      ...coverage.cameras.flatMap((item) => item.polygon)
+    ];
+    const bounds = boundsOf(points);
+    if (!bounds) return null;
+    return {
+      minX: bounds.minX - PADDING_M,
+      minZ: bounds.minZ - PADDING_M,
+      width: Math.max(1, bounds.maxX - bounds.minX + PADDING_M * 2),
+      height: Math.max(1, bounds.maxZ - bounds.minZ + PADDING_M * 2)
+    };
+  }, [floor, coverage]);
+
+  if (!view) return null;
+
+  const toPath = (points: { x: number; z: number }[]) =>
+    points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(2)},${point.z.toFixed(2)}`).join(" ") + " Z";
+
+  return (
+    <svg
+      viewBox={`${view.minX} ${view.minZ} ${view.width} ${view.height}`}
+      role="img"
+      aria-label={`نقشه ${floor.name} با پوشش دوربین‌ها`}
+    >
+      {floor.backdrop?.calibrated ? (
+        <image
+          href={floor.backdrop.imageUrl}
+          x={floor.backdrop.originM.x}
+          y={floor.backdrop.originM.z}
+          width={floor.backdrop.widthPx * floor.backdrop.metresPerPixel}
+          height={floor.backdrop.heightPx * floor.backdrop.metresPerPixel}
+          opacity={floor.backdrop.opacity}
+          preserveAspectRatio="none"
+        />
+      ) : null}
+
+      {/* Bands are disjoint rings, so each is drawn once at full strength. */}
+      {coverage.cameras.map((item) =>
+        item.bands.map((band) =>
+          band.polygon.length >= 3 ? (
+            <path
+              key={`${item.cameraId}-${band.key}`}
+              d={toPath(band.polygon)}
+              fill={band.color}
+              fillOpacity={0.5}
+              stroke={band.color}
+              strokeOpacity={0.9}
+              strokeWidth={0.05}
+            />
+          ) : null
+        )
+      )}
+
+      {floor.obstacles.map((obstacle) => (
+        <path
+          key={obstacle.id}
+          d={toPath(obstacleCorners(obstacle))}
+          fill={obstacle.blocksView ? "#94a3b8" : "#cbd5e1"}
+          fillOpacity={0.75}
+          stroke="#64748b"
+          strokeWidth={0.06}
+        />
+      ))}
+
+      {floor.walls.map((wall) => (
+        <line
+          key={wall.id}
+          x1={wall.a.x} y1={wall.a.z} x2={wall.b.x} y2={wall.b.z}
+          stroke={wall.variant ? "#64748b" : wall.blocksView ? "#334155" : "#93c5fd"}
+          strokeWidth={Math.max(0.12, wall.thicknessM)}
+          strokeLinecap="square"
+          // Fences read as a boundary line rather than as building fabric.
+          strokeDasharray={wall.variant === "fence-mesh" ? "0.6 0.3" : undefined}
+        />
+      ))}
+
+      {(floor.doors ?? []).map((door) => {
+        const wall = floor.walls.find((item) => item.id === door.wallId);
+        return wall ? <DoorSvg key={door.id} door={door} wall={wall} /> : null;
+      })}
+
+      {floor.cameras.map((camera, index) => {
+        const item = coverage.cameras.find((entry) => entry.cameraId === camera.id);
+        const heading = ((camera.yawDeg * Math.PI) / 180);
+        return (
+          <g key={camera.id}>
+            {item ? (
+              <line
+                x1={camera.position.x} y1={camera.position.z}
+                x2={camera.position.x + Math.cos(heading) * 1.6}
+                y2={camera.position.z + Math.sin(heading) * 1.6}
+                stroke="#0f5f99" strokeWidth={0.12}
+              />
+            ) : null}
+            <circle cx={camera.position.x} cy={camera.position.z} r={0.42} fill="#0f5f99" stroke="#fff" strokeWidth={0.14} />
+            <text
+              x={camera.position.x} y={camera.position.z + 0.16}
+              textAnchor="middle" fontSize={0.5} fill="#fff" fontWeight="700"
+            >
+              {index + 1}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 

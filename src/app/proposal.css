@@ -1,0 +1,275 @@
+/*
+ * Printable technical proposal (src/components/smart/EngineeringProposal.tsx).
+ *
+ * The proposal is mounted only while printing. During that print every other part of the
+ * page — top bar, search, buttons, chat, footer — is hidden, and the proposal is laid out
+ * as an A4 document: a cover page, numbered sections, tables that keep their header row on
+ * every page, and maps that never split across pages.
+ */
+
+.proposal-print-root { display: none; }
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 16mm 14mm 18mm;
+
+    @bottom-center {
+      content: "صفحه " counter(page) " از " counter(pages);
+      font-family: Vazirmatn, Tahoma, sans-serif;
+      font-size: 8.5pt;
+      color: #64748b;
+    }
+  }
+
+  @page :first {
+    @bottom-center { content: none; }
+  }
+
+  body.is-printing-proposal {
+    background: #fff !important;
+    min-height: 0 !important;
+  }
+
+  body.is-printing-proposal > *:not(.proposal-print-root) { display: none !important; }
+  body.is-printing-proposal > .proposal-print-root { display: block !important; margin: 0; padding: 0; }
+}
+
+.proposal {
+  --p-ink: #0b1524;
+  --p-muted: #475569;
+  --p-line: #cbd5e1;
+  --p-soft: #f1f5f9;
+  --p-brand: #c2410c;
+  --p-navy: #1e3a8a;
+  color: var(--p-ink);
+  font-family: Vazirmatn, Tahoma, sans-serif;
+  font-size: 10pt;
+  line-height: 1.75;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── Cover ──────────────────────────────────────────────────────────── */
+/*
+ * A fixed height that fits the printable area of both A4 (263mm here) and US Letter
+ * (~245mm). A cover even slightly taller spills onto a second page, and the forced break
+ * after it then leaves that page blank.
+ */
+.proposal-cover {
+  display: flex;
+  flex-direction: column;
+  height: 225mm;
+  overflow: hidden;
+  padding: 10mm 6mm 0;
+  break-after: page;
+  page-break-after: always;
+  border-top: 6mm solid var(--p-navy);
+  background:
+    linear-gradient(180deg, #eef2ff 0, #fff 70mm);
+}
+
+.proposal-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 32mm; }
+.proposal-logo {
+  display: grid;
+  place-items: center;
+  width: 13mm;
+  height: 13mm;
+  color: #fff;
+  background: linear-gradient(135deg, #ee5d27, var(--p-brand));
+  border-radius: 3mm;
+}
+.proposal-brand strong { display: block; font-size: 14pt; font-weight: 900; }
+.proposal-brand small { color: var(--p-muted); font-size: 9pt; }
+
+.proposal-kicker {
+  margin: 0 0 3mm;
+  color: var(--p-brand);
+  font-size: 11pt;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+.proposal-cover h1 { margin: 0; font-size: 28pt; font-weight: 900; line-height: 1.35; }
+.proposal-subtitle { margin: 3mm 0 16mm; color: var(--p-muted); font-size: 12pt; }
+
+.proposal-cover-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  border: 1px solid var(--p-line);
+  border-radius: 2.5mm;
+  overflow: hidden;
+}
+.proposal-cover-meta > div { padding: 4mm 5mm; border-bottom: 1px solid var(--p-line); }
+.proposal-cover-meta > div:nth-child(odd) { border-left: 1px solid var(--p-line); }
+.proposal-cover-meta > div:nth-last-child(-n + 2) { border-bottom: 0; }
+.proposal-cover-meta dt { color: var(--p-muted); font-size: 8.5pt; }
+.proposal-cover-meta dd { margin: 1mm 0 0; font-size: 12pt; font-weight: 800; }
+
+.proposal-client {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: end;
+  gap: 6mm 4mm;
+  margin-top: auto;
+  padding: 10mm 0 8mm;
+  color: var(--p-muted);
+  font-size: 10pt;
+}
+.proposal-client i { display: block; height: 0; border-bottom: 1px dotted #94a3b8; }
+
+/* ── Sections ───────────────────────────────────────────────────────── */
+.proposal-section { margin: 0 0 9mm; }
+.proposal-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 3mm;
+  margin: 0 0 4mm;
+  padding-bottom: 2mm;
+  color: var(--p-navy);
+  font-size: 14pt;
+  font-weight: 900;
+  border-bottom: 0.6mm solid var(--p-navy);
+  break-after: avoid;
+}
+.proposal-section h2 b {
+  display: grid;
+  place-items: center;
+  width: 7mm;
+  height: 7mm;
+  color: #fff;
+  background: var(--p-navy);
+  border-radius: 1.6mm;
+  font-size: 10pt;
+}
+.proposal-section h3 { margin: 0 0 2mm; font-size: 11pt; font-weight: 800; break-after: avoid; }
+
+.proposal-lead { margin: 0 0 4mm; font-size: 10.5pt; text-align: justify; }
+.proposal-note { margin: 3mm 0 0; color: var(--p-muted); font-size: 8.5pt; text-align: justify; }
+
+.proposal-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2.5mm;
+  margin: 0;
+}
+.proposal-facts > div {
+  padding: 2.5mm 3mm;
+  background: var(--p-soft);
+  border: 1px solid #e2e8f0;
+  border-radius: 2mm;
+  break-inside: avoid;
+}
+.proposal-facts dt { color: var(--p-muted); font-size: 8pt; }
+.proposal-facts dd { margin: 0.5mm 0 0; font-size: 10.5pt; font-weight: 800; }
+
+.proposal-callout {
+  margin-top: 4mm;
+  padding: 3mm 4mm;
+  background: #fff7ed;
+  border-right: 1.2mm solid var(--p-brand);
+  border-radius: 1.5mm;
+  break-inside: avoid;
+}
+.proposal-callout strong { color: var(--p-brand); }
+.proposal-callout ul { margin: 1mm 0 0; padding-right: 5mm; }
+
+.proposal-two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5mm; align-items: start; }
+
+/* ── Tables ─────────────────────────────────────────────────────────── */
+.proposal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+}
+.proposal-table caption {
+  margin-bottom: 1.5mm;
+  color: var(--p-ink);
+  font-size: 10pt;
+  font-weight: 800;
+  text-align: right;
+}
+.proposal-table thead { display: table-header-group; }
+.proposal-table tr { break-inside: avoid; }
+.proposal-table th,
+.proposal-table td {
+  padding: 1.8mm 2mm;
+  text-align: right;
+  vertical-align: top;
+  border: 1px solid var(--p-line);
+}
+.proposal-table thead th {
+  color: #fff;
+  background: var(--p-navy);
+  border-color: var(--p-navy);
+  font-weight: 800;
+  white-space: nowrap;
+}
+.proposal-table tbody tr:nth-child(even) td { background: #f8fafc; }
+.proposal-item-name { font-weight: 700; }
+
+.proposal-kv th {
+  width: 52%;
+  color: var(--p-muted);
+  font-weight: 600;
+  background: var(--p-soft);
+}
+.proposal-kv td { font-weight: 800; }
+.proposal-infra { margin-top: 5mm; }
+
+.proposal-gap { margin-top: 5mm; }
+
+/* The technical design leads; prices are present but quiet. */
+.proposal-item-name { display: block; }
+.proposal-item-reason { display: block; margin-top: 0.5mm; color: var(--p-muted); font-size: 7.5pt; line-height: 1.6; }
+.proposal-qty { font-weight: 800; text-align: center !important; }
+.proposal-price { color: #64748b; font-size: 8pt; font-weight: 500; white-space: nowrap; }
+.proposal-bom tfoot td { font-weight: 600; color: var(--p-muted); background: var(--p-soft); border-top: 1px solid var(--p-line); }
+.proposal-bom tfoot td.proposal-price { color: var(--p-ink); font-weight: 700; }
+
+.proposal-meter { display: inline-flex; align-items: center; gap: 2mm; white-space: nowrap; font-weight: 800; }
+.proposal-meter-track { display: inline-block; width: 22mm; height: 2mm; overflow: hidden; background: #e2e8f0; border-radius: 1mm; }
+.proposal-meter-track > span { display: block; height: 100%; background: linear-gradient(90deg, #16a34a, #22c55e); }
+
+.proposal-analysis,
+.proposal-equipment { break-before: page; page-break-before: always; }
+
+/* ── Maps ───────────────────────────────────────────────────────────── */
+.proposal-maps { break-before: page; page-break-before: always; }
+.proposal-legend { display: flex; flex-wrap: wrap; gap: 5mm; margin: 2mm 0 4mm; padding: 0; list-style: none; font-size: 8.5pt; }
+.proposal-legend i { display: inline-block; width: 3.5mm; height: 3.5mm; margin-left: 1.5mm; vertical-align: -0.6mm; border-radius: 0.8mm; }
+
+.proposal-floor { margin-bottom: 8mm; }
+.proposal-floor + .proposal-floor { break-before: page; }
+.proposal-floor h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3mm; }
+.proposal-floor h3 small { color: var(--p-muted); font-size: 8.5pt; font-weight: 600; }
+.proposal-map {
+  margin-bottom: 4mm;
+  padding: 2mm;
+  border: 1px solid var(--p-line);
+  border-radius: 2mm;
+  break-inside: avoid;
+}
+.proposal-map svg { display: block; width: 100%; height: auto; max-height: 150mm; }
+.proposal-schedule { font-size: 8pt; }
+
+/* ── Scope, signatures ──────────────────────────────────────────────── */
+.proposal-checks,
+.proposal-pending { margin: 0; padding-right: 5mm; font-size: 9pt; }
+.proposal-checks li::marker { color: #15803d; }
+.proposal-pending li::marker { color: var(--p-brand); }
+
+.proposal-sign {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12mm;
+  margin-top: 12mm;
+  break-inside: avoid;
+}
+.proposal-sign > div { display: grid; gap: 2mm; }
+.proposal-sign span { font-weight: 800; }
+.proposal-sign i { display: block; height: 18mm; border-bottom: 1px solid #94a3b8; }
+.proposal-sign small { color: var(--p-muted); font-size: 8pt; }
+
+.proposal-colophon { margin-top: 8mm; color: #94a3b8; font-size: 8pt; text-align: center; }

@@ -1,5 +1,7 @@
 import { LoginForm, type LoginMode } from "@/src/components/LoginForm";
 import { safeAuthRedirect } from "@/src/lib/authRedirect";
+import type { Metadata } from "next";
+import { pageMetadata } from "@/src/lib/seo";
 
 type LoginPageProps = {
   searchParams: Promise<{
@@ -8,6 +10,8 @@ type LoginPageProps = {
     next?: string | string[];
   }>;
 };
+
+export const metadata: Metadata = pageMetadata("/login", "ورود به حساب", "ورود به حساب همیار دوربین با پیامک یا رمز عبور.", { index: false });
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;

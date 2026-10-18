@@ -5,11 +5,13 @@ import { ChatAssistant } from "@/src/components/chat/ChatAssistant";
 import { PwaInstallPrompt } from "@/src/components/PwaInstallPrompt";
 import { ScrollReset } from "@/src/components/ScrollReset";
 import { SiteFooter } from "@/src/components/SiteFooter";
+import { SITE_URL } from "@/src/lib/site";
 import "./globals.css";
 import "./theme.css";
+import "./proposal.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://hamyardoorbin.ir"),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "همیار دوربین",
     template: "%s | همیار دوربین"

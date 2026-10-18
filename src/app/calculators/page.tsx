@@ -21,6 +21,8 @@ import { dashboardCategories, type DashboardCategory, type DashboardTool } from 
 import { getUserById } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
 import { getSubscriptionAccess, isCategoryLocked } from "@/src/lib/subscription";
+import type { Metadata } from "next";
+import { pageMetadata } from "@/src/lib/seo";
 
 const iconMap: Record<DashboardTool["icon"] | DashboardCategory["icon"], LucideIcon> = {
   activity: Activity,
@@ -53,6 +55,8 @@ const storageCategory = categoryById("storage");
 const networkCategory = categoryById("network");
 const wirelessCategory = categoryById("wireless");
 const lensCategory = categoryById("lens");
+
+export const metadata: Metadata = pageMetadata("/calculators", "ابزارهای محاسباتی دوربین مداربسته و شبکه", "مجموعه ابزارهای آنلاین برای محاسبه ظرفیت ذخیره‌سازی و RAID، فاصله DORI، لنز و زاویه دید، ساب‌نت IP، بودجه لینک بی‌سیم و ناحیه فرنل.");
 
 export default async function CalculatorsPage() {
   const session = await getCurrentSession();

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Anchor, ArrowLeft, ArrowRight, Bookmark, BriefcaseBusiness, BrickWall, Bus, BusFront, Cable, CarFront, Check, ChevronLeft, CircleAlert, CircleParking, Droplets, Factory, FileDown, Flame, FolderOpen, Fuel, Gem, GraduationCap, HardHat, HeartPulse, Hotel, House, Info, Landmark, LoaderCircle, LockKeyhole, Mic, Milestone, MonitorCog, Moon, MousePointer2, Move3d, PencilRuler, Pickaxe, Plane, Presentation, RotateCcw, Save, Search, Server, ShieldCheck, Ship, ShoppingBag, ShoppingCart, Siren, SlidersHorizontal, Sparkles, Sprout, SquareStack, Store, SunMedium, TowerControl, TrafficCone, TrainFront, Trash2, UtensilsCrossed, Volleyball, Warehouse, Waves, Waypoints, X, Zap } from "lucide-react";
+import { Anchor, ArrowLeft, ArrowRight, Bookmark, BriefcaseBusiness, BrickWall, Bus, BusFront, Cable, CarFront, Check, ChevronLeft, CircleAlert, CircleParking, Droplets, Factory, FileDown, Flame, FolderOpen, Fuel, Gem, GraduationCap, HardHat, HeartPulse, History, Hotel, House, Info, Landmark, LoaderCircle, LockKeyhole, Mic, Milestone, MonitorCog, Moon, MousePointer2, Move3d, PencilRuler, Pickaxe, Plane, Presentation, RotateCcw, Save, Search, Server, ShieldCheck, Ship, ShoppingBag, ShoppingCart, Siren, SlidersHorizontal, Sparkles, Sprout, SquareStack, Store, SunMedium, TowerControl, TrafficCone, TrainFront, Trash2, UtensilsCrossed, Volleyball, Warehouse, Waves, Waypoints, X, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ProjectBrief, ProjectCameraTemplate, ProjectZone, RecommendationPlan, RecommendationResult } from "@/src/domain/catalog/types";
 import { createEmptyPlan, type BuildingPlan } from "@/src/domain/planner/types";
@@ -14,6 +14,15 @@ import { CameraTemplateEditor } from "@/src/components/smart/CameraTemplateEdito
 import { CameraStreamEditor } from "@/src/components/smart/CameraStreamEditor";
 import { createTemplate, defaultCameraTemplates, zonesFromPlan, zonesFromTemplates } from "@/src/lib/planner/camera-templates";
 import { roomAtPoint } from "@/src/lib/planner/rooms";
+import {
+  clearPlannerDraft,
+  planHasContent,
+  readPlannerDraft,
+  summariseDraft,
+  writePlannerDraft,
+  type DraftStage,
+  type DraftSummary
+} from "@/src/lib/planner/draft";
 import { createSamplePlan, sampleVenueTypeIds, type SamplePlanId } from "@/src/lib/planner/sample-plans";
 import { findSectionType, venueTypes, type VenueType, type VenueTypeId } from "@/src/domain/planner/venues";
 import { ProjectGallery, ProjectLimitDialog, VenueComposition } from "@/src/components/smart/ProjectGallery";
@@ -28,6 +37,8 @@ import {
 } from "@/src/lib/projects/client";
 import { DEFAULT_PROJECT_LIMIT, PROJECT_LIMIT_CODE } from "@/src/lib/projects/limits";
 import { useRouter } from "next/navigation";
+import { createPortal, flushSync } from "react-dom";
+import { EngineeringProposal } from "@/src/components/smart/EngineeringProposal";
 
 const formatFaCount = (value: number) => new Intl.NumberFormat("fa-IR").format(value);
 /** Shown wherever a project type would be, for a design started without one. */
@@ -860,6 +871,28 @@ export function ProjectWizard() {
   /** Bumped to make the gallery refetch after a save. */
   const [galleryToken, setGalleryToken] = useState(0);
   const dirtyRef = useRef(false);
+  /** Set by openSavedProject so loading a design does not count as an unsaved change. */
+  const suppressDirtyRef = useRef(false);
+
+  /*
+   * Local drafts of designs not yet saved to the account.
+   *
+   * Every new design (blank, project type, sample, or a resumed draft) starts a session
+   * with its own id and remembers the plan it started from. The draft is written only once
+   * the plan differs from that starting point, so merely opening a sample never replaces
+   * an earlier draft, and saving clears only this session's draft.
+   */
+  const [designSessionId, setDesignSessionId] = useState(() => newDraftId());
+  const draftBaselineRef = useRef<BuildingPlan | null>(null);
+  const draftDueRef = useRef(false);
+  const lastStageRef = useRef<DraftStage>("design");
+  /** A resumed draft is unsaved work from the first moment, before any new edit. */
+  const resumedDraftRef = useRef(false);
+  const [draftSummary, setDraftSummary] = useState<DraftSummary | null>(null);
+  const startDesignSession = useCallback(() => {
+    resumedDraftRef.current = false;
+    setDesignSessionId(newDraftId());
+  }, []);
   // Memoised: the `?? []` fallback would otherwise be a fresh array every render and
   // invalidate every hook downstream of it.
   const cameraTemplates = useMemo(() => brief.cameraTemplates ?? [], [brief.cameraTemplates]);
@@ -962,6 +995,8 @@ export function ProjectWizard() {
       const saved = projectId
         ? await saveStoredProject(projectId, payload)
         : await createStoredProject(payload);
+      // Now on the server: the local safety copy of this design is no longer needed.
+      if (!projectId) clearPlannerDraft(designSessionId);
       setProjectId(saved.id);
       setProjectName(saved.name);
       dirtyRef.current = false;
@@ -976,7 +1011,7 @@ export function ProjectWizard() {
       }
       return null;
     }
-  }, [buildPayload, projectId]);
+  }, [buildPayload, designSessionId, projectId]);
 
   /*
    * Autosave.
@@ -991,7 +1026,118 @@ export function ProjectWizard() {
     return () => window.clearTimeout(timer);
   }, [projectId, persistProject, brief, buildingPlan, result]);
 
-  useEffect(() => { dirtyRef.current = true; }, [brief, buildingPlan, result]);
+  useEffect(() => {
+    if (suppressDirtyRef.current) {
+      suppressDirtyRef.current = false;
+      return;
+    }
+    dirtyRef.current = true;
+  }, [brief, buildingPlan, result]);
+
+  const onGateway = step === 1 && !designFocusActive;
+  useEffect(() => {
+    if (!onGateway) lastStageRef.current = designFocusActive ? "design" : "cameras";
+  }, [onGateway, designFocusActive]);
+
+  // A new session's starting plan is the baseline; only changes after it are drafted.
+  useEffect(() => {
+    draftBaselineRef.current = buildingPlan;
+    draftDueRef.current = false;
+    // Only when a session starts; later plan edits must not move the baseline.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [designSessionId]);
+
+  const writeDraftNow = useCallback(() => {
+    draftDueRef.current = false;
+    if (projectId || buildingPlan === draftBaselineRef.current || !planHasContent(buildingPlan)) return;
+    writePlannerDraft({
+      id: designSessionId,
+      projectName,
+      brief,
+      plan: buildingPlan,
+      experience: designExperience,
+      stage: lastStageRef.current
+    });
+  }, [brief, buildingPlan, designExperience, designSessionId, projectId, projectName]);
+
+  useEffect(() => {
+    if (projectId || buildingPlan === draftBaselineRef.current || !planHasContent(buildingPlan)) return;
+    draftDueRef.current = true;
+    const timer = window.setTimeout(writeDraftNow, 1200);
+    return () => window.clearTimeout(timer);
+  }, [buildingPlan, projectId, writeDraftNow]);
+
+  // Back on the project page: write anything pending, then offer the draft if there is one.
+  useEffect(() => {
+    if (!onGateway) return;
+    if (draftDueRef.current) writeDraftNow();
+    const timer = window.setTimeout(() => {
+      const draft = readPlannerDraft();
+      setDraftSummary(draft ? summariseDraft(draft) : null);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [onGateway, writeDraftNow]);
+
+  /*
+   * Leaving the page with unsaved work: write the draft synchronously (localStorage is
+   * synchronous, so it lands even as the tab closes) and ask the browser to confirm.
+   */
+  const unsavedRef = useRef(false);
+  const writeDraftRef = useRef(writeDraftNow);
+  useEffect(() => {
+    writeDraftRef.current = writeDraftNow;
+    unsavedRef.current = !onGateway && (
+      projectId
+        ? dirtyRef.current && saveState !== "saving"
+        : (resumedDraftRef.current || buildingPlan !== draftBaselineRef.current) && planHasContent(buildingPlan)
+    );
+  });
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (draftDueRef.current) writeDraftRef.current();
+      if (!unsavedRef.current) return;
+      event.preventDefault();
+      // Older browsers need a returnValue; the text itself is no longer shown.
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+
+  /** Restores the local draft into the studio the user left it in. */
+  const resumeDraft = useCallback(() => {
+    const draft = readPlannerDraft<Partial<ProjectBrief>>();
+    if (!draft) {
+      setDraftSummary(null);
+      return;
+    }
+    resumedDraftRef.current = true;
+    setDesignSessionId(draft.id || newDraftId());
+    setBrief({ ...initialBrief, ...draft.brief });
+    setBuildingPlan(draft.plan);
+    setProjectName(draft.projectName ?? "");
+    setDesignExperience(draft.experience ?? "advanced");
+    setProjectId(null);
+    setResult(null);
+    setSiteMode("designer");
+    setSaveState("idle");
+    setSaveError("");
+    setPendingDesignStart(null);
+    dirtyRef.current = true;
+    if (draft.stage === "cameras") {
+      setStep(3);
+      setDesignFocusActive(false);
+    } else {
+      setStep(1);
+      setDesignFocusActive(true);
+    }
+  }, []);
+
+  const discardDraft = useCallback(() => {
+    if (!window.confirm("پیش‌نویس طرح ذخیره‌نشده حذف شود؟ این کار قابل بازگشت نیست.")) return;
+    clearPlannerDraft();
+    setDraftSummary(null);
+  }, []);
 
   /**
    * Loads a saved design back into the wizard and drops the user straight into the drawing
@@ -1001,6 +1147,8 @@ export function ProjectWizard() {
   const openSavedProject = useCallback(async (item: Pick<ProjectListItem, "id">) => {
     try {
       const project = await fetchProject(item.id);
+      suppressDirtyRef.current = true;
+      startDesignSession();
       setProjectId(project.id);
       setProjectName(project.name);
       setBrief((current) => ({ ...current, ...(project.brief as Partial<ProjectBrief>) }));
@@ -1019,7 +1167,7 @@ export function ProjectWizard() {
     } catch {
       setSaveError("باز کردن پروژه انجام نشد.");
     }
-  }, []);
+  }, [startDesignSession]);
 
   // "Edit in the designer" on the project page links here with ?project=<id>.
   useEffect(() => {
@@ -1045,6 +1193,7 @@ export function ProjectWizard() {
       cameraTemplates: defaultCameraTemplates()
     });
     setBuildingPlan({ ...createEmptyPlan(), venueTypeId: venueId });
+    startDesignSession();
     setResult(null);
     setProjectId(null);
     setProjectName("");
@@ -1052,7 +1201,7 @@ export function ProjectWizard() {
     dirtyRef.current = false;
     setSiteMode("designer");
     setDesignFocusActive(true);
-  }, []);
+  }, [startDesignSession]);
 
   /**
    * A simple design: a new, empty plan with no project type.
@@ -1063,6 +1212,7 @@ export function ProjectWizard() {
    */
   const startBlankDesign = useCallback(() => {
     setBuildingPlan(createEmptyPlan());
+    startDesignSession();
     setBrief({ ...initialBrief, cameraTemplates: defaultCameraTemplates() });
     setResult(null);
     setProjectId(null);
@@ -1071,7 +1221,7 @@ export function ProjectWizard() {
     dirtyRef.current = false;
     setSiteMode("designer");
     setDesignFocusActive(true);
-  }, []);
+  }, [startDesignSession]);
 
   /**
    * The drawn plan is the source of truth for area and storey count once the designer is
@@ -1188,6 +1338,7 @@ export function ProjectWizard() {
     setSaveState("idle");
     dirtyRef.current = false;
     applyPreset(preset);
+    startDesignSession();
     setDesignFocusActive(true);
   }
 
@@ -1312,6 +1463,9 @@ export function ProjectWizard() {
         onOpenProject={openSavedProject}
         onViewProject={viewSavedProject}
         galleryToken={galleryToken}
+        draft={draftSummary}
+        onResumeDraft={resumeDraft}
+        onDiscardDraft={discardDraft}
         samples={samplePresets}
         onOpenSample={(preset) => setPendingDesignStart({ kind: "sample", preset })}
       />
@@ -1330,7 +1484,7 @@ export function ProjectWizard() {
   );
 
   // The drawn plan only reaches the results when it was actually used and completed.
-  if (step === 7 && result) return <RecommendationResults result={result} plan={planReady ? buildingPlan : undefined} onReset={goToPlannerHome} onUseCompatibleDefaults={retryWithCompatibleDefaults} onEditPlacement={siteMode === "designer" ? () => setStep(3) : undefined} onRefine={() => setStep(4)} />;
+  if (step === 7 && result) return <RecommendationResults result={result} plan={planReady ? buildingPlan : undefined} onReset={goToPlannerHome} onUseCompatibleDefaults={retryWithCompatibleDefaults} onEditPlacement={siteMode === "designer" ? () => setStep(3) : undefined} onRefine={() => setStep(4)} projectName={projectName.trim() || defaultProjectName(buildingPlan.venueTypeId)} venueLabel={selectedVenue?.label} />;
 
   const stepTitles = ["شناخت محیط", "دستگاه‌های پیش‌فرض", "جانمایی دوربین‌ها", "مشخصات دقیق دوربین‌ها", "پروفایل ضبط و آرشیو", "زیرساخت و اولویت"];
   return <section ref={wizardTopRef} className="wizard-shell advanced-wizard">
@@ -1509,6 +1663,62 @@ export function ProjectWizard() {
   </section>;
 }
 
+function newDraftId() {
+  return `draft-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+}
+
+function formatDraftTime(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const time = date.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" });
+  return date.toDateString() === new Date().toDateString()
+    ? `امروز ساعت ${time}`
+    : `${date.toLocaleDateString("fa-IR")} ساعت ${time}`;
+}
+
+/** Offers the design that was left unsaved in this browser. */
+function DraftBanner({ draft, onResume, onDiscard }: { draft: DraftSummary; onResume: () => void; onDiscard: () => void }) {
+  const venue = venueTypes.find((item) => item.id === draft.venueTypeId);
+  // Only what is actually on the plan, so a draft of two columns does not read "0 walls".
+  const contents = [
+    `${formatFaCount(draft.floors)} طبقه`,
+    draft.walls > 0 ? `${formatFaCount(draft.walls)} دیوار` : "",
+    draft.rooms > 0 ? `${formatFaCount(draft.rooms)} فضا` : "",
+    draft.elements > 0 ? `${formatFaCount(draft.elements)} المان` : "",
+    draft.cameras > 0 ? `${formatFaCount(draft.cameras)} دوربین` : ""
+  ].filter(Boolean).join(" · ");
+  return (
+    <section className="planner-draft-banner" aria-label="طرح ذخیره‌نشده">
+      <span className="planner-draft-icon"><History size={20} aria-hidden="true" /></span>
+      <div className="planner-draft-copy">
+        <strong>
+          یک طرح ذخیره‌نشده دارید{draft.projectName.trim() ? `: «${draft.projectName.trim()}»` : ""}
+        </strong>
+        <small>
+          {venue?.label ?? blankDesignLabel}
+          {" · "}{contents}
+          {" · "}آخرین تغییر {formatDraftTime(draft.savedAt)}
+        </small>
+        <small>
+          فقط در همین مرورگر نگه داشته شده است؛ برای ماندگار شدن، بعد از ادامه آن را ذخیره کنید. شروع یک طرح تازه و ویرایش آن، جای این پیش‌نویس را می‌گیرد.
+        </small>
+        {draft.backdropDropped ? (
+          <small className="planner-draft-warning">تصویر نقشهٔ زمینه به‌خاطر حجم زیاد در پیش‌نویس نگه داشته نشد؛ بقیهٔ طرح کامل است.</small>
+        ) : null}
+      </div>
+      <div className="planner-draft-actions">
+        <button type="button" className="primary-action" onClick={onResume}>
+          <PencilRuler size={16} aria-hidden="true" />
+          {draft.stage === "cameras" ? "ادامه از جانمایی دوربین" : "ادامهٔ طرح"}
+        </button>
+        <button type="button" className="secondary-action" onClick={onDiscard}>
+          <Trash2 size={15} aria-hidden="true" />حذف پیش‌نویس
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function ProjectTypeGateway({
   venues,
   selectedVenueId,
@@ -1519,6 +1729,9 @@ function ProjectTypeGateway({
   onOpenProject,
   onViewProject,
   galleryToken,
+  draft,
+  onResumeDraft,
+  onDiscardDraft,
   samples,
   onOpenSample
 }: {
@@ -1531,6 +1744,9 @@ function ProjectTypeGateway({
   onOpenProject: (project: ProjectListItem) => void;
   onViewProject: (project: ProjectListItem) => void;
   galleryToken: number;
+  draft: DraftSummary | null;
+  onResumeDraft: () => void;
+  onDiscardDraft: () => void;
   samples: WizardPreset[];
   onOpenSample: (preset: WizardPreset) => void;
 }) {
@@ -1659,6 +1875,7 @@ function ProjectTypeGateway({
       </header>
 
       <div className="project-gateway-content">
+        {draft ? <DraftBanner draft={draft} onResume={onResumeDraft} onDiscard={onDiscardDraft} /> : null}
         <ProjectGallery
           onOpen={onOpenProject}
           onView={onViewProject}
@@ -2155,7 +2372,7 @@ function NumberField({ label, value, min, max, onChange }: { label: string; valu
 function LabeledNumber({ label, value, unit, min, max, onChange }: { label: string; value: number; unit: string; min: number; max: number; onChange: (value: number) => void }) { return <label className="wizard-labeled-number"><span>{label}</span><div><input type="number" value={value} min={min} max={max} onChange={(event) => onChange(Math.max(min, Math.min(max, Number(event.target.value))))} /><small>{unit}</small></div></label>; }
 function FeatureToggle({ icon, title, description, checked, onChange }: { icon: React.ReactNode; title: string; description: string; checked: boolean; onChange: (value: boolean) => void }) { return <label className={checked ? "feature-toggle active" : "feature-toggle"}><span className="feature-toggle-icon">{icon}</span><span><strong>{title}</strong><small>{description}</small></span><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /></label>; }
 
-function RecommendationResults({ result, plan, onReset, onUseCompatibleDefaults, onEditPlacement, onRefine }: { result: RecommendationResult; plan?: BuildingPlan; onReset: () => void; onUseCompatibleDefaults: () => void; onEditPlacement?: () => void; onRefine?: () => void }) {
+function RecommendationResults({ result, plan, onReset, onUseCompatibleDefaults, onEditPlacement, onRefine, projectName, venueLabel }: { result: RecommendationResult; plan?: BuildingPlan; onReset: () => void; onUseCompatibleDefaults: () => void; onEditPlacement?: () => void; onRefine?: () => void; projectName?: string; venueLabel?: string }) {
   const [activePlan, setActivePlan] = useState(result.project.budget);
   const [quantities, setQuantities] = useState<Record<string, Record<string, number>>>({});
   const [saved, setSaved] = useState(false);
@@ -2196,23 +2413,54 @@ function RecommendationResults({ result, plan, onReset, onUseCompatibleDefaults,
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "ثبت نسخه سرور انجام نشد.");
-      setSaveVersionMessage(`نسخه ${new Intl.NumberFormat("fa-IR").format(data.version.version_number)} در تاریخچه سرور ذخیره شد.`);
+      const fa = new Intl.NumberFormat("fa-IR");
+      setSaveVersionMessage(
+        `نسخه ${fa.format(data.version.version_number)} در تاریخچه سرور ذخیره شد.`
+        + (typeof data.limit === "number" ? ` (${fa.format(data.limit)} نسخهٔ آخر نگه داشته می‌شود.)` : "")
+      );
     } catch (error) {
       setSaveVersionMessage(`${error instanceof Error ? error.message : "ثبت نسخه سرور انجام نشد."} نسخه محلی محفوظ است.`);
     } finally {
       setSavingVersion(false);
     }
   };
+  /*
+   * PDF export prints a dedicated proposal document, never this page. It is mounted only
+   * for the print (beforeprint → afterprint), so Ctrl+P here produces the same clean
+   * proposal as the button; proposal.css hides everything else on the page.
+   */
+  const [printing, setPrinting] = useState(false);
+  const titleBeforePrintRef = useRef<string | null>(null);
+  useEffect(() => {
+    const before = () => {
+      flushSync(() => setPrinting(true));
+      document.body.classList.add("is-printing-proposal");
+    };
+    const after = () => {
+      document.body.classList.remove("is-printing-proposal");
+      setPrinting(false);
+      if (titleBeforePrintRef.current !== null) {
+        document.title = titleBeforePrintRef.current;
+        titleBeforePrintRef.current = null;
+      }
+    };
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+      document.body.classList.remove("is-printing-proposal");
+    };
+  }, []);
   const printEngineeringReport = () => {
-    const details = Array.from(document.querySelectorAll<HTMLDetailsElement>(".recommendation-results details"));
-    const previous = details.map((item) => item.open);
-    details.forEach((item) => { item.open = true; });
+    // The document title becomes the suggested PDF file name.
+    titleBeforePrintRef.current = document.title;
+    document.title = `پروپوزال فنی - ${projectName?.trim() || "پروژه نظارت تصویری"}`;
     window.print();
-    window.setTimeout(() => details.forEach((item, index) => { item.open = previous[index]; }), 250);
   };
 
   return <section className="recommendation-results">
-    <div className="results-hero"><div><p className="eyebrow">پیشنهاد اولیه آماده است</p><h1>سناریوهای قابل ویرایش</h1><p>موتور {result.calculation.engineVersion} · ورودی {result.calculation.inputVersion} · {result.calculation.inputFingerprint}</p><small className="calculation-standards">{result.calculation.standardVersions.join(" · ")}</small></div><div className="result-actions"><button className="secondary-action" onClick={onReset}><ShieldCheck size={16} />صفحه اصلی طراحی هوشمند</button>{onEditPlacement ? <button className="secondary-action" onClick={onEditPlacement}><PencilRuler size={16} />اصلاح جانمایی</button> : null}{onRefine ? <button className="secondary-action" onClick={onRefine} title="مشخصات دقیق هر دوربین، پروفایل ضبط و آرشیو، زیرساخت"><SlidersHorizontal size={16} />تنظیمات دقیق</button> : null}<button className="secondary-action" onClick={printEngineeringReport}><FileDown size={16} />خروجی PDF مهندسی</button><button className="primary-action" onClick={saveSolution} disabled={savingVersion}><Save size={16} />{savingVersion ? "در حال ذخیره نسخه..." : saved ? "ذخیره نسخه جدید" : "ذخیره پلن و نسخه محاسبه"}</button>{saveVersionMessage ? <small>{saveVersionMessage}</small> : null}</div></div>
+    <div className="results-hero"><div><p className="eyebrow">پیشنهاد اولیه آماده است</p><h1>سناریوهای قابل ویرایش</h1><p>موتور {result.calculation.engineVersion} · ورودی {result.calculation.inputVersion} · {result.calculation.inputFingerprint}</p><small className="calculation-standards">{result.calculation.standardVersions.join(" · ")}</small></div><div className="result-actions"><button className="secondary-action" onClick={onReset}><ShieldCheck size={16} />صفحه اصلی طراحی هوشمند</button>{onEditPlacement ? <button className="secondary-action" onClick={onEditPlacement}><PencilRuler size={16} />اصلاح جانمایی</button> : null}{onRefine ? <button className="secondary-action" onClick={onRefine} title="مشخصات دقیق هر دوربین، پروفایل ضبط و آرشیو، زیرساخت"><SlidersHorizontal size={16} />تنظیمات دقیق</button> : null}<button className="secondary-action" onClick={printEngineeringReport}><FileDown size={16} />دریافت پروپوزال PDF</button><button className="primary-action" onClick={saveSolution} disabled={savingVersion}><Save size={16} />{savingVersion ? "در حال ذخیره نسخه..." : saved ? "ذخیره نسخه جدید" : "ذخیره پلن و نسخه محاسبه"}</button>{saveVersionMessage ? <small>{saveVersionMessage}</small> : null}</div></div>
     {selected && <div className="metric-strip"><Metric label="PPM متوسط / حداقل" value={`${selected.metrics.averagePpm} / ${selected.metrics.minimumPpm}`} /><Metric label="Incoming / Remote" value={`${selected.metrics.bandwidthMbps} / ${selected.metrics.outgoingBandwidthMbps} Mbps`} /><Metric label="تقاضای Decode" value={`${selected.metrics.decodeDemandMp} MP`} /><Metric label="Storage پایه / نهایی" value={`${selected.metrics.storageBaseTb} / ${selected.metrics.storageRequiredTb} TB`} /><Metric label="فضای usable / خام" value={`${selected.metrics.storageUsableTb} / ${selected.metrics.storageRawTb} TB`} /><Metric label="آرایش دیسک" value={selected.metrics.raidLevel} /><Metric label="بار / بودجه PoE" value={`${selected.metrics.poeLoadW} / ${selected.metrics.poeBudgetW} W`} /><Metric label="نقاط توزیع شبکه" value={`${selected.metrics.switchLocations}`} /><Metric label="Duty Cycle ضبط" value={`${Math.round(selected.metrics.recordingDutyCycle * 100)}%`} /><Metric label="زمان پشتیبانی" value={selected.metrics.estimatedRuntimeMin ? `${selected.metrics.estimatedRuntimeMin} min` : "لحاظ نشده"} /><Metric label="وضوح بیشینه" value={`${selected.metrics.recommendedResolutionMp} MP`} /></div>}
     <div className="plan-tabs">{result.plans.map((plan) => <button key={plan.id} className={selected?.id === plan.id ? "active" : ""} onClick={() => setActivePlan(plan.id)}><span>{plan.title}</span><small>امتیاز محاسبه‌شده {new Intl.NumberFormat("fa-IR").format(plan.score)} از ۱۰۰</small></button>)}</div>
     {selected && <>{plan ? <PlanResultMaps plan={plan} recommendation={selected} /> : null}<div className="infrastructure-grid"><Metric label="کابل مسی با ذخیره" value={`${selected.infrastructure.copperCableM} m`} /><Metric label="Backbone فیبر" value={`${selected.infrastructure.fiberBackboneM} m`} /><Metric label="Rack" value={`${selected.infrastructure.rackCount} × ${selected.infrastructure.recommendedRackU}U`} /><Metric label="Patch Panel / SFP" value={`${selected.infrastructure.patchPanelCount} / ${selected.infrastructure.sfpModuleCount}`} /></div></>}
@@ -2221,6 +2469,19 @@ function RecommendationResults({ result, plan, onReset, onUseCompatibleDefaults,
       <div className="why-plan"><Sparkles size={20} /><div><strong>چرا این ترکیب؟</strong><p>{selected.highlights.join(" · ")}</p></div></div>
       <details className="rejected-options"><summary>دامنه بررسی فنی این پلن <ChevronLeft size={16} /></summary><ul>{selected.constraints.checked.map((item) => <li key={item}><strong>بررسی شده</strong><span>{item}</span></li>)}{selected.constraints.pending.map((item) => <li key={item}><strong>نیازمند بررسی تکمیلی</strong><span>{item}</span></li>)}</ul></details>
       <details className="rejected-options"><summary>جزئیات امتیاز محاسبه‌شده <ChevronLeft size={16} /></summary><ul>{Object.entries(selected.scoreBreakdown).map(([key, value]) => <li key={key}><strong>{scoreLabels[key as keyof RecommendationPlan["scoreBreakdown"]]}</strong><span>{value}</span></li>)}</ul></details></div>}
+    {printing && selected ? createPortal(
+      <div className="proposal-print-root">
+        <EngineeringProposal
+          result={result}
+          selected={selected}
+          quantityFor={(productId, initial) => quantityFor(selected, productId, initial)}
+          plan={plan}
+          projectName={projectName}
+          venueLabel={venueLabel}
+        />
+      </div>,
+      document.body
+    ) : null}
     {!selected && <div className="wizard-error no-plan-state"><CircleAlert size={18} /><div><strong>هیچ پلنی تمام قیود فعلی را تأمین نکرد</strong><span>برای ساخت یک پیشنهاد قابل اجرا، تنظیمات سازگار با موجودی فعلی را بارگذاری کنید.</span></div><button type="button" onClick={onUseCompatibleDefaults}><RotateCcw size={14} />بارگذاری پیش‌فرض سازگار</button></div>}
   </section>;
 }
