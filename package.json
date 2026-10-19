@@ -1,5 +1,6 @@
 {
   "name": "hamyardoorbin-revised-ui-2",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -8,6 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --import ./tests/register-alias.mjs --test tests/*.test.mjs",
+    "test:coverage": "node --experimental-strip-types --import ./tests/register-alias.mjs --test --experimental-test-coverage --test-coverage-exclude=\"tests/**\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info tests/*.test.mjs",
     "llm:check": "node scripts/check-local-llm.mjs",
     "datasheets:import": "node scripts/import-datasheet-facts.mjs",
     "knowledge:ingest": "node scripts/ingest-verified-knowledge.mjs",

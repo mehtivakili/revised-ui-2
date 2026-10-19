@@ -1,0 +1,63 @@
+name: گزارش باگ
+description: گزارش رفتار نادرست یا خطا
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: شرح مشکل
+      description: چه اتفاقی افتاد و چه انتظاری داشتید؟
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: مراحل بازتولید
+      placeholder: |
+        1. به صفحهٔ ... بروید
+        2. روی ... کلیک کنید
+        3. خطا را ببینید
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity (شدت)
+      options:
+        - S1 – بحرانی (از کار افتادن سرویس، از دست رفتن داده، امنیتی)
+        - S2 – بالا (قابلیت اصلی بدون راه جایگزین کار نمی‌کند)
+        - S3 – متوسط (خطا با راه جایگزین)
+        - S4 – پایین (ظاهری یا جزئی)
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority (اولویت)
+      options:
+        - P1 – فوری (hotfix)
+        - P2 – نسخهٔ بعدی
+        - P3 – در برنامهٔ کاری
+        - P4 – در صورت فرصت
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: نسخه
+      description: نسخهٔ برنامه (مثلاً 1.0.0) یا شناسهٔ commit
+  - type: dropdown
+    id: platform
+    attributes:
+      label: بستر
+      multiple: true
+      options:
+        - وب (دسکتاپ)
+        - وب (موبایل)
+        - اپ اندروید
+  - type: textarea
+    id: logs
+    attributes:
+      label: لاگ یا تصویر
+      description: پیام خطا، خروجی کنسول یا اسکرین‌شات

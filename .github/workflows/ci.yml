@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  lint-typecheck:
+    name: Lint & typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      # Report type errors even when lint fails, so both results are visible.
+      - run: npm run typecheck
+        if: success() || failure()
+
+  test:
+    name: Tests & coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # DATABASE_URL is intentionally not set: the DB-backed suites
+      # (projects-store, calculation-versions) skip themselves without it.
+      - name: Run tests with coverage
+        shell: bash
+        run: |
+          mkdir -p coverage
+          npm run test:coverage 2>&1 | tee coverage/test-output.txt
+      - name: Coverage summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Test & coverage report"
+            echo
+            echo '```'
+            grep -E '^(ℹ|#) (tests|suites|pass|fail|cancelled|skipped|todo|duration_ms) ' coverage/test-output.txt || true
+            echo
+            echo "coverage            | line % | branch % | funcs %"
+            grep -E '^(ℹ|#) all files ' coverage/test-output.txt || true
+            echo
+            sed -n '/^✖ failing tests:/,$p' coverage/test-output.txt | grep -E '^✖' || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage/lcov.info
+            coverage/test-output.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # The production build evaluates authStore, which requires a >=32-char
+      # AUTH_SECRET. Use a throwaway random value per run; never a real secret.
+      - name: Generate build-only AUTH_SECRET
+        shell: bash
+        run: echo "AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - run: npm run build

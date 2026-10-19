@@ -1,0 +1,51 @@
+name: درخواست قابلیت
+description: پیشنهاد قابلیت یا بهبود جدید
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: مسئله یا نیاز
+      description: این قابلیت چه مشکلی را برای چه کاربری حل می‌کند؟
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: راه‌حل پیشنهادی
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: معیارهای پذیرش
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity (اثر نبودِ این قابلیت)
+      options:
+        - S1 – بحرانی
+        - S2 – بالا
+        - S3 – متوسط
+        - S4 – پایین
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority (اولویت)
+      options:
+        - P1 – فوری
+        - P2 – نسخهٔ بعدی
+        - P3 – در برنامهٔ کاری
+        - P4 – در صورت فرصت
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: راه‌حل‌های جایگزین

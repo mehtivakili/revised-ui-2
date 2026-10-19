@@ -1,5 +1,6 @@
 node_modules
 .next
+.next-build
 out
 build
 dist
@@ -30,3 +31,6 @@ Thumbs.db
 
 # PM2 runtime logs
 logs/
+
+# Test coverage output
+coverage/
