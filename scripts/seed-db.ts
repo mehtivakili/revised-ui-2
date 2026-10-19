@@ -91,8 +91,8 @@ async function main() {
     } else {
       console.log(`Database "${dbName}" already exists.`);
     }
-  } catch (err: any) {
-    console.error("Database setup failed: ", err.message);
+  } catch (err) {
+    console.error("Database setup failed: ", err instanceof Error ? err.message : err);
   } finally {
     setupClient.release();
     await setupPool.end();

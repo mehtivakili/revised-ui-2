@@ -65,7 +65,7 @@ function cameraSpecs(text: string, warnings: string[]): CameraSpecs {
   const maxPowerW = numberFrom(text, /(\d+(?:[.,]\d+)?)\s*w(?:att)?/i, 10, "توان دوربین تخمینی است.", warnings);
   
   const hasIpRating = /ip6[5-9]/i.test(text);
-  const ipRating = hasIpRating ? text.match(/ip6[5-9]/i)?.[0].toUpperCase()! : "IP66";
+  const ipRating = text.match(/ip6[5-9]/i)?.[0].toUpperCase() ?? "IP66";
   if (!hasIpRating) {
     warnings.push("درجه حفاظت بدنه (IP66) تخمینی است.");
   }
@@ -227,12 +227,15 @@ async function updateSyncProgress(runId: number, stage: string, percent: number,
     [stage, Math.max(0, Math.min(100, Math.round(percent))), current, total, runId]);
 }
 
+/** One row for a batched insert: column name → value, passed to pg as-is. */
+type DbRow = Record<string, unknown>;
+
 async function batchInsert<T>(
   client: PoolClient,
   table: string,
   columns: string[],
   records: T[],
-  toValues: (record: T, index: number) => any[],
+  toValues: (record: T, index: number) => unknown[],
   onConflictSql?: string
 ) {
   if (records.length === 0) return;
@@ -244,7 +247,7 @@ async function batchInsert<T>(
   for (let i = 0; i < records.length; i += chunkSize) {
     const chunk = records.slice(i, i + chunkSize);
     const valuePlaceholders: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
     
     chunk.forEach((record, recordIdx) => {
       const placeholders = [];
@@ -444,12 +447,12 @@ async function executeWooCatalogSync(runId: number, dryRun: boolean) {
       for (let i = 0; i < sourceProducts.length; i += batchSize) {
         const chunk = sourceProducts.slice(i, i + batchSize);
         
-        const snapshotsData: any[] = [];
-        const attributesData: any[] = [];
-        const imagesData: any[] = [];
-        const imageJobsData: any[] = [];
-        const categoriesData: any[] = [];
-        const tagsData: any[] = [];
+        const snapshotsData: DbRow[] = [];
+        const attributesData: DbRow[] = [];
+        const imagesData: DbRow[] = [];
+        const imageJobsData: DbRow[] = [];
+        const categoriesData: DbRow[] = [];
+        const tagsData: DbRow[] = [];
         
         for (const product of chunk) {
           snapshotsData.push({
@@ -608,12 +611,12 @@ async function executeWooCatalogSync(runId: number, dryRun: boolean) {
       for (let i = 0; i < products.length; i += batchSize) {
         const chunk = products.slice(i, i + batchSize);
         
-        const catalogProductsData: any[] = [];
-        const cameraSpecsData: any[] = [];
-        const recorderSpecsData: any[] = [];
-        const switchSpecsData: any[] = [];
-        const storageSpecsData: any[] = [];
-        const upsSpecsData: any[] = [];
+        const catalogProductsData: DbRow[] = [];
+        const cameraSpecsData: DbRow[] = [];
+        const recorderSpecsData: DbRow[] = [];
+        const switchSpecsData: DbRow[] = [];
+        const storageSpecsData: DbRow[] = [];
+        const upsSpecsData: DbRow[] = [];
         
         for (const product of chunk) {
           const brandId = brandMap.get(product.brand) || null;

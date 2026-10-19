@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronLeft, Search } from "lucide-react";
 import { minimumSearchLength, normalizeText, searchIndex, searchTools } from "@/src/lib/toolSearch";
+
+const subscribeNothing = () => () => {};
 
 export function TopSearch({ lockedToolSlugs = [] }: { lockedToolSlugs?: string[] }) {
   const pathname = usePathname();
@@ -15,7 +17,8 @@ export function TopSearch({ lockedToolSlugs = [] }: { lockedToolSlugs?: string[]
 function TopSearchInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
-  const [isHydrated, setIsHydrated] = useState(false);
+  // False in the server render, true once the page is live in the browser.
+  const isHydrated = useSyncExternalStore(subscribeNothing, () => true, () => false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const canSearch = normalizeText(query).length >= minimumSearchLength;
@@ -76,7 +79,6 @@ function TopSearchInner({ lockedToolSlugs }: { lockedToolSlugs: string[] }) {
         reactPanel.style.display = "";
       }
     }
-    setIsHydrated(true);
   }, []);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {

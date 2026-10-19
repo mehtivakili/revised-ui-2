@@ -1,12 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Download, Share2, X } from "lucide-react";
 import Image from "next/image";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
+
+const subscribeNothing = () => () => {};
+
+/** iOS has no install event, so it gets written instructions instead — unless already installed or dismissed. */
+function offersIosHelp() {
+  if (isStandalone() || sessionStorage.getItem("pwa-install-dismissed") === "1") return false;
+  return /iphone|ipad|ipod/i.test(navigator.userAgent)
+    || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 }
 
 function isStandalone() {
@@ -16,7 +25,9 @@ function isStandalone() {
 
 export function PwaInstallPrompt() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [showIosHelp, setShowIosHelp] = useState(false);
+  const iosEligible = useSyncExternalStore(subscribeNothing, offersIosHelp, () => false);
+  const [iosHelpClosed, setIosHelpClosed] = useState(false);
+  const showIosHelp = iosEligible && !iosHelpClosed;
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
@@ -26,10 +37,6 @@ export function PwaInstallPrompt() {
 
     if (isStandalone() || sessionStorage.getItem("pwa-install-dismissed") === "1") return;
 
-    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent)
-      || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
-    if (ios) setShowIosHelp(true);
-
     const handleInstallPrompt = (event: Event) => {
       event.preventDefault();
       setInstallPrompt(event as BeforeInstallPromptEvent);
@@ -37,7 +44,7 @@ export function PwaInstallPrompt() {
 
     const handleInstalled = () => {
       setInstallPrompt(null);
-      setShowIosHelp(false);
+      setIosHelpClosed(true);
     };
 
     window.addEventListener("beforeinstallprompt", handleInstallPrompt);

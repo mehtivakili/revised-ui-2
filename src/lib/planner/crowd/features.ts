@@ -1,9 +1,7 @@
 import type { FloorPlan, PlanObstacle, Vec2 } from "@/src/domain/planner/types";
 import {
   cellOf,
-  insideObstacle,
   nearestWalkable,
-  obstacleFootprint,
   obstacleToWorld,
   type NavGrid
 } from "@/src/lib/planner/crowd/navigation";

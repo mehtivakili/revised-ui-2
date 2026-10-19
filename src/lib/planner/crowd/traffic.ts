@@ -897,7 +897,6 @@ function bodyForward(tracks: Track[], car: TrafficCar, s: number) {
 }
 
 function placeCar(tracks: Track[], car: TrafficCar) {
-  const track = tracks[car.track]!;
   const forward = bodyForward(tracks, car, car.s);
   car.position = routePoint(tracks, car, car.s);
   car.heading = -Math.atan2(forward.z, forward.x);

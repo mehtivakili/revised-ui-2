@@ -26,8 +26,8 @@ async function test() {
       console.log(`Success! Password is: "${pw}"`);
       await client.end();
       process.exit(0);
-    } catch (err: any) {
-      console.log(`Failed: ${err.message}`);
+    } catch (err) {
+      console.log(`Failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   console.log("None of the passwords worked.");
