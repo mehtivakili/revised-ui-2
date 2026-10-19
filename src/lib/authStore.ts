@@ -69,11 +69,42 @@ function resolveSessionSecret() {
 const sessionSecret = resolveSessionSecret();
 const passwordSecret = process.env.PASSWORD_SECRET || sessionSecret;
 
-export const seedPasswords = {
-  admin: "HmyAdm-8qN4!vR2#Kp7",
-  user: "HmyUser-5Lm9!Qa3#Tz1",
-  free: "HmyFree-2Wx6!Pn8#Rs4"
+/*
+ * Seed accounts (admin, user, free) take their passwords from the environment, never from
+ * source code. In production an account whose variable is unset is simply not created.
+ * In development a missing one gets a random password for this run, printed once to the
+ * server console when it is actually used.
+ */
+type SeedAccount = "admin" | "user" | "free";
+
+const seedPasswordVariables: Record<SeedAccount, string> = {
+  admin: "SEED_ADMIN_PASSWORD",
+  user: "SEED_USER_PASSWORD",
+  free: "SEED_FREE_PASSWORD"
 };
+
+const generatedSeedPasswords = new Map<SeedAccount, string>();
+
+function configuredSeedPassword(account: SeedAccount) {
+  return process.env[seedPasswordVariables[account]]?.trim() || null;
+}
+
+/** This run's development password for a seed account whose variable is unset. */
+function generatedSeedPassword(account: SeedAccount) {
+  let password = generatedSeedPasswords.get(account);
+  if (!password) {
+    password = randomBytes(12).toString("base64url");
+    generatedSeedPasswords.set(account, password);
+    console.warn(`[auth] ${seedPasswordVariables[account]} is not set; development seed account "${account}" uses this password for this run: ${password}`);
+  }
+  return password;
+}
+
+function seedPassword(account: SeedAccount): string | null {
+  const configured = configuredSeedPassword(account);
+  if (configured) return configured;
+  return process.env.NODE_ENV === "production" ? null : generatedSeedPassword(account);
+}
 
 /** Seed accounts are a local-development convenience, never a production fallback. */
 function developmentSeedAccountsEnabled() {
@@ -87,18 +118,17 @@ function developmentSeedUsers(): UserAccount[] {
     {
       id: "seed-admin", username: "admin", role: "admin", plan: "pro", isFreeAccount: false,
       displayName: "مدیر سیستم", signupAt: now, createdAt: now, failedLogins: 0,
-      loginCount: 1, trialDays: defaultTrialDays, passwordPreview: seedPasswords.admin, protected: true
+      loginCount: 1, trialDays: defaultTrialDays, protected: true
     },
     {
       id: "seed-user", username: "user", role: "user", plan: "pro", isFreeAccount: false,
       displayName: "کاربر حرفه‌ای", signupAt: now, createdAt: now, failedLogins: 0,
-      loginCount: 1, trialDays: defaultTrialDays, passwordPreview: seedPasswords.user, protected: true
+      loginCount: 1, trialDays: defaultTrialDays, protected: true
     },
     {
       id: "seed-free", username: "free", role: "user", plan: "free", isFreeAccount: true,
       displayName: "کاربر تست رایگان", signupAt: expiredTrialSignup, createdAt: expiredTrialSignup,
-      failedLogins: 0, loginCount: 1, trialDays: defaultTrialDays,
-      passwordPreview: seedPasswords.free, protected: true
+      failedLogins: 0, loginCount: 1, trialDays: defaultTrialDays, protected: true
     }
   ];
 }
@@ -303,12 +333,21 @@ async function seedBaseUsers() {
   const now = new Date();
   const expiredTrialSignup = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
   const seeds = [
-    ["seed-admin", "admin", "admin", "pro", false, "مدیر سیستم", now, now, 0, true, seedPasswords.admin],
-    ["seed-user", "user", "user", "pro", false, "کاربر حرفه‌ای", now, now, 0, true, seedPasswords.user],
-    ["seed-free", "free", "user", "free", true, "کاربر تست رایگان", expiredTrialSignup, expiredTrialSignup, 0, true, seedPasswords.free]
+    ["seed-admin", "admin", "admin", "pro", false, "مدیر سیستم", now, now, 0, true],
+    ["seed-user", "user", "user", "pro", false, "کاربر حرفه‌ای", now, now, 0, true],
+    ["seed-free", "free", "user", "free", true, "کاربر تست رایگان", expiredTrialSignup, expiredTrialSignup, 0, true]
   ] as const;
 
   for (const seed of seeds) {
+    const account = seed[1] as SeedAccount;
+    // An existing account keeps its password; only a missing one is created.
+    const existing = await query("SELECT 1 FROM users WHERE username = $1", [account]);
+    if (existing.rowCount) continue;
+    const password = seedPassword(account);
+    if (!password) {
+      console.warn(`[auth] ${seedPasswordVariables[account]} is not set; seed account "${account}" was not created.`);
+      continue;
+    }
     await query(
       `INSERT INTO users
        (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
@@ -317,7 +356,8 @@ async function seedBaseUsers() {
          password_hash = COALESCE(NULLIF(users.password_hash, ''), EXCLUDED.password_hash),
          password_preview = COALESCE(NULLIF(users.password_preview, ''), EXCLUDED.password_preview),
          trial_days = COALESCE(users.trial_days, EXCLUDED.trial_days)`,
-      [...seed.slice(0, 10), hashPassword(seed[10]), seed[10], defaultTrialDays]
+      // No plain-text preview for seed accounts: their password lives only in the environment.
+      [...seed, hashPassword(password), null, defaultTrialDays]
     );
   }
 }
@@ -376,8 +416,8 @@ export async function upsertMobileUser(username: string) {
 export async function verifyPassword(username: string, password: string) {
   if (developmentSeedAccountsEnabled()) {
     const user = developmentSeedUsers().find((candidate) => candidate.username === username);
-    const passwordKey = user?.username as keyof typeof seedPasswords | undefined;
-    if (!user || !passwordKey || !safeEqual(seedPasswords[passwordKey], password)) {
+    const expected = user ? seedPassword(user.username as SeedAccount) : null;
+    if (!user || !expected || !safeEqual(expected, password)) {
       return { ok: false as const, error: "نام کاربری یا رمز عبور اشتباه است." };
     }
     return {

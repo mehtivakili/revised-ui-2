@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { createHmac } from "crypto";
+import { createHmac, randomBytes } from "crypto";
 import { Pool } from "pg";
 
 const envLocalPath = path.resolve(process.cwd(), ".env.local");
@@ -24,10 +24,19 @@ if (!dbUrl) {
 
 const defaultTrialDays = 7;
 const passwordSecret = process.env.PASSWORD_SECRET || process.env.AUTH_SECRET || "local-development-secret-change-before-production";
+// Seed passwords come from the environment (.env.local); a missing one is generated for
+// this run and printed, so no password is ever written into the source code.
+function seedPasswordFor(variable: string, account: string) {
+  const configured = process.env[variable]?.trim();
+  if (configured) return configured;
+  const generated = randomBytes(12).toString("base64url");
+  console.warn(`${variable} is not set; seed account "${account}" gets this password: ${generated}`);
+  return generated;
+}
 const seedPasswords = {
-  admin: "HmyAdm-8qN4!vR2#Kp7",
-  user: "HmyUser-5Lm9!Qa3#Tz1",
-  free: "HmyFree-2Wx6!Pn8#Rs4"
+  admin: seedPasswordFor("SEED_ADMIN_PASSWORD", "admin"),
+  user: seedPasswordFor("SEED_USER_PASSWORD", "user"),
+  free: seedPasswordFor("SEED_FREE_PASSWORD", "free")
 };
 
 function hashPassword(value: string) {
@@ -148,7 +157,7 @@ async function main() {
     await client.query(
       `INSERT INTO users (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-      ["seed-admin", "admin", "admin", "pro", false, "مدیر سیستم", new Date(), new Date(), 0, true, hashPassword(seedPasswords.admin), seedPasswords.admin, defaultTrialDays]
+      ["seed-admin", "admin", "admin", "pro", false, "مدیر سیستم", new Date(), new Date(), 0, true, hashPassword(seedPasswords.admin), null, defaultTrialDays]
     );
 
     // 9 more admins
@@ -175,7 +184,7 @@ async function main() {
     await client.query(
       `INSERT INTO users (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-      ["seed-user", "user", "user", "pro", false, "کاربر حرفه‌ای", new Date(), new Date(), 0, true, hashPassword(seedPasswords.user), seedPasswords.user, defaultTrialDays]
+      ["seed-user", "user", "user", "pro", false, "کاربر حرفه‌ای", new Date(), new Date(), 0, true, hashPassword(seedPasswords.user), null, defaultTrialDays]
     );
 
     // seed-free
@@ -183,7 +192,7 @@ async function main() {
     await client.query(
       `INSERT INTO users (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-      ["seed-free", "free", "user", "free", true, "کاربر تست رایگان", expiredTrialSignup, expiredTrialSignup, 0, true, hashPassword(seedPasswords.free), seedPasswords.free, defaultTrialDays]
+      ["seed-free", "free", "user", "free", true, "کاربر تست رایگان", expiredTrialSignup, expiredTrialSignup, 0, true, hashPassword(seedPasswords.free), null, defaultTrialDays]
     );
 
     const totalProNeeded = 497;
