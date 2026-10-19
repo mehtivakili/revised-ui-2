@@ -44,13 +44,11 @@
 
 ### Fixed
 - رفع خطاهای جانمایی دوربین، مسیریابی، پیامک/OTP، تداخل CSS پس از ادغام و منوی ابزار موبایل.
-
-### Known issues
-- یک آزمون از مجموعهٔ ۳۴۸ آزمون شکست می‌خورد:
-  `dynamic environment: traffic › primary-school: cars never touch, never vanish mid-road and never stand stuck`
-  (`tests/crowd-simulation.test.mjs`). این مورد پنهان نشده و CI آن را گزارش می‌کند.
-- `npm run lint` هنوز ۳۱ خطا در کد موجود گزارش می‌کند (بیشتر `no-explicit-any` و
-  `no-require-imports`)؛ CI آن را نشان می‌دهد تا در نسخه‌های بعدی رفع شود.
+- شبیه‌سازی ترافیک: جاده‌ای که کمی پیش از جادهٔ دیگر تمام می‌شود به آن وصل می‌شود (سه‌راهی)؛
+  جاده‌های نمونهٔ «مدرسه ابتدایی» اصلاح شد و خودروها دیگر بیش از ۲۰ ثانیه نمی‌ایستند.
+- ذخیرهٔ نسخه‌های محاسبه روی سرور (خطای نوع پارامتر در Postgres) و سقف ۱۰ نسخه برای هر حساب.
+- همهٔ خطاهای `npm run lint` (۳۱ مورد) رفع شد.
+- حذف صفحهٔ آزمایشی پیش‌نمایش پروپوزال که به‌اشتباه منتشر شده بود.
 
 [Unreleased]: https://github.com/mehtivakili/revised-ui-2/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/mehtivakili/revised-ui-2/releases/tag/v1.0.0
