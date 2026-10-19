@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Activity, CalendarDays, CheckCircle2, CloudDownload, Database, Download, Eye, EyeOff, MessageSquare, Pencil, Plus, RefreshCw, Save, Settings2, ShieldCheck, Trash2, UsersRound, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Activity, CalendarDays, CheckCircle2, CloudDownload, Database, Download, MessageSquare, Pencil, Plus, RefreshCw, Save, Settings2, ShieldCheck, Trash2, UsersRound, X, ChevronDown, ChevronUp } from "lucide-react";
 import type { UserPlan, UserRole } from "@/src/lib/authStore";
 import { getSubscriptionAccess } from "@/src/lib/subscription";
 import { RequiredNumberInput } from "@/src/components/calculators/CalculatorUi";
@@ -20,7 +20,6 @@ export type AdminUser = {
   failedLogins: number;
   loginCount: number;
   trialDays: number;
-  passwordPreview?: string;
   isProtected: boolean;
 };
 
@@ -179,7 +178,6 @@ export function AdminPanel({
   const [bulkOperation, setBulkOperation] = useState("trialDays");
   const [bulkTrialDays, setBulkTrialDays] = useState(initialDefaultTrialDays);
   const [savingBulk, setSavingBulk] = useState(false);
-  const [showPasswords, setShowPasswords] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
     username: "",
@@ -767,10 +765,6 @@ export function AdminPanel({
                   <Plus size={16} aria-hidden="true" />
                   ایجاد کاربر جدید
                 </button>
-                <button className="secondary-action compact password-toggle" type="button" onClick={() => setShowPasswords((value) => !value)}>
-                  {showPasswords ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
-                  {showPasswords ? "مخفی کردن رمزها" : "نمایش رمزها"}
-                </button>
                 <button className="secondary-action compact" type="button" onClick={exportUsers} disabled={exportingUsers}>
                   <Download size={15} aria-hidden="true" />
                   {exportingUsers ? "در حال ساخت فایل..." : "دانلود اکسل کاربران"}
@@ -831,7 +825,6 @@ export function AdminPanel({
                     <th>نام کاربری</th>
                     <th>نقش</th>
                     <th>اشتراک</th>
-                    <th>رمز</th>
                     <th>ثبت‌نام</th>
                     <th>آخرین ورود</th>
                     <th>تعداد ورود</th>
@@ -881,9 +874,6 @@ export function AdminPanel({
                           <span className={`plan-pill ${access.plan}`}>{access.plan === "pro" ? "حرفه‌ای" : "رایگان"}</span>
                           <small>{access.plan === "free" ? (access.restricted ? "تست منقضی" : `${access.trialDaysRemaining} روز باقی‌مانده`) : "دسترسی کامل"}</small>
                         </td>
-                        <td data-label="رمز" className="col-desktop-only">
-                          <small>{showPasswords ? user.passwordPreview || "فقط قابل تغییر" : "••••••••"}</small>
-                        </td>
                         <td data-label="ثبت‌نام" className="col-desktop-only">{new Date(access.signupAt).toLocaleDateString("fa-IR")}</td>
                         <td data-label="آخرین ورود" className="col-desktop-only">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString("fa-IR") : "بدون ورود"}</td>
                         <td data-label="تعداد ورود" className="col-desktop-only">{user.loginCount ?? 1}</td>
@@ -920,7 +910,6 @@ export function AdminPanel({
                               <span><strong>ثبت‌نام:</strong> {new Date(access.signupAt).toLocaleDateString("fa-IR")}</span>
                               <span><strong>وضعیت:</strong> {locked ? "قفل" : "فعال"}</span>
                               <span><strong>تعداد ورود:</strong> {user.loginCount ?? 1}</span>
-                              <span><strong>رمز:</strong> {showPasswords ? user.passwordPreview || "فقط قابل تغییر" : "••••••••"}</span>
                             </div>
                             <div className="mobile-details-row-actions">
                               <button
@@ -1160,8 +1149,9 @@ export function AdminPanel({
                 <span>رمز عبور</span>
                 <input
                   dir="ltr"
-                  type={showPasswords ? "text" : "password"}
-                  placeholder="اگر خالی باشد، موبایل رمز می‌شود"
+                  type="text"
+                  autoComplete="new-password"
+                  placeholder="اگر خالی باشد، کاربر فقط با پیامک وارد می‌شود"
                   value={createForm.password}
                   onChange={(event) => setCreateForm({ ...createForm, password: event.target.value })}
                 />
@@ -1221,7 +1211,7 @@ export function AdminPanel({
               </label>
               <label>
                 <span>رمز جدید</span>
-                <input dir="ltr" type={showPasswords ? "text" : "password"} value={editForm.password} onChange={(event) => setEditForm({ ...editForm, password: event.target.value })} />
+                <input dir="ltr" type="text" autoComplete="new-password" value={editForm.password} onChange={(event) => setEditForm({ ...editForm, password: event.target.value })} />
               </label>
               <p className="admin-modal-note">اگر رمز جدید را خالی بگذارید، رمز فعلی حفظ می‌شود.</p>
               <div className="admin-modal-actions">

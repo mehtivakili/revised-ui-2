@@ -126,7 +126,6 @@ async function main() {
         failed_logins INTEGER DEFAULT 0,
         is_protected BOOLEAN DEFAULT FALSE,
         password_hash TEXT,
-        password_preview TEXT,
         trial_days INTEGER NOT NULL DEFAULT 7,
         locked_until BIGINT
       );
@@ -155,9 +154,9 @@ async function main() {
     const adminUsernames = new Set<string>();
     adminUsernames.add("admin");
     await client.query(
-      `INSERT INTO users (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-      ["seed-admin", "admin", "admin", "pro", false, "مدیر سیستم", new Date(), new Date(), 0, true, hashPassword(seedPasswords.admin), null, defaultTrialDays]
+      `INSERT INTO users (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, trial_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      ["seed-admin", "admin", "admin", "pro", false, "مدیر سیستم", new Date(), new Date(), 0, true, hashPassword(seedPasswords.admin), defaultTrialDays]
     );
 
     // 9 more admins
@@ -170,9 +169,9 @@ async function main() {
       const name = getRandomName();
       const date = getRandomDate();
       await client.query(
-        `INSERT INTO users (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [`admin-${i}`, ph, "admin", "pro", false, name, date, date, 0, false, hashPassword(ph), ph, defaultTrialDays]
+        `INSERT INTO users (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, trial_days)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [`admin-${i}`, ph, "admin", "pro", false, name, date, date, 0, false, hashPassword(`!no-password:${randomBytes(16).toString("hex")}`), defaultTrialDays]
       );
     }
 
@@ -182,17 +181,17 @@ async function main() {
 
     // seed-user
     await client.query(
-      `INSERT INTO users (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-      ["seed-user", "user", "user", "pro", false, "کاربر حرفه‌ای", new Date(), new Date(), 0, true, hashPassword(seedPasswords.user), null, defaultTrialDays]
+      `INSERT INTO users (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, trial_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      ["seed-user", "user", "user", "pro", false, "کاربر حرفه‌ای", new Date(), new Date(), 0, true, hashPassword(seedPasswords.user), defaultTrialDays]
     );
 
     // seed-free
     const expiredTrialSignup = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
     await client.query(
-      `INSERT INTO users (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-      ["seed-free", "free", "user", "free", true, "کاربر تست رایگان", expiredTrialSignup, expiredTrialSignup, 0, true, hashPassword(seedPasswords.free), null, defaultTrialDays]
+      `INSERT INTO users (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, trial_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      ["seed-free", "free", "user", "free", true, "کاربر تست رایگان", expiredTrialSignup, expiredTrialSignup, 0, true, hashPassword(seedPasswords.free), defaultTrialDays]
     );
 
     const totalProNeeded = 497;
@@ -221,9 +220,9 @@ async function main() {
       const lastLogin = Math.random() > 0.3 ? getRandomDate() : null;
 
       await client.query(
-        `INSERT INTO users (id, username, role, plan, is_free_account, display_name, signup_at, created_at, last_login_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-        [`user-${i}`, ph, "user", plan, plan === "free", name, date, date, lastLogin, 0, false, hashPassword(ph), ph, defaultTrialDays]
+        `INSERT INTO users (id, username, role, plan, is_free_account, display_name, signup_at, created_at, last_login_at, failed_logins, is_protected, password_hash, trial_days)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        [`user-${i}`, ph, "user", plan, plan === "free", name, date, date, lastLogin, 0, false, hashPassword(`!no-password:${randomBytes(16).toString("hex")}`), defaultTrialDays]
       );
     }
 

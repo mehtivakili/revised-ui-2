@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { query } from "@/src/lib/db";
-import { ensureAuthSchema, getDefaultTrialDays, hashPassword, setDefaultTrialDays } from "@/src/lib/authStore";
+import { ensureAuthSchema, getDefaultTrialDays, hashPassword, setDefaultTrialDays, unusablePasswordHash } from "@/src/lib/authStore";
 import { getCurrentSession } from "@/src/lib/session";
 
 async function requireAdmin() {
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
              created_at as "createdAt", last_login_at as "lastLoginAt", 
              login_count as "loginCount",
              failed_logins as "failedLogins", is_protected as "isProtected",
-             trial_days as "trialDays", password_preview as "passwordPreview"
+             trial_days as "trialDays"
       FROM users
       ${whereString}
       ${orderString}
@@ -177,7 +177,7 @@ export async function POST(request: Request) {
     const plan = sanitizePlan(body?.plan);
     const trialDays = toSafeInt(body?.trialDays, await getDefaultTrialDays());
     const daysLeft = toSafeInt(body?.daysLeft, trialDays);
-    const password = String(body?.password ?? username).trim() || username;
+    const password = String(body?.password ?? "").trim();
 
     if (!username) {
       return NextResponse.json({ ok: false, error: "نام کاربری یا موبایل الزامی است." }, { status: 400 });
@@ -186,8 +186,8 @@ export async function POST(request: Request) {
     const signupAt = await signupAtForRemainingDays(trialDays, daysLeft);
     const result = await query(
       `INSERT INTO users
-       (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 0, false, $8, $9, $10)
+       (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, trial_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 0, false, $8, $9)
        RETURNING id`,
       [
         randomUUID(),
@@ -197,8 +197,7 @@ export async function POST(request: Request) {
         plan === "free",
         displayName || username,
         signupAt,
-        hashPassword(password),
-        password,
+        password ? hashPassword(password) : unusablePasswordHash(),
         trialDays
       ]
     );
@@ -239,9 +238,9 @@ export async function PATCH(request: Request) {
       await query(
         `UPDATE users
          SET role = $1, plan = $2, is_free_account = $3, display_name = $4,
-             trial_days = $5, signup_at = $6, password_hash = $7, password_preview = $8
+             trial_days = $5, signup_at = $6, password_hash = $7
          WHERE id = $9`,
-        [role, plan, plan === "free", displayName, trialDays, signupAt, hashPassword(password), password, id]
+        [role, plan, plan === "free", displayName, trialDays, signupAt, hashPassword(password), id]
       );
     } else {
       await query(

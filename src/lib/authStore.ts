@@ -20,7 +20,6 @@ export type UserAccount = {
   failedLogins: number;
   loginCount: number;
   trialDays: number;
-  passwordPreview?: string;
   protected?: boolean;
 };
 
@@ -210,14 +209,11 @@ type DbUserRow = {
   loginCount?: unknown;
   trial_days?: unknown;
   trialDays?: unknown;
-  password_preview?: unknown;
-  passwordPreview?: unknown;
   is_protected?: unknown;
   isProtected?: unknown;
 };
 
 function mapDbUser(row: DbUserRow): UserAccount {
-  const passwordPreview = row.password_preview ?? row.passwordPreview;
   return {
     id: String(row.id),
     username: String(row.username),
@@ -232,7 +228,6 @@ function mapDbUser(row: DbUserRow): UserAccount {
     failedLogins: Number(row.failed_logins ?? row.failedLogins ?? 0),
     loginCount: Number(row.login_count ?? row.loginCount ?? 1),
     trialDays: Number(row.trial_days ?? row.trialDays ?? defaultTrialDays),
-    passwordPreview: passwordPreview == null ? undefined : String(passwordPreview),
     protected: Boolean(row.is_protected ?? row.isProtected)
   };
 }
@@ -257,7 +252,6 @@ export async function ensureAuthSchema() {
         );
       `);
       await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT");
-      await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_preview TEXT");
       await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_days INTEGER NOT NULL DEFAULT 7");
       await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until BIGINT");
       await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS login_count INTEGER NOT NULL DEFAULT 1");
@@ -301,32 +295,35 @@ export async function ensureAuthSchema() {
         [String(defaultTrialDays)]
       );
       await seedBaseUsers();
-      await query(
-        `UPDATE users
-         SET password_hash = $1, password_preview = username
-         WHERE (password_hash IS NULL OR password_hash = '')`,
-        [hashPassword("__placeholder__")]
-      );
-      await query(
-        `UPDATE users
-         SET password_hash = $1
-         WHERE password_preview = username AND password_hash = $2`,
-        [hashPassword("__placeholder__"), hashPassword("__placeholder__")]
-      );
-      await query(
-        `UPDATE users
-         SET password_hash = $1
-         WHERE password_preview = username`,
-        [hashPassword("__phone_password_marker__")]
-      );
-      const rows = await query("SELECT username FROM users WHERE password_hash = $1", [hashPassword("__phone_password_marker__")]);
-      for (const row of rows.rows) {
-        await query("UPDATE users SET password_hash = $1 WHERE username = $2", [hashPassword(row.username), row.username]);
-      }
+      await retirePhoneNumberPasswords();
+      // Passwords are never kept readable: the old plain-text preview column goes.
+      await query("ALTER TABLE users DROP COLUMN IF EXISTS password_preview");
     })();
   }
 
   return globalState.__hamyarSchemaReady;
+}
+
+/**
+ * A password hash nobody can match: for accounts that sign in by SMS and have not chosen
+ * a password. Random per account, so it is not even the same value twice.
+ */
+export function unusablePasswordHash() {
+  return hashPassword(`!no-password:${randomBytes(32).toString("hex")}`);
+}
+
+/**
+ * Accounts used to be given their phone number (their username) as password, and the
+ * password login accepted it: anyone who knew a number could sign in as its owner. Those,
+ * and accounts with no password at all, get an unusable one; they still sign in by SMS.
+ */
+async function retirePhoneNumberPasswords() {
+  const accounts = await query("SELECT id, username, password_hash FROM users");
+  for (const row of accounts.rows) {
+    const hash = String(row.password_hash ?? "");
+    if (hash && !safeEqual(hash, hashPassword(String(row.username)))) continue;
+    await query("UPDATE users SET password_hash = $1, failed_logins = 0 WHERE id = $2", [unusablePasswordHash(), row.id]);
+  }
 }
 
 async function seedBaseUsers() {
@@ -350,14 +347,12 @@ async function seedBaseUsers() {
     }
     await query(
       `INSERT INTO users
-       (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, trial_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        ON CONFLICT (username) DO UPDATE SET
          password_hash = COALESCE(NULLIF(users.password_hash, ''), EXCLUDED.password_hash),
-         password_preview = COALESCE(NULLIF(users.password_preview, ''), EXCLUDED.password_preview),
          trial_days = COALESCE(users.trial_days, EXCLUDED.trial_days)`,
-      // No plain-text preview for seed accounts: their password lives only in the environment.
-      [...seed, hashPassword(password), null, defaultTrialDays]
+      [...seed, hashPassword(password), defaultTrialDays]
     );
   }
 }
@@ -405,10 +400,10 @@ export async function upsertMobileUser(username: string) {
   const trialDays = await getDefaultTrialDays();
   const result = await query(
     `INSERT INTO users
-     (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, password_preview, trial_days)
-     VALUES ($1, $2, 'user', 'free', true, $3, $4, $4, 0, false, $5, $6, $7)
+     (id, username, role, plan, is_free_account, display_name, signup_at, created_at, failed_logins, is_protected, password_hash, trial_days)
+     VALUES ($1, $2, 'user', 'free', true, $3, $4, $4, 0, false, $5, $6)
      RETURNING *`,
-    [randomBytes(10).toString("hex"), username, `کاربر ${username}`, signupAt, hashPassword(username), username, trialDays]
+    [randomBytes(10).toString("hex"), username, `کاربر ${username}`, signupAt, unusablePasswordHash(), trialDays]
   );
   return mapDbUser(result.rows[0]);
 }
@@ -622,9 +617,9 @@ export async function completeRegistration(username: string, token: string, disp
   const loginAt = new Date();
   await query(
     `UPDATE users
-     SET display_name = $1, password_hash = $2, password_preview = $3
-     WHERE id = $4`,
-    [finalDisplayName, hashPassword(finalPassword), finalPassword, user.id]
+     SET display_name = $1, password_hash = $2
+     WHERE id = $3`,
+    [finalDisplayName, hashPassword(finalPassword), user.id]
   );
   const loginCount = await recordSuccessfulLogin(user.id, loginAt, false);
   return {
@@ -632,7 +627,6 @@ export async function completeRegistration(username: string, token: string, disp
     user: {
       ...user,
       displayName: finalDisplayName,
-      passwordPreview: finalPassword,
       lastLoginAt: loginAt.toISOString(),
       loginCount
     }

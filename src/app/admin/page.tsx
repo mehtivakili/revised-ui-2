@@ -29,7 +29,7 @@ export default async function AdminPage() {
              created_at as "createdAt", last_login_at as "lastLoginAt", 
              login_count as "loginCount",
              failed_logins as "failedLogins", is_protected as "isProtected",
-             trial_days as "trialDays", password_preview as "passwordPreview"
+             trial_days as "trialDays"
       FROM users
       ORDER BY is_protected DESC, signup_at DESC
       LIMIT 50 OFFSET 0
