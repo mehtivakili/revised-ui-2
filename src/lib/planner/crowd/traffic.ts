@@ -153,8 +153,55 @@ export function trackPose(track: Track, s: number): { position: Vec2; heading: V
   return { position: { x: from.x + (to.x - from.x) * t, z: from.z + (to.z - from.z) * t }, heading: unit(sub(to, from)) };
 }
 
+/** How far short of another road a road may end and still be taken as joining it. */
+const JOIN_GAP_M = 3;
+
+/**
+ * A road drawn to stop just short of another (a pavement strip left between them, or a
+ * hand-drawn gap) is meant to join it. Without this the two are separate networks: cars
+ * shuttle up and down the dead-end drive forever, turning round right at the edge of the
+ * street, and street traffic has to wait for every one of those turns. Such an end is
+ * carried on to the other road's centre line, where the T-junction below picks it up.
+ */
+function joinNearbyEnds(pieces: Piece[]) {
+  pieces.forEach((piece, i) => {
+    for (const which of ["a", "b"] as const) {
+      const end = piece[which];
+      if (pieces.some((other, j) => j !== i && insideObstacle(other.obstacle, end, 0.6))) continue;
+      const outward = unit(sub(end, which === "a" ? piece.b : piece.a));
+      let best: { k: number; point: Vec2 } | null = null;
+      pieces.forEach((other, j) => {
+        if (j === i) return;
+        const along = unit(sub(other.b, other.a));
+        // Only a road met head-on or at an angle; one running alongside is not a junction.
+        if (Math.abs(dot(outward, along)) > 0.7) return;
+        // Where the line ahead of this end meets the other road's centre line.
+        const r = outward;
+        const q = sub(other.b, other.a);
+        const denominator = r.x * q.z - r.z * q.x;
+        if (Math.abs(denominator) < 1e-6) return;
+        const offset = sub(other.a, end);
+        const k = (offset.x * q.z - offset.z * q.x) / denominator;
+        const u = (offset.x * r.z - offset.z * r.x) / denominator;
+        if (k <= 0 || k > other.width / 2 + JOIN_GAP_M || u < 0.08 || u > 0.92) return;
+        const point = add(end, scale(outward, k));
+        // Not right next to where the other road itself ends (and may join something): two
+        // junctions that close would be merged into one, dragging both roads off their line.
+        const crowded = Math.min(len(sub(point, other.a)), len(sub(point, other.b))) < (piece.width + other.width) / 2 + 4.5;
+        if (crowded) return;
+        if (!best || k < best.k) best = { k, point };
+      });
+      if (best) {
+        piece[which] = (best as { k: number; point: Vec2 }).point;
+        piece.length = len(sub(piece.b, piece.a));
+      }
+    }
+  });
+}
+
 export function buildTraffic(floor: FloorPlan, rng: Rng): Traffic {
   const pieces = roadPieces(floor);
+  joinNearbyEnds(pieces);
   const tracks: Track[] = [];
   const junctions: Junction[] = [];
   if (!pieces.length) return { tracks, junctions, zones: [], cars: [], entries: [] };

@@ -1525,15 +1525,18 @@ function primarySchoolPlan(): BuildingPlan {
     sizedPreset("primary-school-fence-south-east", "fence-mesh", 14.25, 27, 23.5, 0.1),
     presetObstacle("primary-school-gate", "gate-sliding", 0, 27),
     presetObstacle("primary-school-guard-booth", "guard-booth", -6, 25),
-    sizedPreset("primary-school-path", "road", 0, 20.5, 4, 13),
+    // The drive runs from the entrance through the gate and across the drop-off forecourt
+    // onto the street. The staff parking aisle branches off it far enough from the street
+    // for two junctions with room for a car to wait between them.
+    sizedPreset("primary-school-path", "road", 0, 25.8, 4, 23.6),
     sizedPreset("primary-school-play-yard", "grass", -13, 20.5, 18, 11),
     ...presetObstacles("primary-school-yard", [
       ["waiting-bench", -15, 17.5], ["waiting-bench", -10, 17.5], ["deciduous", -21, 23]
     ]),
     ...parkingRow("primary-school-staff-car", ["sedan", "suv", "sedan"], [6, 8.7, 11.4, 14.1, 16.8, 19.5], 19.5, "north"),
-    sizedPreset("primary-school-parking-aisle", "road", 13, 24, 18, 4),
+    sizedPreset("primary-school-parking-aisle", "road", 11.75, 24, 20.5, 4),
     ...presetObstacles("primary-school-poles", [["light-pole", 23, 24.5], ["light-pole", -23, -15]]),
-    sizedPreset("primary-school-street", "road", 0, 31, 56, 4)
+    sizedPreset("primary-school-street", "road", 0, 39, 56, 4)
   ];
   const ground = floor("primary-school-ground", "مدرسه ابتدایی، کلاس‌ها و حیاط", 0, walls, openings, obstacles, 3.8);
   ground.coverageRequirements = [

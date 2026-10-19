@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { describe } from "node:test";
 import * as THREE from "three";
 import { createSamplePlan } from "@/src/lib/planner/sample-plans.ts";
+import { createFloor } from "@/src/domain/planner/types.ts";
 import { appearances, proportions } from "@/src/lib/planner/crowd/appearances.ts";
 import { createCrowd, stepCrowd, MIN_GAP_M } from "@/src/lib/planner/crowd/simulation.ts";
 import { isRoad, isWalkable } from "@/src/lib/planner/crowd/navigation.ts";
@@ -179,6 +180,19 @@ describe("dynamic environment: traffic", () => {
     assert.ok(junctions.some((junction) => junction.degree >= 3), "the sample has a junction");
     assert.ok(tracks.some((track) => track.control === "stop" || track.control === "yield"), "no road gives way");
     assert.ok(record.turns > 0, "no car turned at a junction");
+  });
+
+  test("a road drawn to stop just short of another still joins it", () => {
+    // A street, and a drive that ends 2 m short of it (a pavement strip left between).
+    const street = createSamplePlan("primary-school").floors[0].obstacles.find((item) => item.id === "primary-school-street");
+    const floor = createFloor("test", 0);
+    floor.obstacles = [
+      { ...street, id: "street", center: { x: 0, z: 30 }, widthM: 60, depthM: 4, rotationDeg: 0 },
+      { ...street, id: "drive", center: { x: 0, z: 14 }, widthM: 4, depthM: 24, rotationDeg: 0 }
+    ];
+    const { junctions } = createCrowd(floor, { seed: 3 }).traffic;
+    assert.ok(junctions.some((junction) => junction.degree === 3), "the drive meets the street in a T-junction");
+    assert.equal(junctions.filter((junction) => junction.degree > 0).length, 4, "one network: the T, the drive's far end and both ends of the street");
   });
 
   test("cars stop at a barrier, then drive through", () => {
